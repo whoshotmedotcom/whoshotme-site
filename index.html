@@ -12,18 +12,26 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="favicon.png">
+<!-- Bare apex domain, matching the actual live host (www.whoshotme.com just
+     301-redirects here) — tells Google unambiguously which URL is
+     authoritative, rather than leaving it to infer from the redirect. -->
+<link rel="canonical" href="https://whoshotme.com/">
 <meta name="description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
 <meta property="og:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
 <meta property="og:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://www.whoshotme.com/og-image.png">
+<meta property="og:image" content="https://whoshotme.com/og-image.png">
 <!-- Update this and the twitter:image URL below if the domain ever changes
      again — social platforms need an absolute URL here, a relative path
-     won't resolve when the page gets shared. -->
+     won't resolve when the page gets shared. Must be the bare apex domain
+     (whoshotme.com), not www — www.whoshotme.com 301-redirects to the
+     apex, and most social scrapers (WhatsApp, etc.) won't follow a
+     redirect when fetching this image, so a www URL here silently breaks
+     link previews. -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
 <meta name="twitter:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
-<meta name="twitter:image" content="https://www.whoshotme.com/og-image.png">
+<meta name="twitter:image" content="https://whoshotme.com/og-image.png">
 
 <!-- ====================================================================
   VISITOR COUNT — no third-party analytics at all. Every page load pings
@@ -79,7 +87,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css" />
 <!-- Leaflet's JS is loaded further down, right before the map is actually
-     created (see near the closing </body>), not here in <head>. A
+     created (see near the closing body tag), not here in the head. A
      synchronous script tag in the head blocks the browser from parsing
      the rest of the page (header, search box, filters) until it's
      downloaded — moving it to just before first use means all that
@@ -983,7 +991,7 @@
       <p>Who Shot Me? helps you find roadside motorcycle photographers around Derbyshire - whether they're live right now, coming up, or already wrapped up from a past ride.</p>
 
       <h3>Meet the creator</h3>
-      <img class="creatorPhoto" src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
+      <img class="creatorPhoto" data-src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
       <p><strong>Hi, I'm Peter.</strong></p>
       <p>I'm a keen motorcyclist and GIS professional from the Peak District. I first got into riding on a red 2010 Honda CB125, and these days you'll usually find me out on an orange Honda CB500F with a pillion passenger… a Charmander soft toy. It's for the kids… honest!</p>
       <p>After seeing the same question appear time and time again in motorcycle Facebook groups - "Who was the photographer at Cat & Fiddle?", "Does anyone know who was at Snake Pass today?" - I realised there had to be a better way.</p>
@@ -2667,6 +2675,14 @@ if (aboutContactLink) aboutContactLink.href = `mailto:${LISTING_EMAIL}?subject=$
 // =========================================================================
 const aboutOverlay = document.getElementById('aboutOverlay');
 document.getElementById('aboutLink').addEventListener('click', () => {
+  // Loaded on first open rather than eagerly on page load — it sits inside
+  // a display:none overlay most visitors never open, so there's no reason
+  // to make everyone download it up front.
+  const photo = document.querySelector('.creatorPhoto');
+  if (photo.dataset.src) {
+    photo.src = photo.dataset.src;
+    delete photo.dataset.src;
+  }
   aboutOverlay.classList.add('show');
 });
 document.getElementById('aboutCloseBtn').addEventListener('click', () => {
