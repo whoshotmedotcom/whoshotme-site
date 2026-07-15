@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WhoShotMe - logic tests</title>
+<style>
+  body{ font-family: 'Segoe UI', Roboto, system-ui, sans-serif; background:#1c1e22; color:#f3f1ea; padding:20px; }
+  h1{ font-size:1.2rem; }
+  #summary{ font-weight:700; margin:14px 0; padding:10px 14px; border-radius:8px; }
+  #summary.pass{ background:rgba(212,255,63,0.15); color:#d4ff3f; }
+  #summary.fail{ background:rgba(217,122,83,0.15); color:#d97a53; }
+  ul{ list-style:none; padding:0; margin:0; }
+  li{ padding:4px 0; font-size:0.85rem; font-family:Consolas, monospace; }
+  li.pass::before{ content:"PASS  "; color:#9bbf2e; }
+  li.fail::before{ content:"FAIL  "; color:#d97a53; }
+  .err{ color:#d97a53; margin-left:52px; display:block; }
+  iframe{ display:none; }
+</style>
+</head>
+<body>
+
+<!--
+  No test runner / build step, matching this project's "plain HTML/JS,
+  no framework, no bundler" convention (see CLAUDE.md). Loads the real
+  pages in hidden iframes and calls their actual global functions
+  directly - no copy-pasted logic here to drift out of sync with the
+  real thing. Open this file via Live Server (needs a real HTTP origin
+  for the iframes' own fetches to work) and read the page, or check
+  #summary's data-failed attribute for automation.
+-->
+
+<h1>WhoShotMe - pure logic function tests</h1>
+<div id="summary">Running...</div>
+<ul id="results"></ul>
+
+<iframe id="indexFrame" src="index.html"></iframe>
+<iframe id="addShootFrame" src="add-shoot.html"></iframe>
+
+<script>
+const results = [];
+function test(name, fn){
+  try { fn(); results.push({ name, pass: true }); }
+  catch (e) { results.push({ name, pass: false, error: e.message }); }
+}
+function assertEqual(actual, expected, label){
+  if (actual !== expected) throw new Error(`${label || ''} expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+function assertDeepEqual(actual, expected, label){
+  const a = JSON.stringify(actual), b = JSON.stringify(expected);
+  if (a !== b) throw new Error(`${label || ''} expected ${b}, got ${a}`);
+}
+function assertClose(actual, expected, tolerance, label){
+  if (Math.abs(actual - expected) > tolerance) throw new Error(`${label || ''} expected ~${expected} (+/-${tolerance}), got ${actual}`);
+}
+function assertThrows(fn, label){
+  let threw = false;
+  try { fn(); } catch (e) { threw = true; }
+  if (!threw) throw new Error(`${label || ''} expected a throw, but it returned normally`);
+}
+
+// Polls for a global on an iframe's window instead of waiting for the
+// iframe's `load` event, which would also wait on live map tile/CSV
+// fetches that have nothing to do with whether these functions exist.
+function waitFor(getWin, name, timeoutMs){
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    (function poll(){
+      let win;
+      try { win = getWin(); } catch (e) { win = null; }
+      if (win && typeof win[name] === 'function') return resolve(win);
+      if (Date.now() - start > timeoutMs) return reject(new Error(`Timed out waiting for window.${name}`));
+      setTimeout(poll, 50);
+    })();
+  });
+}
+
+async function run(){
+  const indexWin = await waitFor(() => document.getElementById('indexFrame').contentWindow, 'parseUKDateTime', 15000);
+  const addShootWin = await waitFor(() => document.getElementById('addShootFrame').contentWindow, 'parseUKDateTime', 15000);
+
+  // ===== parseUKDateTime (index.html and add-shoot.html each keep their
+  // own copy - see the comment on add-shoot.html's version - so both are
+  // tested to catch the two drifting apart). =====
+  [['index.html', indexWin], ['add-shoot.html', addShootWin]].forEach(([label, win]) => {
+    test(`${label}: parseUKDateTime - BST (summer, UTC+1)`, () => {
+      const d = win.parseUKDateTime('2026-06-30 08:00');
+      assertEqual(d.toISOString(), '2026-06-30T07:00:00.000Z');
+    });
+    test(`${label}: parseUKDateTime - GMT (winter, UTC+0)`, () => {
+      const d = win.parseUKDateTime('2026-01-15 08:00');
+      assertEqual(d.toISOString(), '2026-01-15T08:00:00.000Z');
+    });
+    test(`${label}: parseUKDateTime - passes an already-ISO "...Z" string straight through`, () => {
+      const d = win.parseUKDateTime('2026-06-30T07:00:00.000Z');
+      assertEqual(d.getTime(), new Date('2026-06-30T07:00:00.000Z').getTime());
+    });
+    test(`${label}: parseUKDateTime - throws on an unparseable string (callers must pre-validate, e.g. with DATETIME_RE)`, () => {
+      assertThrows(() => win.parseUKDateTime('46215.375'));
+    });
+  });
+
+  // ===== getStatus - index.html takes a spot object, add-shoot.html
+  // takes (start, end) directly; intentionally different signatures. =====
+  test('index.html: getStatus - past shoot', () => {
+    const now = Date.now();
+    const spot = { start: new Date(now - 2 * 3600000), end: new Date(now - 3600000) };
+    assertEqual(indexWin.getStatus(spot), 'past');
+  });
+  test('index.html: getStatus - live shoot (now falls within the window)', () => {
+    const now = Date.now();
+    const spot = { start: new Date(now - 3600000), end: new Date(now + 3600000) };
+    assertEqual(indexWin.getStatus(spot), 'live');
+  });
+  test('index.html: getStatus - upcoming shoot', () => {
+    const now = Date.now();
+    const spot = { start: new Date(now + 3600000), end: new Date(now + 2 * 3600000) };
+    assertEqual(indexWin.getStatus(spot), 'soon');
+  });
+  test('add-shoot.html: getStatus - past shoot', () => {
+    const now = Date.now();
+    assertEqual(addShootWin.getStatus(new Date(now - 2 * 3600000), new Date(now - 3600000)), 'past');
+  });
+  test('add-shoot.html: getStatus - live shoot', () => {
+    const now = Date.now();
+    assertEqual(addShootWin.getStatus(new Date(now - 3600000), new Date(now + 3600000)), 'live');
+  });
+  test('add-shoot.html: getStatus - upcoming shoot', () => {
+    const now = Date.now();
+    assertEqual(addShootWin.getStatus(new Date(now + 3600000), new Date(now + 2 * 3600000)), 'soon');
+  });
+
+  // ===== spotDayKeys (index.html only) =====
+  test('index.html: spotDayKeys - single-day shoot returns one key', () => {
+    const spot = { start: indexWin.parseUKDateTime('2026-07-15 09:00'), end: indexWin.parseUKDateTime('2026-07-15 17:00') };
+    assertDeepEqual(indexWin.spotDayKeys(spot, null, null), ['2026-07-15']);
+  });
+  test('index.html: spotDayKeys - overnight shoot spans both calendar days', () => {
+    const spot = { start: indexWin.parseUKDateTime('2026-07-15 22:00'), end: indexWin.parseUKDateTime('2026-07-16 02:00') };
+    assertDeepEqual(indexWin.spotDayKeys(spot, null, null), ['2026-07-15', '2026-07-16']);
+  });
+  test('index.html: spotDayKeys - clipped to a range shorter than the shoot', () => {
+    const spot = { start: indexWin.parseUKDateTime('2026-07-14 09:00'), end: indexWin.parseUKDateTime('2026-07-18 17:00') };
+    const rangeStart = indexWin.parseUKDateTime('2026-07-16 00:00');
+    const rangeEnd = indexWin.parseUKDateTime('2026-07-16 23:59');
+    assertDeepEqual(indexWin.spotDayKeys(spot, rangeStart, rangeEnd), ['2026-07-16']);
+  });
+
+  // ===== ordinalSuffix (index.html only) =====
+  test('index.html: ordinalSuffix - 1st/2nd/3rd/4th', () => {
+    assertEqual(indexWin.ordinalSuffix(1), 'st');
+    assertEqual(indexWin.ordinalSuffix(2), 'nd');
+    assertEqual(indexWin.ordinalSuffix(3), 'rd');
+    assertEqual(indexWin.ordinalSuffix(4), 'th');
+  });
+  test('index.html: ordinalSuffix - 11th/12th/13th are exceptions to the last-digit rule', () => {
+    assertEqual(indexWin.ordinalSuffix(11), 'th');
+    assertEqual(indexWin.ordinalSuffix(12), 'th');
+    assertEqual(indexWin.ordinalSuffix(13), 'th');
+  });
+  test('index.html: ordinalSuffix - 21st/22nd/23rd/24th (the exception does not apply past the teens)', () => {
+    assertEqual(indexWin.ordinalSuffix(21), 'st');
+    assertEqual(indexWin.ordinalSuffix(22), 'nd');
+    assertEqual(indexWin.ordinalSuffix(23), 'rd');
+    assertEqual(indexWin.ordinalSuffix(24), 'th');
+  });
+  test('index.html: ordinalSuffix - 111th/113th (teens-style exception recurs every hundred)', () => {
+    assertEqual(indexWin.ordinalSuffix(111), 'th');
+    assertEqual(indexWin.ordinalSuffix(113), 'th');
+    assertEqual(indexWin.ordinalSuffix(121), 'st');
+  });
+
+  // ===== haversineMeters (add-shoot.html only) =====
+  test('add-shoot.html: haversineMeters - identical points are 0m apart', () => {
+    assertClose(addShootWin.haversineMeters(53.18, -1.72, 53.18, -1.72), 0, 0.001);
+  });
+  test('add-shoot.html: haversineMeters - one degree of latitude is ~111,195m', () => {
+    assertClose(addShootWin.haversineMeters(53.0, 0, 54.0, 0), 111195, 5);
+  });
+
+  // ===== timeRangesOverlap (add-shoot.html only) =====
+  test('add-shoot.html: timeRangesOverlap - clearly overlapping ranges', () => {
+    assertEqual(addShootWin.timeRangesOverlap(10, 20, 15, 25), true);
+  });
+  test('add-shoot.html: timeRangesOverlap - clearly separate ranges', () => {
+    assertEqual(addShootWin.timeRangesOverlap(0, 5, 10, 15), false);
+  });
+  test('add-shoot.html: timeRangesOverlap - touching endpoints do not count as overlapping', () => {
+    assertEqual(addShootWin.timeRangesOverlap(0, 10, 10, 20), false);
+  });
+  test('add-shoot.html: timeRangesOverlap - one range fully contains the other', () => {
+    assertEqual(addShootWin.timeRangesOverlap(0, 100, 10, 20), true);
+  });
+  test('add-shoot.html: timeRangesOverlap - identical ranges', () => {
+    assertEqual(addShootWin.timeRangesOverlap(5, 15, 5, 15), true);
+  });
+
+  render();
+}
+
+function render(){
+  const list = document.getElementById('results');
+  results.forEach(r => {
+    const li = document.createElement('li');
+    li.className = r.pass ? 'pass' : 'fail';
+    li.textContent = r.name;
+    if (!r.pass){
+      const err = document.createElement('span');
+      err.className = 'err';
+      err.textContent = r.error;
+      li.appendChild(err);
+    }
+    list.appendChild(li);
+  });
+  const passed = results.filter(r => r.pass).length;
+  const failed = results.length - passed;
+  const summary = document.getElementById('summary');
+  summary.textContent = `${passed}/${results.length} passed` + (failed ? ` - ${failed} FAILED` : '');
+  summary.className = failed ? 'fail' : 'pass';
+  summary.dataset.total = results.length;
+  summary.dataset.passed = passed;
+  summary.dataset.failed = failed;
+}
+
+run().catch(err => {
+  const summary = document.getElementById('summary');
+  summary.textContent = 'Test setup failed: ' + err.message;
+  summary.className = 'fail';
+});
+</script>
+
+</body>
+</html>
