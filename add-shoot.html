@@ -648,7 +648,7 @@
       <p>This is your personal dashboard for managing your own listings on Who Shot Me? - add, edit, or delete shoots, and attach gallery links, all without needing spreadsheet access.</p>
 
       <h3>Meet the creator</h3>
-      <img class="creatorPhoto" src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
+      <img class="creatorPhoto" data-src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
       <p><strong>Hi, I'm Peter.</strong></p>
       <p>I'm a keen motorcyclist and GIS professional from the Peak District. I first got into riding on a red 2010 Honda CB125, and these days you'll usually find me out on an orange Honda CB500F with a pillion passenger… a Charmander soft toy. It's for the kids… honest!</p>
       <p>After seeing the same question appear time and time again in motorcycle Facebook groups - "Who was the photographer at Cat & Fiddle?", "Does anyone know who was at Snake Pass today?" - I realised there had to be a better way.</p>
@@ -966,26 +966,35 @@ async function fetchCsv(url){
 // Lightweight on purpose — only the fields the proximity check and the
 // "who else is around" map markers actually need, not the full spot
 // pipeline index.html builds (no galleries, no logo fallback, etc.).
+// Matches index.html's DATETIME_RE — a row whose Start/End isn't in this
+// "YYYY-MM-DD HH:MM" shape (e.g. a raw Sheets date serial like "46215.375"
+// from a cell edited directly in the Sheets UI, bypassing the app) must be
+// filtered out *before* parseUKDateTime ever sees it: it throws on
+// unparseable input rather than returning an invalid date, and since this
+// runs inside one map() over every row, a single bad row would otherwise
+// abort the whole batch and silently wipe out every other photographer.
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+
 let otherPhotographersShoots = [];
 async function loadOtherPhotographersShoots(){
   try {
     const rows = await fetchCsv(COMBINED_CSV_URL);
     otherPhotographersShoots = rows
+      .filter(row => DATETIME_RE.test(row['Start'] || '') && DATETIME_RE.test(row['End'] || ''))
       .map(row => ({
         name: row['Photographer Name'] || '',
         shootTabName: row['Shoot Tab Name'] || '',
         lat: Number(row['Lat']),
         lng: Number(row['Lng']),
-        start: parseUKDateTime(row['Start'] || ''),
-        end: parseUKDateTime(row['End'] || ''),
+        start: parseUKDateTime(row['Start']),
+        end: parseUKDateTime(row['End']),
         link: row['Website URL'] || ''
       }))
       // Exclude this photographer's own shoots (nothing to warn them
       // about relative to themselves) and anything with unusable
-      // coordinates or dates.
+      // coordinates.
       .filter(s => s.shootTabName !== P
-        && Number.isFinite(s.lat) && Number.isFinite(s.lng)
-        && !isNaN(s.start) && !isNaN(s.end));
+        && Number.isFinite(s.lat) && Number.isFinite(s.lng));
   } catch (err) {
     console.warn('Could not load other photographers\' shoots for the proximity check — continuing without it:', err);
     otherPhotographersShoots = [];
@@ -1480,6 +1489,7 @@ saveShootBtn.addEventListener('click', async () => {
   const location = locationNameEl.value.trim();
   if (!location){ formError.textContent = 'Location name is required.'; formError.classList.remove('hidden'); return; }
   if (currentLat === null || currentLng === null){ formError.textContent = 'Tap the map to drop a pin.'; formError.classList.remove('hidden'); return; }
+  if (!UK_BOUNDS.contains(L.latLng(currentLat, currentLng))){ formError.textContent = 'The pin must be within the UK.'; formError.classList.remove('hidden'); return; }
   if (!startEl.value || !endEl.value){ formError.textContent = 'Start and end times are both required.'; formError.classList.remove('hidden'); return; }
   if (endEl.value <= startEl.value){ formError.textContent = 'End time must be after the start time.'; formError.classList.remove('hidden'); return; }
 
@@ -1822,6 +1832,13 @@ const aboutOverlay = document.getElementById('aboutOverlay');
 const aboutContactLink = document.getElementById('aboutContactLink');
 if (aboutContactLink) aboutContactLink.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
 document.getElementById('aboutLink').addEventListener('click', () => {
+  // Loaded on first open rather than eagerly on page load — see the
+  // matching fix in index.html.
+  const photo = document.querySelector('.creatorPhoto');
+  if (photo.dataset.src) {
+    photo.src = photo.dataset.src;
+    delete photo.dataset.src;
+  }
   aboutOverlay.classList.add('show');
 });
 document.getElementById('aboutCloseBtn').addEventListener('click', () => {

@@ -249,6 +249,8 @@ function validateShoot(shoot) {
   if (!shoot || !String(shoot.location || '').trim()) return 'Location is required';
   if (typeof shoot.lat !== 'number' || isNaN(shoot.lat)) return 'Lat must be a number';
   if (typeof shoot.lng !== 'number' || isNaN(shoot.lng)) return 'Lng must be a number';
+  // Same box as UK_BOUNDS in add-shoot.html — keep these in sync.
+  if (shoot.lat < 49.5 || shoot.lat > 61.2 || shoot.lng < -10.9 || shoot.lng > 2.1) return 'Coordinates must be within the UK';
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(shoot.start || '')) return 'Start must look like "2026-06-30 08:00"';
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(shoot.end || '')) return 'End must look like "2026-06-30 11:00"';
   if (String(shoot.end) <= String(shoot.start)) return 'End time must be after the start time';
