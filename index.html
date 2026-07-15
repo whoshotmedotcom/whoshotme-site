@@ -1,0 +1,2933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire</title>
+<!-- Headline font only (not body text) — matches the logo's geometric
+     style, particularly its near-circular O. Body/UI text stays on the
+     fast system font stack; this is a small, deliberate exception just
+     for the brand name itself. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="favicon.png">
+<meta name="description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
+<meta property="og:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
+<meta property="og:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://www.whoshotme.com/og-image.png">
+<!-- Update this and the twitter:image URL below if the domain ever changes
+     again — social platforms need an absolute URL here, a relative path
+     won't resolve when the page gets shared. -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
+<meta name="twitter:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
+<meta name="twitter:image" content="https://www.whoshotme.com/og-image.png">
+
+<!-- ====================================================================
+  VISITOR COUNT — no third-party analytics at all. Every page load pings
+  the same Apps Script backend used for photographer stats and adds one
+  to a daily total in a "SiteVisits" tab in the Google Sheet. No cookies,
+  no localStorage, nothing stored on the visitor's device, no data ever
+  leaves your own sheet — genuinely simpler on the privacy front than any
+  third-party analytics tool, free or paid, since there's no separate
+  company processing anything. To check numbers, just open that tab.
+  Uses the same APPS_SCRIPT_URL configured further down for click stats —
+  nothing extra to set up here.
+===================================================================== -->
+
+
+<!-- ====================================================================
+  GET LISTED — where "+ Get listed" button enquiries go.
+  Set this to whatever email you want photographers to reach. Replace
+  the placeholder before publishing, or the button will mail nowhere.
+===================================================================== -->
+<script>
+  const LISTING_EMAIL = 'peterrastall@gmail.com';
+</script>
+
+<!-- ====================================================================
+  LIVE DATA — where the map gets its shoots from.
+  1. In your Google Sheet: File > Share > Publish to web.
+  2. Under "Link", choose the "Combined" tab (not "Entire document") and
+     format "Comma-separated values (.csv)", then click Publish and copy
+     the URL it gives you into COMBINED_CSV_URL below.
+  3. Repeat for the "Combined Galleries" tab into GALLERIES_CSV_URL below.
+     If you don't use galleries, leave this one as-is — it fails quietly.
+  Any edit to the sheet (once protections/permissions are set up per the
+  Instructions tab) appears on the site the next time someone loads the
+  page — no redeploy needed.
+===================================================================== -->
+<script>
+  const COMBINED_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1737338184&single=true&output=csv';
+  const GALLERIES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1377515975&single=true&output=csv';
+</script>
+
+<!-- ====================================================================
+  Set this to the same Apps Script Web App URL used in add-shoot.html
+  (ends in /exec). Used only to send anonymous click counters back to
+  each photographer's Stats row — see trackEvent() further down. Leave
+  as-is to skip stats tracking entirely; nothing else on the site depends
+  on it.
+===================================================================== -->
+<script>
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
+</script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css" />
+<!-- Leaflet's JS is loaded further down, right before the map is actually
+     created (see near the closing </body>), not here in <head>. A
+     synchronous script tag in the head blocks the browser from parsing
+     the rest of the page (header, search box, filters) until it's
+     downloaded — moving it to just before first use means all that
+     static markup paints immediately, and only the map itself waits on
+     the library. Functionally identical either way; just faster to
+     first paint. -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://tile.openstreetmap.org">
+<style>
+  :root{
+    --asphalt:#1c1e22;
+    --asphalt-light:#2a2d33;
+    --hi-vis:#d4ff3f;
+    --hi-vis-dim:#9bbf2e;
+    --paper:#f3f1ea;
+    --rust:#d97a53; /* lightened from #c4572b - the original failed WCAG AA
+      (3.1-3.8:1) everywhere it touched text: as text on the dark
+      backgrounds, and as a background under the light "paper" text used
+      on status badges/toasts/the active "Upcoming" chip. This value
+      clears 4.5:1 in both directions at once - same hue, just lighter,
+      so it's still recognisably the same "upcoming" rust/amber. */
+    --line:#3a3d44;
+    --past-grey:#868a90; /* lightened from #6c7077 — the original failed WCAG AA
+      contrast (3.36:1 on the main background, 2.77:1 on panels) at the small
+      text sizes it's actually used at; this clears 4.5:1 on both. */
+    --muted-grey:#9aa0a6; /* a second, lighter grey used for secondary/meta text — distinct from --past-grey, which is reserved for the "past" status color */
+    color-scheme: dark; /* tells the browser to draw ALL its own native UI (scrollbars,
+      form controls, etc.) in dark mode by default, rather than only the pieces we
+      happen to style ourselves — otherwise a light-OS visitor gets light-grey native
+      scrollbars sitting inside these dark panels. */
+  }
+  /* Scrollbar color, matching the site's palette rather than the browser's generic
+     dark default. Firefox uses scrollbar-color; Chrome/Edge/Safari use the
+     ::-webkit-scrollbar family below. */
+  *{ scrollbar-color: var(--line) var(--asphalt-light); scrollbar-width: thin; }
+  *::-webkit-scrollbar{ width:10px; height:10px; }
+  *::-webkit-scrollbar-track{ background:var(--asphalt-light); }
+  *::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+  *::-webkit-scrollbar-thumb:hover{ background:var(--past-grey); }
+  *{box-sizing:border-box;}
+  /* Removes the default blue/grey flash mobile browsers show on tap for
+     any clickable element (buttons, links) — most noticeable on Android
+     Chrome/Samsung Internet. Global rather than scoped to one button,
+     since it's a one-line fix with no downside and the same flash would
+     otherwise show up on every button on the site, not just this one. */
+  *{ -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+    background:var(--asphalt);
+    color:var(--paper);
+    display:flex;
+    flex-direction:column;
+    height:100vh; /* fallback for very old browsers */
+    height:calc(var(--vh, 1vh) * 100); /* JS-corrected fallback, see script below */
+    height:100dvh; /* modern browsers: real visible viewport, ignores address bar */
+    overflow:hidden;
+  }
+  header{
+    padding:14px 20px 10px;
+    border-bottom:3px solid var(--hi-vis);
+    background:var(--asphalt);
+    flex-shrink:0;
+  }
+  header h1{
+    margin:0;
+    font-size:1.5rem;
+    letter-spacing:0.5px;
+    font-weight:900;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+  }
+  header h1 span{ color:var(--hi-vis); }
+  header p{
+    margin:4px 0 0;
+    color:var(--muted-grey);
+    font-size:0.85rem;
+  }
+  #aboutLink{
+    background:none;
+    border:none;
+    color:var(--hi-vis-dim);
+    text-decoration:underline;
+    font-size:0.85rem;
+    cursor:pointer;
+    padding:0;
+    margin-left:4px;
+  }
+  #aboutLink:hover{ color:var(--hi-vis); }
+  #aboutOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:4000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  #aboutOverlay.show{ display:flex; }
+  #aboutModal{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:12px;
+    max-width:420px;
+    width:100%;
+    max-height:80vh;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden; /* the body below scrolls, not this outer box, so the
+      header (title + X) stays visible the whole time regardless of scroll
+      position — the point of adding the X in the first place. */
+  }
+  #aboutModalHeader{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:22px 24px 0;
+    flex-shrink:0;
+  }
+  #aboutModalBody{
+    overflow-y:auto;
+    padding:12px 24px 22px;
+  }
+  #aboutCloseBtnTop{
+    background:var(--asphalt);
+    color:var(--hi-vis);
+    border:1px solid var(--line);
+    border-radius:50%;
+    width:32px;
+    height:32px;
+    min-width:32px;
+    flex-shrink:0;
+    font-size:1rem;
+    line-height:1;
+    cursor:pointer;
+  }
+  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
+  #aboutModal h2{
+    margin:0;
+    color:var(--hi-vis);
+    font-size:1.1rem;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-weight:900;
+  }
+  #aboutModal h3{
+    margin:16px 0 8px;
+    color:var(--hi-vis-dim);
+    font-size:0.88rem;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  #aboutModal p{
+    font-size:0.85rem;
+    color:#c7c9cd;
+    line-height:1.5;
+    margin:0 0 10px;
+  }
+  .creatorPhoto{
+    display:block;
+    width:100%;
+    max-width:280px;
+    margin:0 auto 12px;
+    border-radius:12px;
+    border:1px solid var(--line);
+  }
+  #aboutCloseBtn{
+    margin-top:6px;
+    border:1px solid var(--hi-vis-dim);
+    background:transparent;
+    color:var(--hi-vis);
+    padding:8px 18px;
+    border-radius:18px;
+    font-size:0.8rem;
+    cursor:pointer;
+  }
+  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+
+  /* Recenter control — sits below the default zoom buttons, bottom-left.
+     Dimmed by default (nothing to do yet); switches to the hi-vis accent
+     the moment a manual pan/zoom makes it actually actionable, so it
+     visually "wakes up" right when it becomes useful instead of sitting
+     unnoticed the whole time. */
+  .recenter-btn{
+    padding:6px 12px;
+    background:var(--asphalt-light);
+    color:var(--past-grey);
+    border:2px solid rgba(0,0,0,0.2);
+    border-radius:16px;
+    font-size:0.76rem;
+    font-weight:700;
+    white-space:nowrap;
+    cursor:pointer;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4);
+    transition:background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .recenter-btn:hover{ background:var(--asphalt); }
+  .recenter-btn.is-active{
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border-color:transparent;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4), 0 0 0 3px rgba(212,255,63,0.25);
+  }
+  .recenter-btn.is-active:hover{ background:var(--hi-vis-dim); }
+
+  /* Theme Leaflet's default zoom control (+/-) to match the dark UI instead
+     of its default white boxes, and match the recenter button's sizing.
+     One joined vertical pill (rounded top and bottom on the shared
+     container, buttons clipped to it via overflow:hidden) rather than
+     Leaflet's default near-square bar or two separate circles — a thin
+     divider line separates the two buttons within it. */
+  .leaflet-control-zoom{
+    border:none !important;
+    background:var(--asphalt-light) !important;
+    border-radius:17px !important;
+    overflow:hidden;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
+  }
+  .leaflet-control-zoom a{
+    width:34px !important;
+    height:34px !important;
+    line-height:34px !important;
+    background:none !important;
+    color:var(--hi-vis) !important;
+    border:none !important;
+    border-bottom:1px solid var(--line) !important;
+    font-size:1.15rem;
+    display:block;
+  }
+  .leaflet-control-zoom a:last-child{ border-bottom:none !important; }
+  .leaflet-control-zoom a:hover{
+    background:var(--asphalt) !important;
+    color:var(--hi-vis) !important;
+  }
+  .leaflet-control-zoom a.leaflet-disabled{
+    background:none !important;
+    color:#55585e !important;
+  }
+
+  /* Basemap switcher (Map / Aerial) — matches the zoom control's look.
+     The collapsed toggle is a circle (same treatment as the zoom
+     buttons); the expanded panel uses the app's standard panel radius
+     (12px, matching the popup/modal convention) rather than the tighter
+     6px it had before, which read as noticeably squarer than everything
+     else. */
+  .leaflet-control-layers{
+    border:none !important;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
+    background:var(--asphalt-light) !important;
+    color:var(--paper) !important;
+    border-radius:12px !important;
+    padding:6px 10px !important;
+  }
+  .leaflet-control-layers-toggle{
+    background-color:var(--asphalt-light) !important;
+    width:34px !important;
+    height:34px !important;
+    border-radius:50% !important;
+  }
+  .leaflet-control-layers label{ font-size:0.82rem; color:var(--paper); }
+  .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
+  .leaflet-control-layers-separator{ border-color:var(--line) !important; }
+
+  /* ---- Map sits in the middle, takes remaining space ---- */
+  #mapWrap{
+    flex:1;
+    position:relative;
+    min-height:0;
+  }
+  #map{
+    height:100%;
+    width:100%;
+  }
+
+  /* Sits over the map while data loads, or if the fetch fails */
+  #dataStateOverlay{
+    position:absolute;
+    inset:0;
+    z-index:1000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--asphalt);
+    padding:20px;
+    text-align:center;
+  }
+  #dataStateOverlay.hidden{ display:none; }
+  #dataStateBox{ max-width:320px; }
+  #dataStateTitle{
+    margin:0 0 8px;
+    font-weight:800;
+    font-size:1rem;
+    color:var(--hi-vis);
+  }
+  #dataStateOverlay.error #dataStateTitle{ color:var(--rust); }
+  #dataStateBody{
+    margin:0;
+    font-size:0.85rem;
+    color:#c7c9cd;
+    line-height:1.5;
+  }
+  #dataStateRetryBtn{
+    margin-top:14px;
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:none;
+    border-radius:20px;
+    padding:9px 18px;
+    font-weight:800;
+    font-size:0.82rem;
+    cursor:pointer;
+  }
+
+  /* Shown across the top of the map when viewing one photographer's
+     shared link (?photographer=...) instead of everyone. Sits as a
+     normal flex item between the header and the map, not absolutely
+     positioned, so it doesn't need to coordinate with the search box. */
+  #photographerFilterBanner, #defaultModeBanner{
+    flex-shrink:0;
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    padding:8px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    font-size:0.82rem;
+    font-weight:700;
+  }
+  #photographerFilterBanner.hidden, #defaultModeBanner.hidden{ display:none; }
+  #clearPhotographerFilterBtn, #dismissDefaultModeBtn{
+    background:var(--asphalt);
+    color:var(--hi-vis);
+    border:none;
+    border-radius:14px;
+    padding:5px 12px;
+    font-size:0.76rem;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  #clearPhotographerFilterBtn:hover, #dismissDefaultModeBtn:hover{ background:var(--asphalt-light); }
+
+  /* Floating search box over the map, top-left */
+  #searchWrap{
+    position:absolute;
+    top:12px;
+    left:12px;
+    right:12px;
+    max-width:360px;
+    z-index:1000;
+  }
+  /* Toggled on/off by the popupopen/popupclose handlers below. z-index:0
+     (not removing the property, and not a smaller positive number) is
+     deliberate — explicit z-index:0 lands in the exact same stacking
+     tier as #map's unset z-index (both "auto or 0" per the CSS stacking
+     spec), whereas ANY positive z-index, however small, always outranks
+     that tier regardless of its numeric value. At that shared tier, DOM
+     order breaks the tie: #searchWrap comes before #map in the markup,
+     so #map (and the popup inside it) renders on top. Without this, a
+     popup near the top of the map was rendering underneath the search
+     box on mobile, where the box takes up proportionally more space. */
+  #searchWrap.yield-to-popup{ z-index:0; }
+  #searchBox{
+    display:flex;
+    align-items:center;
+    background:rgba(28,30,34,0.95);
+    border:1px solid var(--line);
+    border-radius:22px;
+    padding:4px 6px 4px 14px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  }
+  #searchInput{
+    flex:1;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--paper);
+    font-size:0.9rem;
+    padding:8px 4px;
+  }
+  /* outline:none above removes the browser default, so this box-shadow ring
+     is the actual visible focus indicator for keyboard users — without it,
+     tabbing to this field showed nothing at all. */
+  #searchBox:focus-within{
+    box-shadow:0 0 0 2px var(--hi-vis);
+  }
+  #searchInput::placeholder{ color:#7c8088; }
+  #searchClear{
+    background:transparent;
+    border:none;
+    color:var(--muted-grey);
+    cursor:pointer;
+    font-size:1rem;
+    padding:6px 10px;
+    display:none;
+  }
+  #searchResults{
+    margin-top:6px;
+    background:rgba(28,30,34,0.97);
+    border:1px solid var(--line);
+    border-radius:12px;
+    max-height:260px;
+    overflow-y:auto;
+    display:none;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  }
+  #searchResults.show{ display:block; }
+  .resultItem{
+    padding:9px 14px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .resultItem:last-child{ border-bottom:none; }
+  .resultItem:hover{ background:var(--asphalt-light); }
+  .resultItem:focus-visible{ background:var(--asphalt-light); outline:2px solid var(--hi-vis); outline-offset:-2px; }
+  .resultItem .rName{ font-weight:700; color:var(--hi-vis); display:block; }
+  .resultItem .rMeta{ color:var(--muted-grey); font-size:0.78rem; }
+  .resultItem .rTagPast{ color:var(--past-grey); font-style:italic; }
+  .resultsSectionTitle{
+    padding:8px 14px 4px;
+    font-size:0.7rem;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    color:var(--hi-vis-dim);
+    font-weight:700;
+  }
+
+  /* "Get listed" CTA, top-right of the map — for photographers */
+  #getListedBtn{
+    position:absolute;
+    top:12px;
+    right:12px;
+    z-index:1000;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:none;
+    border-radius:20px;
+    padding:9px 14px;
+    font-size:0.82rem;
+    font-weight:700;
+    text-decoration:none;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    cursor:pointer;
+  }
+  #getListedBtn:hover{ background:var(--hi-vis-dim); }
+
+
+  /* ---- Bottom control panel ---- */
+  #bottomPanel{
+    flex-shrink:0;
+    background:var(--asphalt-light);
+    border-top:1px solid var(--line);
+  }
+  #filters{
+    display:flex;
+    gap:8px;
+    padding:10px 20px;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--paper);
+    padding:7px 14px;
+    border-radius:20px;
+    font-size:0.82rem;
+    font-weight:700;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .chip:hover{ border-color:var(--hi-vis); }
+  .chip.active{
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border-color:var(--hi-vis);
+  }
+  /* The chip's own color dot - doubles as the map's color legend (each
+     chip's dot matches its marker color), so a separate legend row
+     listing the same three colors isn't needed. */
+  .chipDot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
+  /* When the chip is active, its background becomes that same status
+     color (e.g. Live's hi-vis dot on a hi-vis background), so the dot
+     disappears entirely. box-shadow (not border) rings it without
+     shrinking the dot's own fill - the ring sits just outside it -
+     using --asphalt, the same dark-on-light contrast already used for
+     the chip's own active text color, rather than introducing a new
+     color just for this. */
+  .chip.active .chipDot{ box-shadow:0 0 0 2px var(--asphalt); }
+  /* Past and Upcoming get the same colours as their marker states (grey
+     dashed pins, rust "soon" pins) instead of both defaulting to hi-vis,
+     so each active chip colour matches what you're actually looking at.
+     Live keeps the default hi-vis, matching live markers. */
+  .chip.active[data-filter="past"]{
+    background:var(--past-grey);
+    border-color:var(--past-grey);
+    color:var(--paper);
+  }
+  .chip.active[data-filter="upcoming"]{
+    background:var(--rust);
+    border-color:var(--rust);
+    color:var(--asphalt);
+  }
+  .leaflet-popup-content-wrapper{
+    background:var(--asphalt-light);
+    color:var(--paper);
+    border-radius:8px;
+  }
+  .leaflet-popup-tip{ background:var(--asphalt-light); }
+  .noShootsPopup .leaflet-popup-content{ margin:14px 16px; }
+  .noShootsPopup .leaflet-popup-content-wrapper{ border:1px solid var(--hi-vis-dim); }
+  .noShootsTitle{ font-weight:800; color:var(--hi-vis); margin:0 0 4px; font-size:0.95rem; }
+  .noShootsBody{ font-size:0.82rem; color:#c7c9cd; margin:0; }
+  .popup-name{
+    font-weight:800;
+    font-size:1rem;
+    margin:0 0 4px;
+    color:var(--hi-vis);
+  }
+  .popup-meta{ font-size:0.8rem; color:#c7c9cd; margin:2px 0; }
+  .popup-status{
+    display:inline-block;
+    margin-top:6px;
+    padding:2px 8px;
+    border-radius:10px;
+    font-size:0.72rem;
+    font-weight:700;
+  }
+  .status-live{ background:var(--hi-vis); color:var(--asphalt); }
+  .status-soon{ background:var(--rust); color:var(--asphalt); }
+  .status-past{ background:var(--past-grey); color:var(--asphalt); }
+  /* Thin hairline dividers between popup sections — reuses the existing
+     margin-top spacing each section already had rather than adding new
+     height, so splitting the popup into sections costs close to nothing
+     vertically: just a 1px line sitting in space that was already there. */
+  .popup-divider{
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px solid var(--line);
+  }
+  /* Small uppercase "eyebrow" label — enough to give a section an
+     identity without the height cost of a full heading (roughly a third
+     the height of the h3s used elsewhere in the page). */
+  .popup-eyebrow{
+    display:block;
+    font-size:0.62rem;
+    font-weight:700;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    color:var(--past-grey);
+    margin-bottom:4px;
+  }
+  .popup-link{
+    display:inline-block;
+    color:var(--hi-vis);
+    font-size:0.8rem;
+    text-decoration:none;
+    border-bottom:1px solid var(--hi-vis-dim);
+  }
+  .popup-share-btn{
+    display:block;
+    margin-top:6px;
+    background:none;
+    border:none;
+    padding:0;
+    color:var(--past-grey);
+    font-size:0.76rem;
+    text-decoration:underline;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .popup-share-btn:hover{ color:var(--hi-vis); }
+  .popup-galleries{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .popup-gallery-link{
+    color:var(--paper);
+    font-size:0.78rem;
+    text-decoration:none;
+    border-bottom:1px dotted var(--past-grey);
+    width:fit-content;
+  }
+  .popup-gallery-link:hover{ color:var(--hi-vis); }
+  .popup-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .popup-logo{
+    width:40px;
+    height:40px;
+    border-radius:50%;
+    object-fit:cover;
+    border:2px solid var(--hi-vis);
+    flex-shrink:0;
+    background:var(--asphalt);
+  }
+  .popup-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .popup-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:5px 10px;
+    border-radius:14px;
+    font-size:0.74rem;
+    font-weight:700;
+    text-decoration:none;
+    border:1px solid var(--hi-vis-dim);
+    color:var(--hi-vis);
+  }
+  .popup-btn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+  .count-pill{
+    margin-left:auto;
+    font-size:0.78rem;
+    color:var(--muted-grey);
+  }
+  #dateLabelRow{
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:8px;
+    width:100%;
+  }
+  #monthSelect{
+    background:var(--asphalt-light);
+    color:var(--paper);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:5px 10px;
+    font-size:0.76rem;
+    font-family:inherit;
+    cursor:pointer;
+    max-width:100%;
+    flex-shrink:0;
+  }
+  #monthSelect:hover{ border-color:var(--hi-vis-dim); }
+  #monthSelect:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:1px; }
+  #exitMonthLockBtn{
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:none;
+    border-radius:14px;
+    padding:5px 12px;
+    font-size:0.76rem;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  #exitMonthLockBtn:hover{ background:var(--hi-vis-dim); }
+  #exitMonthLockBtn.hidden{ display:none; }
+
+  /* Small transient status message (geolocation errors, etc.) - same
+     component as add-shoot.html's toast, added here so index.html has
+     somewhere lightweight for one-off messages instead of borrowing the
+     defaultModeBanner (built for a longer-lived, more prominent purpose)
+     for things like "location access was denied". */
+  #toast{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translateX(-50%);
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    font-weight:700;
+    font-size:0.85rem;
+    padding:10px 18px;
+    border-radius:20px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    z-index:3000;
+  }
+  #toast.error{ background:var(--rust); color:var(--asphalt); }
+  #toast.hidden{ display:none; }
+  #dateBar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 16px 12px;
+    flex-wrap:wrap;
+  }
+  #dateLabel{
+    font-weight:700;
+    font-size:0.92rem;
+    color:var(--hi-vis);
+    flex:1;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  #dateSliderWrap{
+    position:relative;
+    flex:1;
+    display:flex;
+    align-items:center;
+    min-width:80px;
+  }
+  #dateSlider{
+    width:100%;
+    -webkit-appearance:none;
+    height:6px;
+    border-radius:3px;
+    background:var(--line);
+    outline:none;
+    touch-action:pan-x;
+  }
+  #dateSlider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:32px;height:32px;
+    border-radius:50%;
+    background:var(--hi-vis);
+    cursor:pointer;
+    border:3px solid var(--asphalt);
+    box-shadow:0 0 0 1px var(--line);
+    position:relative;
+    z-index:2;
+  }
+  /* outline:none on #dateSlider itself removes the browser default, so this
+     is the actual keyboard-focus indicator — a visible ring around the
+     thumb, since a keyboard user can grab and move this slider with arrow
+     keys and otherwise had no way to see it was focused. */
+  #dateSlider:focus-visible::-webkit-slider-thumb{
+    box-shadow:0 0 0 1px var(--line), 0 0 0 4px var(--hi-vis);
+  }
+  #dateSlider:focus-visible::-moz-range-thumb{
+    box-shadow:0 0 0 1px var(--line), 0 0 0 4px var(--hi-vis);
+  }
+  #dateSlider::-moz-range-thumb{
+    width:32px;height:32px;
+    border-radius:50%;
+    background:var(--hi-vis);
+    cursor:pointer;
+    border:3px solid var(--asphalt);
+    box-shadow:0 0 0 1px var(--line);
+    z-index:2;
+  }
+  #todayMarker{
+    position:absolute;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:14px;
+    height:14px;
+    border-radius:50%;
+    border:2px solid var(--hi-vis);
+    background:transparent;
+    box-sizing:border-box;
+    cursor:pointer;
+    z-index:1;
+    pointer-events:auto;
+  }
+  .stepBtn{
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--paper);
+    width:36px;height:36px;
+    border-radius:50%;
+    font-size:1rem;
+    font-weight:700;
+    cursor:pointer;
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+  }
+  .stepBtn:hover{ border-color:var(--hi-vis); }
+  .stepBtn:active{ background:var(--hi-vis); color:var(--asphalt); border-color:var(--hi-vis); }
+  #todayBtn{
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--paper);
+    padding:6px 12px;
+    border-radius:16px;
+    font-size:0.78rem;
+    cursor:pointer;
+  }
+  #todayBtn:hover{ border-color:var(--hi-vis); }
+
+  #lastUpdated{ white-space:nowrap; color:var(--muted-grey); font-size:0.78rem; }
+
+  /* Custom cluster icons — colored per status so a cluster's color always
+     matches what's actually inside it, same as single-marker pins */
+  .whoshotme-cluster{
+    border-radius:50%;
+    font-weight:800;
+    font-size:0.85rem;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .whoshotme-cluster.cluster-live{
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:2px solid var(--asphalt);
+    box-shadow:0 0 0 3px rgba(212,255,63,0.35);
+    animation:clusterPulse 1.6s infinite;
+  }
+  .whoshotme-cluster.cluster-soon{
+    background:var(--rust);
+    color:var(--asphalt);
+    border:2px solid var(--asphalt);
+    box-shadow:0 0 0 3px rgba(217,122,83,0.35);
+  }
+  .whoshotme-cluster.cluster-past{
+    background:var(--past-grey);
+    color:var(--asphalt);
+    border:2px dashed var(--asphalt);
+    opacity:0.85;
+  }
+  @keyframes clusterPulse{
+    0%{ box-shadow:0 0 0 3px rgba(212,255,63,0.4); transform:scale(1); }
+    50%{ box-shadow:0 0 0 16px rgba(212,255,63,0); transform:scale(1.08); }
+    100%{ box-shadow:0 0 0 3px rgba(212,255,63,0.4); transform:scale(1); }
+  }
+
+  /* =====================================================================
+     MOBILE — narrow screens get smaller type, tighter padding, and a
+     slightly smaller slider thumb so the map keeps as much room as
+     possible above the controls.
+  ===================================================================== */
+  @media (max-width: 480px){
+    header{ padding:10px 14px 8px; }
+    header h1{ font-size:1.15rem; }
+    header p{ font-size:0.74rem; }
+    #aboutLink{ font-size:0.78rem; }
+
+    #searchWrap{ max-width:none; left:8px; right:8px; top:8px; }
+    #searchBox{ padding:3px 4px 3px 12px; border-radius:18px; }
+    #searchInput{ font-size:0.84rem; padding:7px 4px; }
+    .resultItem{ padding:8px 12px; font-size:0.8rem; }
+    #getListedBtn{ top:60px; right:8px; padding:7px 11px; font-size:0.74rem; }
+
+    /* Bottom-left map control stack (zoom, Reset view, My location) -
+       shrunk like everything else on mobile instead of staying at full
+       desktop size. 30px matches .stepBtn's established mobile size
+       elsewhere in this file, rather than picking a new arbitrary value -
+       still comfortably tappable, just consistent with the rest of the
+       page's mobile scale-down. */
+    .leaflet-control-zoom{ border-radius:15px !important; }
+    .leaflet-control-zoom a{ width:30px !important; height:30px !important; line-height:30px !important; font-size:1rem; }
+    .leaflet-control-layers-toggle{ width:30px !important; height:30px !important; }
+    .recenter-btn{ padding:5px 10px; font-size:0.7rem; }
+
+    #filters{ padding:8px 12px; gap:6px; }
+    .chip{ padding:6px 10px; font-size:0.76rem; }
+    .chipDot{ width:8px; height:8px; }
+    .count-pill{ font-size:0.7rem; }
+    #lastUpdated{ font-size:0.7rem; }
+
+    #dateBar{ padding:8px 12px 10px; gap:6px; }
+    #monthSelect{ font-size:0.72rem; padding:4px 8px; }
+    #exitMonthLockBtn{ font-size:0.72rem; padding:4px 10px; }
+    #dateLabel{ font-size:0.8rem; }
+    .stepBtn{ width:30px; height:30px; font-size:0.9rem; }
+    #dateSlider::-webkit-slider-thumb{ width:26px; height:26px; }
+    #dateSlider::-moz-range-thumb{ width:26px; height:26px; }
+    #todayMarker{ width:12px; height:12px; }
+    #todayBtn{ padding:5px 9px; font-size:0.72rem; }
+
+    .popup-logo{ width:34px; height:34px; }
+    .popup-name{ font-size:0.92rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<header>
+  <h1>Who <span>Shot</span> Me?</h1>
+  <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
+</header>
+
+<div id="aboutOverlay">
+  <div id="aboutModal">
+    <div id="aboutModalHeader">
+      <h2>About this site</h2>
+      <button id="aboutCloseBtnTop" aria-label="Close">✕</button>
+    </div>
+    <div id="aboutModalBody">
+      <p>Who Shot Me? helps you find roadside motorcycle photographers around Derbyshire - whether they're live right now, coming up, or already wrapped up from a past ride.</p>
+
+      <h3>Meet the creator</h3>
+      <img class="creatorPhoto" src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
+      <p><strong>Hi, I'm Peter.</strong></p>
+      <p>I'm a keen motorcyclist and GIS professional from the Peak District. I first got into riding on a red 2010 Honda CB125, and these days you'll usually find me out on an orange Honda CB500F with a pillion passenger… a Charmander soft toy. It's for the kids… honest!</p>
+      <p>After seeing the same question appear time and time again in motorcycle Facebook groups - "Who was the photographer at Cat & Fiddle?", "Does anyone know who was at Snake Pass today?" - I realised there had to be a better way.</p>
+      <p>That's what inspired me to create WhoShotMe.</p>
+      <p>The aim is simple: make it easy for riders to find photographers, and help photographers reach more riders. By bringing both together in one place, I hope to save riders from endless searching while giving photographers another way to showcase their work.</p>
+      <p>WhoShotMe is an independent project that I develop in my spare time, and it's continually evolving based on feedback from the motorcycle community. Every suggestion helps shape the platform and where it goes next.</p>
+      <p>Thanks for visiting, and I hope you find WhoShotMe useful.</p>
+      <p><strong>Built by a rider, for riders and photographers.</strong></p>
+
+      <h3>Your privacy</h3>
+      <p>Visiting this site: we keep a simple count of page visits and which photographer links get clicked, entirely within our own systems - no third-party analytics company is involved. No cookies, nothing stored in your browser, nothing that identifies you personally - just anonymous counts.</p>
+      <p>"My location" button: if you tap it, your browser will ask your permission directly - that's a conversation between you and your browser, not something WhoShotMe controls. If you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
+      <p>Photographer listings: if you're listed, we store the details needed to run your listing - your name, contact email, logo and website links, and the shoot times/locations you submit. You manage this yourself via your own personal link; contact us (see below) to have your listing removed entirely. We keep this data for as long as you're listed, and delete it once you ask us to.</p>
+      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), Netlify (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p>Photographers: please only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Listings that don't meet this may be removed.</p>
+      <p>Questions, or want your listing removed? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
+
+      <button id="aboutCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="photographerFilterBanner" class="hidden" role="status" aria-live="polite">
+  <span id="photographerFilterText"></span>
+  <button id="clearPhotographerFilterBtn">Show everyone ✕</button>
+</div>
+
+<div id="defaultModeBanner" class="hidden" role="status" aria-live="polite">
+  <span id="defaultModeText"></span>
+  <button id="dismissDefaultModeBtn" aria-label="Dismiss this message">✕</button>
+</div>
+
+<div id="mapWrap">
+  <div id="searchWrap">
+    <div id="searchBox">
+      <input type="text" id="searchInput" placeholder="Search photographer or location…" autocomplete="off" aria-label="Search photographer or location">
+      <button id="searchClear" aria-label="Clear search">✕</button>
+    </div>
+    <div id="searchResults" role="listbox" aria-label="Search results"></div>
+  </div>
+
+  <a id="getListedBtn" href="#" rel="noopener">📷 Get listed</a>
+
+  <div id="map"></div>
+
+  <div id="dataStateOverlay" role="status" aria-live="polite">
+    <div id="dataStateBox">
+      <p id="dataStateTitle">Loading shoots…</p>
+      <p id="dataStateBody">Just a moment.</p>
+    </div>
+  </div>
+</div>
+
+<div id="bottomPanel">
+  <div id="filters">
+    <button class="chip" data-filter="past"><span class="chipDot" style="background:#6c7077;border:2px dashed var(--muted-grey);"></span>Past</button>
+    <button class="chip" data-filter="live"><span class="chipDot" style="background:#d4ff3f;"></span>Live now</button>
+    <button class="chip active" data-filter="upcoming"><span class="chipDot" style="background:#d97a53;"></span>Upcoming</button>
+    <span class="count-pill" id="countPill"></span>
+    <span id="lastUpdated"></span>
+  </div>
+
+  <div id="dateBar">
+    <div id="dateLabelRow">
+      <span id="dateLabel"></span>
+      <button id="exitMonthLockBtn" class="hidden" aria-label="Exit month view and return to today">‹ Back to today</button>
+      <select id="monthSelect" aria-label="Jump to a specific month">
+        <option value="">Jump to month…</option>
+      </select>
+    </div>
+    <button class="stepBtn" id="prevDay" aria-label="Previous day">‹</button>
+    <div id="dateSliderWrap">
+      <input type="range" id="dateSlider" min="0" max="0" value="0" step="1" aria-label="Date">
+      <div id="todayMarker" title="Jump back to today"></div>
+    </div>
+    <button class="stepBtn" id="nextDay" aria-label="Next day">›</button>
+    <button id="todayBtn">Today</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+
+<script>
+// =========================================================================
+// DATA — comes live from the Google Sheet, nothing to edit here.
+//
+// Shoots are added/changed/removed by editing the Google Sheet directly
+// (or via add-shoot.html, which builds a row to paste in) — never by
+// editing this file. See COMBINED_CSV_URL / GALLERIES_CSV_URL near the
+// top of the page for where the site pulls its data from.
+//
+// EXPECTED COLUMNS (from the "Combined" tab):
+//   Photographer Name, Logo URL, Website URL, Location Name, Description,
+//   Lat, Lng, Start, End, Shoot ID
+// Start/End must look like "YYYY-MM-DD HH:MM", 24hr clock, always UK time
+// regardless of who's visiting the site.
+//
+// If a row has a problem (e.g. a missing date, or lat/lng that isn't a
+// number), that one spot is skipped and a note is printed to the browser
+// console — it won't break the rest of the map.
+// =========================================================================
+
+// Builds a badge locally (no external request) with up to 3 initials, so
+// multi-word names like "Two Wheeled Photographer" show "TWP" instead of
+// just two letters. Short filler words ("the", "&", "and"...) are skipped
+// so the initials pull from the words that actually identify the name.
+const INITIAL_STOPWORDS = new Set(['the','of','and','&','a','an']);
+
+function getInitials(name){
+  const words = String(name)
+    .replace(/['’]/g, '')            // "Pete's" -> "Petes", so the apostrophe doesn't split it
+    .split(/[\s\-_/]+/)
+    .filter(w => w.length && !INITIAL_STOPWORDS.has(w.toLowerCase()));
+  const initials = words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
+  return initials || String(name).trim().slice(0, 2).toUpperCase() || '?';
+}
+
+function avatarFor(name){
+  const initials = getInitials(name);
+  const fontSize = initials.length >= 3 ? 42 : 52;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">`
+    + `<rect width="128" height="128" rx="64" fill="#2a2d33"/>`
+    + `<text x="64" y="76" font-family="Segoe UI, Roboto, sans-serif" font-size="${fontSize}" `
+    + `font-weight="800" fill="#d4ff3f" text-anchor="middle">${initials}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+// =========================================================================
+// CSV FETCHING — pulls live data from the "Combined" and "Combined
+// Galleries" tabs, published as CSV from the Google Sheet (see the
+// COMBINED_CSV_URL / GALLERIES_CSV_URL config near the top of this file).
+//
+// A tiny CSV parser is used instead of a naive split(',') because Google
+// Sheets quotes any field containing a comma, quote, or newline (e.g. a
+// description with a comma in it) — a naive split would shift columns
+// and quietly corrupt every row after the first one.
+// =========================================================================
+function parseCsv(text){
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i + 1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if (c === '"'){
+      inQuotes = true;
+    } else if (c === ','){
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r'){
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length){ row.push(field); rows.push(row); }
+
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(cell => cell.trim() !== '')) // drop fully-blank rows
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (r[idx] !== undefined ? r[idx] : '').trim(); });
+      return obj;
+    });
+}
+
+async function fetchCsv(url){
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  let text = await res.text();
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip a leading BOM if present
+  return parseCsv(text);
+}
+
+// Groups gallery rows by Shoot ID so each spot can look up its own
+// galleries in O(1) instead of re-scanning the whole list per spot.
+function groupGalleriesByShootId(galleryRows){
+  const map = {};
+  galleryRows.forEach(row => {
+    const id = (row['Shoot ID'] || '').trim();
+    if (!id) return;
+    const label = (row['Gallery Label'] || '').trim();
+    const url = (row['Gallery URL'] || '').trim();
+    if (!url || !isSafeUrl(url)) return;
+    if (!map[id]) map[id] = [];
+    map[id].push({ label: label || 'Gallery', url });
+  });
+  return map;
+}
+
+// Converts one row from the "Combined" CSV (Photographer Name, Logo URL,
+// Website URL, Location Name, Description, Lat, Lng, Start, End, Shoot ID)
+// into the {name, logo, lat, lng, ...} shape the rest of the app expects.
+// Photographer-submitted fields (location, description, gallery labels/
+// URLs) end up in HTML via popups and search results below. Escaping text
+// and checking URL schemes here means a bad or leaked secret key can't be
+// used to inject a script into every visitor's browser.
+function escapeHtml(str){
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function isSafeUrl(url){
+  return /^https?:\/\//i.test(String(url || '').trim());
+}
+
+function combinedRowToRawSpot(row){
+  return {
+    name: row['Photographer Name'] || '',
+    logo: row['Logo URL'] || '',
+    location: row['Location Name'] || '',
+    description: row['Description'] || '',
+    lat: row['Lat'] !== '' && row['Lat'] !== undefined ? Number(row['Lat']) : NaN,
+    lng: row['Lng'] !== '' && row['Lng'] !== undefined ? Number(row['Lng']) : NaN,
+    start: row['Start'] || '',
+    end: row['End'] || '',
+    link: row['Website URL'] || '',
+    shootId: row['Shoot ID'] || '',
+    shootTabName: row['Shoot Tab Name'] || ''
+  };
+}
+
+// =========================================================================
+// UK TIME HELPERS
+//
+// The site always treats start/end times above as UK local time (and
+// handles the BST/GMT clock change automatically), and always displays
+// times and "today" in UK time too — regardless of which timezone a
+// visitor's phone is set to. This matters because everyone using the
+// site is looking at Derbyshire shoots, so the times should always mean
+// "UK time", not "whatever time it is where the visitor happens to be".
+// =========================================================================
+function londonOffsetMinutes(utcDate){
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour12: false,
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+  const parts = fmt.formatToParts(utcDate).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour === '24' ? 0 : parts.hour, parts.minute, parts.second);
+  return (asUTC - utcDate.getTime()) / 60000; // minutes London is ahead of UTC (0 in winter, 60 in BST)
+}
+
+function parseUKDateTime(str){
+  // Normally str looks like "2026-06-30 08:00" (always meant as UK local
+  // time) and needs a "Z" appended before parsing as a UTC instant. But if
+  // Sheets ever silently converted the cell into a real Date value (see
+  // app-script.gs's createShoot/updateShoot for why that can happen), it
+  // comes back already as a full ISO string with its own trailing "Z" —
+  // appending a second one would produce "...000ZZ", an Invalid Date.
+  // Detect that case and parse it directly instead.
+  if (/Z$/.test(str)) {
+    return new Date(str);
+  }
+  const utcGuess = new Date(str.replace(' ', 'T') + 'Z');
+  const offsetMin = londonOffsetMinutes(utcGuess);
+  return new Date(utcGuess.getTime() - offsetMin * 60000);
+}
+
+function ukDateKey(date){
+  // Returns "YYYY-MM-DD" for whatever calendar day this instant falls on
+  // in the UK — used to group shoots by day regardless of visitor timezone.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year:'numeric', month:'2-digit', day:'2-digit' }).format(date);
+}
+
+function addDays(date, n){
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+
+function validateSpot(row, idx){
+  const errors = [];
+  if (!row.name || !String(row.name).trim()) errors.push('missing name');
+  if (typeof row.lat !== 'number' || isNaN(row.lat)) errors.push('lat must be a plain number, e.g. 53.1342');
+  if (typeof row.lng !== 'number' || isNaN(row.lng)) errors.push('lng must be a plain number, e.g. -1.6311');
+  if (!row.location || !String(row.location).trim()) errors.push('missing location');
+  if (!DATETIME_RE.test(row.start || '')) errors.push('start must look like "2026-06-30 08:00"');
+  if (!DATETIME_RE.test(row.end || '')) errors.push('end must look like "2026-06-30 11:00"');
+  if (errors.length){
+    console.warn(`Spot #${idx + 1} ("${row.name || 'unnamed'}") was skipped — ${errors.join('; ')}`);
+    return false;
+  }
+  return true;
+}
+
+function hasUsableCellValue(value){
+  // Google Sheets' VLOOKUP returns the number 0 (not "") when the cell
+  // it's looking up is blank, so a blank Logo URL / Website URL in the
+  // Photographers tab arrives here as the literal text "0" rather than
+  // empty. Treat that the same as blank (used for both fields below).
+  const t = String(value || '').trim();
+  return t !== '' && t !== '0';
+}
+
+let spots = [];
+
+// When set (via ?photographer=SHOOT_TAB_NAME in the URL), restricts the
+// whole page — map, date axis, and search — to just that photographer's
+// shoots. null means "show everyone", the normal default.
+let photographerFilter = null;
+
+function getFilterableSpots(){
+  return photographerFilter ? spots.filter(s => s.shootTabName === photographerFilter) : spots;
+}
+
+function getPhotographerDisplayName(shootTabName){
+  const match = spots.find(s => s.shootTabName === shootTabName);
+  return match ? match.name : shootTabName;
+}
+
+function buildSpots(rawSpotData, galleriesByShootId){
+  return rawSpotData
+    .filter((row, idx) => validateSpot(row, idx))
+    .map(row => ({
+      name: String(row.name).trim(),
+      logo: (hasUsableCellValue(row.logo) && isSafeUrl(row.logo)) ? String(row.logo).trim() : avatarFor(String(row.name).trim()),
+      lat: row.lat,
+      lng: row.lng,
+      location: String(row.location).trim(),
+      description: row.description ? String(row.description).trim() : '',
+      start: parseUKDateTime(row.start),
+      end: parseUKDateTime(row.end),
+      link: (hasUsableCellValue(row.link) && isSafeUrl(row.link)) ? String(row.link).trim() : '',
+      galleries: (row.shootId && galleriesByShootId[row.shootId]) || [],
+      shootTabName: row.shootTabName || '',
+      shootId: row.shootId || ''
+    }));
+}
+
+const now = new Date();
+
+// =========================================================================
+// VIEWPORT HEIGHT FIX — mobile browsers resize their address bar in and
+// out, and 100vh doesn't account for that, which can push the bottom
+// panel (date slider, legend) off-screen. We measure the real visible
+// height in JS and feed it back in as a CSS variable. Modern browsers
+// also get a native `100dvh` fallback declared in the CSS above.
+// =========================================================================
+function setRealVH(){
+  document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+}
+setRealVH();
+window.addEventListener('resize', setRealVH);
+window.addEventListener('orientationchange', setRealVH);
+
+// =========================================================================
+// TOAST — small transient status message, bottom-center. Same component
+// as add-shoot.html's toast (kept implementation-identical for
+// consistency between the two pages). Used for one-off messages like
+// geolocation errors, which don't warrant the more prominent, longer-lived
+// defaultModeBanner built for a different purpose.
+// =========================================================================
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(text, isError){
+  clearTimeout(toastTimer);
+  toastEl.textContent = text;
+  toastEl.classList.toggle('error', !!isError);
+  toastEl.classList.remove('hidden');
+  toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2600);
+}
+
+// =========================================================================
+// MAP SETUP — switchable basemaps: OS Road (default), OpenStreetMap, and
+// Aerial (Esri World Imagery). OS Light and OS Outdoor are temporarily
+// disabled (commented out below, easy to re-enable).
+//
+// The OS layers use OS Maps API (raster ZXY), free under the OS Data Hub's
+// OpenData plan. The API key below is a Project API key from that free
+// plan — rate-limited server-side rather than secret, same as how OS's own
+// getting-started examples embed it, but if it ever needs rotating that's
+// done from the project page on the OS Data Hub.
+//
+// The Esri aerial layer uses their older keyless tile endpoint rather than
+// their newer API-key-based service. It works today with zero signup, but
+// Esri has been steering developers toward the token-required service, so
+// this isn't guaranteed to keep working indefinitely — if it ever stops,
+// this is the URL to check first. Separately from the URL itself: Esri's
+// free terms for this imagery require the app not be revenue-generating
+// (no ads, no paid listings) — worth re-checking if that ever changes here.
+// =========================================================================
+const OS_MAPS_API_KEY = 'Yt6QlfesQxgEbJ7b0zj0ezkKqFuktRL6';
+const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database right ' + new Date().getFullYear();
+
+// tap:false — disables Leaflet's internal touch-to-click simulation.
+// Leaflet already does this by default on iOS/Safari because it's a known
+// source of "popup opens then immediately closes" bugs (a synthetic click
+// lands on the map a moment after the real tap, and the map's default
+// closePopupOnClick behaviour closes what was just opened). We've had the
+// same symptom reported on Samsung Internet on Android — worse with
+// leaflet.markercluster in the mix, per longstanding upstream reports
+// (github.com/Leaflet/Leaflet/issues/7330). Modern touch browsers don't
+// need Leaflet's tap polyfill anyway (native click has no delay these
+// days), so disabling it is safe and removes the race entirely.
+const map = L.map('map', { zoomControl: false, attributionControl: false, tap: false, maxBoundsViscosity: 1.0 }).setView([53.18, -1.72], 10);
+// Keep the UK in view — Leaflet's built-in bounds constraint, not custom
+// drag logic. One box works correctly at every zoom level with no extra
+// code: zoomed in, it's vastly bigger than the viewport so panning feels
+// completely free; zoomed out, it's what stops the map drifting off to
+// another continent. maxBoundsViscosity:1.0 (set above) makes it a hard
+// stop rather than a rubber-band bounce-back.
+const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
+map.setMaxBounds(UK_BOUNDS);
+// Same reflow issue as the banners (see applyPhotographerFilterFromUrl) but
+// triggered by rotation or the on-screen keyboard opening/closing (e.g.
+// tapping the search box) — setRealVH() already corrects the CSS height
+// for those, this makes sure Leaflet notices too.
+window.addEventListener('resize', () => map.invalidateSize());
+window.addEventListener('orientationchange', () => map.invalidateSize());
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+// prefix:false drops the "Leaflet" branding link — the required
+// attribution for whichever basemap is active (added via each tile layer
+// below) is kept, since removing that would breach its usage policy.
+L.control.attribution({ prefix: false }).addTo(map);
+
+// Custom panes so pins stack by status — live always on top, then
+// upcoming, then past at the bottom — regardless of which one happens to
+// sit lower on screen. Leaflet's default marker pane auto-orders markers
+// by their vertical pixel position, which is fine within a single status
+// but doesn't guarantee live-over-upcoming-over-past when they overlap
+// (e.g. the "Upcoming" view mixes live + soon together, or a day scrubbed
+// to today can have all three at once). Distinct panes override that.
+const PANE_ZINDEX = { past: 610, soon: 620, live: 630 }; // default markerPane is 600; popupPane is 700
+Object.entries(PANE_ZINDEX).forEach(([status, z]) => {
+  const pane = map.createPane(`pane-${status}`);
+  pane.style.zIndex = z;
+});
+
+// The free OpenData plan only serves OS Maps API tiles up to z16 — z17+
+// requires a Premium plan. maxNativeZoom caps requests at 16 while
+// maxZoom lets Leaflet overzoom (stretch the z16 tile) beyond that, so
+// riders zoomed in to street/village scale still see a background map
+// instead of a blank one.
+//
+// minZoom:5 + minNativeZoom:7 — all five basemaps now share the same
+// zoom-out floor (14 clicks from the shared maxZoom:19 ceiling), rather
+// than OS stopping 7 levels earlier than OSM/Aerial. Getting there safely
+// took two parts:
+//   - minZoom:5 is a HARD floor — the map can never go lower than this on
+//     any layer. Critically, z5 is well above the low zoom levels where
+//     Leaflet starts horizontally duplicating the world to fill the
+//     viewport ("world wrap"). That combination — open-ended underzoom
+//     stretching reaching all the way down into world-wrap territory —
+//     is what caused the map to lock up entirely last time.
+//   - minNativeZoom:7 fills the small remaining gap (OS has no real
+//     tiles below z7): Leaflet stretches the z7 tile to cover z5–z6.
+//     Because minZoom:5 stops it from ever being asked to stretch further
+//     than that, this is a bounded, modest use of the same trick rather
+//     than the previous unbounded one — should be safe, but worth a real
+//     zoom-out test after deploying given the history here.
+//
+// OSM and Aerial get minZoom:5 too, purely as a UI restriction — they
+// have real tiles all the way to z0, so no stretching involved there,
+// just capping how far out the zoom control lets you go.
+/* OS Light — temporarily disabled, may bring back later.
+const osLightLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Light_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+*/
+const osRoadLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Road_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+/* OS Outdoor — temporarily disabled, may bring back later.
+const osOutdoorLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Outdoor_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+*/
+const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, minZoom: 5, attribution: '&copy; OpenStreetMap contributors'
+});
+// maxZoom:19 (was 23) — Esri's tile cache technically has slots up to
+// z23, but that's just the cache's structural ceiling, not a guarantee
+// of real image detail at every location. For this part of the UK, the
+// actual captured imagery runs out around z19 — beyond that Esri serves
+// a placeholder "imagery not available at this scale" tile rather than
+// real detail. Capping here matches what's actually usable, and (per
+// the note above osLightLayer) now matches OSM/OS's ceiling exactly
+// rather than diverging by several levels. minZoom:5 matches OSM/OS's
+// floor too, for the same reason.
+const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Tiles &copy; Esri - Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+});
+// Hybrid reference overlay — Esri's "World Boundaries and Places" layer, drawn
+// on top of the imagery to add place names and admin boundaries. This is
+// the same free keyless endpoint family as aerialLayer above (server.arcgisonline.com,
+// not the newer API-key-gated services.arcgisonline.com), so it carries the same
+// caveat: works today with zero signup, not guaranteed indefinitely.
+const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Esri, DeLorme'
+});
+// Second reference overlay — Boundaries and Places has no road names, so
+// this adds Esri's "World Transportation" layer (roads, road names,
+// railways) on top of it. Same keyless endpoint family, same caveat.
+const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Esri'
+});
+// Grouped, roads on top, so the layer switcher's "Aerial" entry toggles all
+// three tile layers together as one basemap.
+const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
+osRoadLayer.addTo(map);
+L.control.layers({
+  // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
+  'OS Road': osRoadLayer,
+  // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
+  'OpenStreetMap': streetsLayer,
+  'Aerial': aerialWithLabels
+}, null, { position: 'bottomright' }).addTo(map);
+
+// =========================================================================
+// MAP INTERACTION TRACKING — once someone manually pans or zooms, we stop
+// auto-recentering the map whenever the date/filter changes. Otherwise a
+// rider looking at their own area could scrub the date slider and have
+// the map yank them somewhere else, which is disorienting. A small
+// "recenter" button (below the zoom controls) lets them snap back to fit
+// the currently visible spots on demand instead.
+// =========================================================================
+let userHasMovedMap = false;
+let recenterBtnEl = null; // set once the control is added to the map, below
+let suppressInteractionTracking = false;
+let pendingProgrammaticMoves = 0; // counts moves we've started but not yet confirmed finished
+
+// Single point of truth for userHasMovedMap so the "Reset view" button's
+// highlighted state can never drift out of sync with the flag that
+// actually gates auto-recentre.
+function setUserHasMovedMap(value){
+  userHasMovedMap = value;
+  if (recenterBtnEl) recenterBtnEl.classList.toggle('is-active', value);
+}
+
+// Every programmatic move (recentre, date change, etc.) registers itself
+// here and only clears suppression once ALL of them have resolved.
+// Without this counter, firing setView/fitBounds again before a previous
+// animated move finishes causes Leaflet to fire an early 'moveend' for the
+// interrupted move — a single-listener version of this would unsuppress
+// tracking while the *new* move is still animating, and the tail of that
+// animation gets misread as a manual pan, permanently killing auto-recentre.
+function programmaticMapMove(moveFn){
+  pendingProgrammaticMoves++;
+  suppressInteractionTracking = true;
+  moveFn();
+  map.once('moveend', () => {
+    pendingProgrammaticMoves = Math.max(0, pendingProgrammaticMoves - 1);
+    if (pendingProgrammaticMoves === 0) suppressInteractionTracking = false;
+  });
+}
+
+map.on('movestart zoomstart', () => {
+  if (!suppressInteractionTracking) setUserHasMovedMap(true);
+});
+
+const RecenterControl = L.Control.extend({
+  options: { position: 'bottomleft' },
+  onAdd: function(){
+    const btn = L.DomUtil.create('button', 'recenter-btn');
+    // Text label rather than an icon: a crosshair reads as "my location"
+    // and corner-brackets reads as "fullscreen" — neither actually says
+    // "show all current results", so a plain label is the clearest option.
+    // It also switches to the hi-vis accent color (see .is-active) the
+    // moment a manual pan/zoom makes it actionable, rather than sitting
+    // visually identical whether or not there's anything to reset.
+    btn.textContent = 'Reset view';
+    btn.title = 'Snap back to fit all currently-filtered results';
+    L.DomEvent.disableClickPropagation(btn);
+    btn.addEventListener('click', () => {
+      setUserHasMovedMap(false);
+      render();
+    });
+    recenterBtnEl = btn;
+    return btn;
+  }
+});
+map.addControl(new RecenterControl());
+
+// =========================================================================
+// "MY LOCATION" — one-shot browser geolocation lookup, entirely
+// client-side. Coordinates go straight into map.setView() (and a marker)
+// and nowhere else — never sent to our server, never stored, never
+// logged anywhere. See the "Your privacy" section of the About modal for
+// the plain-English version of this. Deliberately a single lookup
+// (getCurrentPosition), not continuous tracking (watchPosition) — we
+// only need "where am I right now", not an ongoing feed of the rider's
+// movements.
+//
+// Treated as a normal manual move (not wrapped in programmaticMapMove),
+// so it behaves just like a manual pan/zoom and won't get silently
+// undone by the next background data refresh.
+// =========================================================================
+let myLocationMarker = null;
+
+function findMyLocation(btn){
+  if (!navigator.geolocation){
+    showToast("This browser doesn't support location - try searching by area instead.", true);
+    return;
+  }
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Locating…';
+  btn.disabled = true;
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      btn.textContent = originalLabel;
+      btn.disabled = false;
+      const { latitude, longitude } = pos.coords;
+      if (myLocationMarker){
+        myLocationMarker.setLatLng([latitude, longitude]);
+      } else {
+        myLocationMarker = L.circleMarker([latitude, longitude], {
+          radius: 8,
+          weight: 3,
+          color: '#4aa3ff',
+          fillColor: '#4aa3ff',
+          fillOpacity: 0.35
+        }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+      }
+      map.setView([latitude, longitude], 13, { animate: true });
+    },
+    (err) => {
+      btn.textContent = originalLabel;
+      btn.disabled = false;
+      const message = err.code === err.PERMISSION_DENIED
+        ? "Location access was denied - check your browser's site settings if you'd like to allow it."
+        : "Couldn't get your location - please try again.";
+      showToast(message, true);
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+const LocateControl = L.Control.extend({
+  options: { position: 'bottomleft' },
+  onAdd: function(){
+    const btn = L.DomUtil.create('button', 'recenter-btn');
+    btn.textContent = '📍 My location';
+    btn.title = "Center the map on your current location (your browser will ask permission first)";
+    L.DomEvent.disableClickPropagation(btn);
+    btn.addEventListener('click', () => findMyLocation(btn));
+    return btn;
+  }
+});
+map.addControl(new LocateControl());
+
+// =========================================================================
+// STATUS + ICONS
+// =========================================================================
+function getStatus(spot){
+  const t = new Date();
+  if (t >= spot.start && t <= spot.end) return 'live';
+  if (t < spot.start) return 'soon';
+  return 'past';
+}
+
+function fmtTime(d){
+  return d.toLocaleString('en-GB', { timeZone: 'Europe/London', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+const lastUpdatedEl = document.getElementById('lastUpdated');
+function updateLastUpdated(){
+  const now = new Date();
+  const timeStr = now.toLocaleString('en-GB', { timeZone: 'Europe/London', hour:'2-digit', minute:'2-digit' });
+  lastUpdatedEl.textContent = `Updated ${timeStr}`;
+  lastUpdatedEl.title = 'When this page last successfully checked the sheet - it rechecks automatically every few minutes.';
+}
+
+const FLASH_PATTERN_LIST = ['cameraFlash', 'cameraFlashBurst2', 'cameraFlashBurst3'];
+// Drives one marker's flash element through the pattern rotation. CSS
+// alone can't switch which @keyframes an element uses once it's already
+// mid-animation, so this sets a single-run (not infinite) animation,
+// waits for it to finish, then re-applies the next pattern in sequence
+// with a freshly randomized duration/delay. Bails out cleanly once the
+// element's gone (marker removed on a re-render/refresh) rather than
+// leaking a listener chain forever.
+function startFlashCycle(flashUid, currentIndex){
+  const el = document.getElementById(flashUid);
+  if (!el) return; // marker no longer exists — refresh/re-render happened
+  const pattern = FLASH_PATTERN_LIST[currentIndex];
+  const duration = (3 + Math.random() * 2.5).toFixed(2);
+  const delay = (Math.random() * 2).toFixed(2);
+  el.style.animation = `${pattern} ${duration}s ${delay}s 1`; // single run, not infinite — advances manually on completion
+  el.addEventListener('animationend', function onEnd(){
+    el.removeEventListener('animationend', onEnd);
+    startFlashCycle(flashUid, nextRandomPatternIndex(currentIndex));
+  }, { once: true });
+}
+
+// Random, but never the same pattern twice running — a pure unweighted
+// pick would occasionally land on the same style two or three cycles in
+// a row, which reads as "stuck on single" rather than "random". Picks
+// uniformly from whichever two patterns aren't the current one instead.
+function nextRandomPatternIndex(currentIndex){
+  const choices = FLASH_PATTERN_LIST.map((_, i) => i).filter(i => i !== currentIndex);
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+function makeIcon(spot, status){
+  // Raw hex literals here, not CSS variables — this string gets an alpha
+  // suffix appended directly below (statusColor + '55'), which only works
+  // on a literal hex value, not a var(...) reference.
+  const statusColor = status === 'live' ? '#d4ff3f' : status === 'soon' ? '#d97a53' : '#9aa0a6';
+  const isPast = status === 'past';
+  const isLive = status === 'live';
+  const size = 46;
+  // Camera-flash sparkle on live pins: a small star badge, top-right
+  // corner, mostly invisible with a brief bright pop near the end of its
+  // cycle. Each marker gets its own random delay AND duration (not just
+  // delay) baked into its inline style at icon-build time, so across
+  // several live pins the flashes drift in and out of sync with each
+  // other indefinitely, rather than one shared cycle where they'd
+  // eventually line up and flash in unison.
+  //
+  // Contrast: tried a drop-shadow outline (too thin to read against pale
+  // OS/OSM basemaps) and a solid dark backing disc (fixed the contrast
+  // but looked like a black blob popping in and out, not a flash). This
+  // is a dark star sitting directly behind a smaller white star, both
+  // using the same clip-path silhouette — a thin dark contour that
+  // follows the star's actual points rather than a circular backdrop.
+  // filter:drop-shadow() is applied to the OUTER wrapper (not either
+  // star directly), so the white glow renders around the combined shape
+  // correctly rather than being clipped away — that only happens when
+  // the shadow is applied to the clipped element itself.
+  //
+  // Random per marker: cycles through all three patterns (single, double,
+  // triple) in turn rather than picking one and sticking with it for the
+  // marker's whole lifetime — starts at a random point in the rotation so
+  // markers aren't all on the same style at once, then advances after
+  // each flash finishes. Speed varies per-cycle too (a fresh random
+  // duration/delay picked every time it advances), not just once at
+  // marker creation, so a given pin doesn't settle into a metronomic
+  // rhythm either.
+  const STAR_CLIP = 'polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%)';
+  const flashUid = `f${Math.random().toString(36).slice(2, 9)}`;
+  const startPattern = Math.floor(Math.random() * FLASH_PATTERN_LIST.length);
+  const flashHtml = isLive ? `<div id="${flashUid}" style="
+      position:absolute; top:-3px; right:-3px;
+      width:16px; height:16px;
+      opacity:0;
+      pointer-events:none;
+    "><div style="
+      position:absolute; inset:0;
+      background:#1c1e22;
+      clip-path:${STAR_CLIP};
+    "></div><div style="
+      position:absolute; top:2.5px; left:2.5px;
+      width:11px; height:11px;
+      background:#fff;
+      clip-path:${STAR_CLIP};
+    "></div></div>` : '';
+  if (isLive){
+    // Deferred so the element actually exists in the DOM by the time this
+    // runs (divIcon's html string isn't attached yet at the point
+    // makeIcon() returns) — a fresh setTimeout(0) per marker is cheap
+    // enough at this app's scale (a handful of live pins, not hundreds).
+    setTimeout(() => startFlashCycle(flashUid, startPattern), 0);
+  }
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative; width:${size}px; height:${size}px;">
+      <div style="
+        width:${size}px;height:${size}px;border-radius:50%;
+        background-image:url('${escapeHtml(spot.logo)}');
+        background-size:cover;
+        background-position:center;
+        background-color:#1c1e22;
+        border:3px ${isPast ? 'dashed' : 'solid'} ${statusColor};
+        box-shadow:0 0 0 2px ${statusColor}55;
+        opacity:${isPast ? 0.55 : 1};
+        filter:${isPast ? 'grayscale(80%)' : 'none'};
+        ${isLive ? 'animation:pulse 1.6s infinite;' : ''}
+      "></div>
+      ${flashHtml}
+    </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2]
+  });
+}
+
+// pulse + camera-flash keyframes for live markers
+const styleTag = document.createElement('style');
+styleTag.textContent = `
+  @keyframes pulse{ 0%{box-shadow:0 0 0 2px #d4ff3f66; transform:scale(1);} 50%{box-shadow:0 0 0 14px #d4ff3f00; transform:scale(1.08);} 100%{box-shadow:0 0 0 2px #d4ff3f66; transform:scale(1);} }
+  @keyframes cameraFlash{
+    0%, 90%, 100% { opacity:0; transform:scale(0.4); filter:drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    93% { opacity:1; transform:scale(1.15); filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
+    96% { opacity:0.5; transform:scale(0.85); filter:drop-shadow(0 0 2px rgba(255,255,255,0.4)); }
+  }
+  @keyframes cameraFlashBurst2{
+    0%, 78%, 84%, 88%, 100% { opacity:0; transform:scale(0.4); filter:drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    80%, 86% { opacity:1; transform:scale(1.1); filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
+  }
+  @keyframes cameraFlashBurst3{
+    0%, 74%, 78%, 82%, 86%, 90%, 100% { opacity:0; transform:scale(0.4); filter:drop-shadow(0 0 0 rgba(255,255,255,0)); }
+    76%, 80%, 84% { opacity:1; transform:scale(1.1); filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
+  }
+`;
+document.head.appendChild(styleTag);
+
+// =========================================================================
+// CLUSTERING — overlapping spots at the same location group into a
+// numbered icon so you can see "3 shoots here" instead of stacked pins.
+//
+// One cluster group per status (live / upcoming / past), so a cluster
+// only ever groups markers that share the same status — a cluster's
+// color always accurately reflects what's inside it, the same way a
+// single pin's color does. Without this, a cluster of two past shoots
+// could end up colored live-green just because that happened to be
+// this group's fixed color, which is misleading.
+// =========================================================================
+function makeClusterGroup(statusClass, pane){
+  return L.markerClusterGroup({
+    maxClusterRadius: 28, // only group markers that are genuinely on top of each other
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    zoomToBoundsOnClick: true,
+    clusterPane: pane, // keeps cluster icons in the same status-stacking pane as their child markers
+    iconCreateFunction: function(cluster){
+      const count = cluster.getChildCount();
+      const size = count < 10 ? 36 : 42;
+      return L.divIcon({
+        html: `<div class="whoshotme-cluster ${statusClass}" style="width:${size}px;height:${size}px;">${count}</div>`,
+        className: '',
+        iconSize: [size, size]
+      });
+    }
+  });
+}
+
+const clusterGroups = {
+  live: makeClusterGroup('cluster-live', 'pane-live'),
+  soon: makeClusterGroup('cluster-soon', 'pane-soon'),
+  past: makeClusterGroup('cluster-past', 'pane-past')
+};
+Object.values(clusterGroups).forEach(group => map.addLayer(group));
+
+// =========================================================================
+// DATE AXIS — lets riders scrub back through past shoots (where they'll
+// spend most of their time) as well as forward to upcoming ones.
+// =========================================================================
+let currentMode = 'upcoming'; // 'upcoming', 'past', 'date', 'month', or 'live' — starts on "upcoming" so the map has something to show
+let shootDates = [];
+let selectedIndex = 0;
+let todaySnapIndex = 0;
+let selectedMonthKey = ''; // "YYYY-MM" when currentMode === 'month', else unused
+
+// When the month dropdown is used, the slider "locks" onto just that
+// month — monthLockKey holds which one, and lockedDates is the day-by-day
+// axis scoped to it (built from the FULL dataset, unlike the normal
+// 15-day-windowed shootDates, since reaching outside that window is the
+// whole point of the dropdown). While locked, the slider/steppers/Today
+// marker all operate on lockedDates instead of shootDates, and won't
+// spill back out to today's date until the lock is explicitly exited.
+let monthLockKey = null;
+let lockedDates = [];
+const exitMonthLockBtn = document.getElementById('exitMonthLockBtn');
+
+function activeDates(){
+  return monthLockKey ? lockedDates : shootDates;
+}
+
+// All UK-calendar day-keys a spot's [start, end] span touches, optionally
+// clipped to [rangeStart, rangeEnd]. Used to populate the date slider so a
+// multi-day shoot gets a stop on every day it's actually running, not just
+// the day it started — a shoot that starts one day and is still live the
+// next previously had no slider position for that second day at all.
+function spotDayKeys(spot, rangeStart, rangeEnd){
+  const keys = [];
+  let cursor = spot.start;
+  let guard = 0;
+  while (guard++ < 60) { // 60-day safety cap - far beyond any realistic shoot duration
+    if ((!rangeStart || cursor >= rangeStart) && (!rangeEnd || cursor <= rangeEnd)) {
+      keys.push(ukDateKey(cursor));
+    }
+    if (ukDateKey(cursor) >= ukDateKey(spot.end)) break; // compare calendar days, not raw instants — otherwise a same-day shoot (start/end both today) gets an extra day appended once cursor ticks past end's exact time
+    cursor = addDays(cursor, 1);
+  }
+  return keys;
+}
+
+function buildLockedDates(key){
+  const [y, m] = key.split('-').map(Number);
+  const monthStart = new Date(y, m - 1, 1);
+  const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+  const dateStrings = new Set();
+  getFilterableSpots()
+    // Overlaps this month at all, not just starts in it - otherwise a
+    // shoot that began in the previous month but runs into this one
+    // (or vice versa) goes missing from this month's axis entirely.
+    .filter(s => s.end >= monthStart && s.start <= monthEnd)
+    .forEach(s => spotDayKeys(s, monthStart, monthEnd).forEach(k => dateStrings.add(k)));
+  return [...dateStrings].sort().map(k => parseUKDateTime(k + ' 00:00'));
+}
+
+function updateSliderRange(){
+  const dates = activeDates();
+  sliderEl.min = 0;
+  sliderEl.max = Math.max(0, dates.length - 1);
+}
+
+function exitMonthLock(){
+  if (!monthLockKey) return;
+  monthLockKey = null;
+  lockedDates = [];
+  selectedMonthKey = '';
+  monthSelectEl.value = '';
+  exitMonthLockBtn.classList.add('hidden');
+  updateSliderRange();
+  positionTodayMarker(); // re-show the marker now that we're back on the unlocked axis
+}
+
+const sliderEl = document.getElementById('dateSlider');
+
+function rebuildDateAxis(){
+  // Only dates with real data, and only within a 15-day window either side
+  // of today — a shoot from 6 months ago or a year from now shouldn't
+  // stretch the day-by-day scrubber out to be mostly empty steps. Anything
+  // further out is reachable via the month/year dropdown instead.
+  const windowStart = addDays(now, -15);
+  const windowEnd = addDays(now, 15);
+  const dateStrings = new Set();
+  getFilterableSpots()
+    // Overlaps the window at all, not just starts within it - a shoot
+    // that began before the window but is still running into it (e.g.
+    // a multi-day shoot spanning today) needs to show up too.
+    .filter(s => s.end >= windowStart && s.start <= windowEnd)
+    .forEach(s => spotDayKeys(s, windowStart, windowEnd).forEach(k => dateStrings.add(k)));
+  // Always include today on the axis, even if nothing is scheduled —
+  // every other empty day is left out entirely.
+  dateStrings.add(ukDateKey(now));
+  shootDates = [...dateStrings]
+    .sort()
+    .map(key => parseUKDateTime(key + ' 00:00'));
+  // todaySnapIndex always tracks where "today" sits on the *unlocked* axis,
+  // even while a month lock means it isn't the active one right now — the
+  // today marker and Today button both need it once the lock is exited.
+  todaySnapIndex = defaultDateIndex();
+
+  if (monthLockKey){
+    // A month is locked — refresh its own day axis (a background sync may
+    // have added/removed shoots in that month) instead of touching the
+    // slider that's currently scoped to it.
+    lockedDates = buildLockedDates(monthLockKey);
+    selectedIndex = Math.min(selectedIndex, Math.max(0, lockedDates.length - 1));
+  } else {
+    selectedIndex = todaySnapIndex;
+  }
+  updateSliderRange();
+  sliderEl.value = selectedIndex;
+  positionTodayMarker();
+}
+
+const monthSelectEl = document.getElementById('monthSelect');
+function rebuildMonthOptions(){
+  // Deliberately built from the FULL dataset, not the 15-day-windowed
+  // shootDates — this is the whole point of the dropdown: reaching months
+  // outside that window. Only months that actually have a shoot appear;
+  // it's not a full always-populated calendar picker.
+  //
+  // Built from every day a spot spans (spotDayKeys with no range bounds),
+  // not just its start date — otherwise a shoot that starts in one month
+  // and runs into the next wouldn't offer the second month as a jump
+  // target at all, even though it's genuinely happening there.
+  const monthKeys = new Set();
+  getFilterableSpots().forEach(s => spotDayKeys(s).forEach(k => monthKeys.add(k.slice(0, 7))));
+  const sortedKeys = [...monthKeys].sort();
+  const previousValue = monthSelectEl.value;
+  monthSelectEl.innerHTML = '<option value="">Jump to month…</option>' + sortedKeys.map(key => {
+    const [y, m] = key.split('-').map(Number);
+    const label = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    return `<option value="${key}">${label}</option>`;
+  }).join('');
+  // Keep the selection across a background refresh if that month still has data
+  if (sortedKeys.includes(previousValue)) monthSelectEl.value = previousValue;
+}
+
+function positionTodayMarker(){
+  const marker = document.getElementById('todayMarker');
+  if (!marker) return;
+  if (monthLockKey || shootDates.length <= 1){
+    // Locked to a single month — the slider no longer represents the
+    // shootDates axis "today" sits on, so the marker would be meaningless
+    // (or worse, misleading) here. Also hidden if there's nothing
+    // meaningful to show a relative position for.
+    marker.style.display = 'none';
+    return;
+  }
+  marker.style.display = 'block';
+  const max = shootDates.length - 1;
+  const pct = todaySnapIndex / max;
+  const trackRect = sliderEl.getBoundingClientRect();
+  const thumbWidth = window.innerWidth <= 480 ? 26 : 32; // keep in sync with the #dateSlider thumb CSS
+  const usableWidth = Math.max(0, trackRect.width - thumbWidth);
+  const leftPx = (thumbWidth / 2) + pct * usableWidth;
+  marker.style.left = `${leftPx}px`;
+}
+
+window.addEventListener('resize', positionTodayMarker);
+document.getElementById('todayMarker').addEventListener('click', () => goToDateMode(todaySnapIndex));
+
+function defaultDateIndex(){
+  const todayKey = ukDateKey(now);
+  let idx = shootDates.findIndex(d => ukDateKey(d) === todayKey);
+  if (idx !== -1) return idx;
+  idx = shootDates.findIndex(d => d >= now);
+  if (idx !== -1) return idx;
+  return Math.max(0, shootDates.length - 1);
+}
+
+function ordinalSuffix(n){
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th'; // 11th/12th/13th are the exception to the last-digit rule below
+  switch (n % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
+}
+
+function fmtDateLabel(d){
+  const isToday = ukDateKey(d) === ukDateKey(now);
+  const dow = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' }).format(d);
+  const dayNum = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric' }).format(d));
+  const month = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'long' }).format(d);
+  const label = `${dow}, ${dayNum}${ordinalSuffix(dayNum)} ${month}`;
+  const weekendTag = (dow === 'Sat' || dow === 'Sun') ? ' 🏍️' : '';
+  return (isToday ? `Today - ${label}` : label) + weekendTag;
+}
+
+function popupHtml(spot){
+  const status = getStatus(spot);
+  const statusLabel = status === 'live' ? 'LIVE NOW' : status === 'soon' ? 'UPCOMING' : 'WRAPPED UP (PAST)';
+  const statusClass = status === 'live' ? 'status-live' : status === 'soon' ? 'status-soon' : 'status-past';
+  // "More from {name}" rather than "View their page" — the link behind
+  // this varies by photographer (some a Facebook/Instagram profile, some
+  // a proper portfolio site), so wording tied to a specific platform
+  // would be wrong for some of them. This phrasing works either way.
+  const linkLine = spot.link ? `<a class="popup-link" href="${escapeHtml(spot.link)}" target="_blank" rel="noopener">More from ${escapeHtml(spot.name)} →</a>` : '';
+  const descLine = spot.description ? `<p class="popup-meta">${escapeHtml(spot.description)}</p>` : '';
+  const galleryLines = (spot.galleries && spot.galleries.length)
+    ? `<div class="popup-galleries popup-divider">
+        <span class="popup-eyebrow">Galleries</span>
+        ${spot.galleries.map(g => `<a class="popup-gallery-link" href="${escapeHtml(g.url)}" target="_blank" rel="noopener">📷 ${escapeHtml(g.label)}</a>`).join('')}
+      </div>`
+    : '';
+  const shareLine = spot.shootId
+    ? `<button class="popup-share-btn" type="button" data-shoot-id="${escapeHtml(spot.shootId)}">🔗 Share this shoot</button>`
+    : '';
+  // Link + share sit together under one divider, sharing a "more ways to
+  // engage" section — no need for two separate dividers back to back.
+  const linkAndShareBlock = (linkLine || shareLine)
+    ? `<div class="popup-divider">${linkLine}${shareLine}</div>`
+    : '';
+  return `
+    <div class="popup-header">
+      <img class="popup-logo" src="${escapeHtml(spot.logo)}" alt="${escapeHtml(spot.name)} logo" />
+      <p class="popup-name" style="margin:0;">${escapeHtml(spot.name)}</p>
+    </div>
+    <p class="popup-meta">${escapeHtml(spot.location)}</p>
+    ${descLine}
+    <p class="popup-meta">${fmtTime(spot.start)} – ${fmtTime(spot.end)}</p>
+    <span class="popup-status ${statusClass}">${statusLabel}</span>
+    <div class="popup-actions popup-divider">
+      <a class="popup-btn" href="https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}" target="_blank" rel="noopener">🧭 Directions (Google Maps)</a>
+      <a class="popup-btn" href="https://maps.apple.com/?daddr=${spot.lat},${spot.lng}" target="_blank" rel="noopener">🧭 Directions (Apple Maps)</a>
+    </div>
+    ${galleryLines}
+    ${linkAndShareBlock}
+  `;
+}
+
+// =========================================================================
+// EMPTY STATE — when a view (a given day, "live now", etc.) has zero
+// spots, show a small popup on the map explaining that rather than
+// leaving an unexplained blank map.
+// =========================================================================
+const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false });
+
+function emptyStateMessage(){
+  const who = photographerFilter ? getPhotographerDisplayName(photographerFilter) : null;
+  const suffix = who ? ` for ${who}` : '';
+  if (currentMode === 'live') {
+    return { title: `No live shoots right now${suffix}`, body: 'Nobody\u2019s out shooting at this exact moment. Try "Upcoming" or "Past" instead.' };
+  }
+  if (currentMode === 'upcoming') {
+    return { title: `No upcoming shoots listed${suffix}`, body: 'Nothing scheduled yet - check back soon, or switch to "Past" to see what\u2019s already happened.' };
+  }
+  if (currentMode === 'past') {
+    return { title: `No past shoots yet${suffix}`, body: 'Nothing\u2019s wrapped up yet - switch to "Upcoming" to see what\u2019s coming up.' };
+  }
+  if (currentMode === 'month') {
+    return { title: `No shoots that month${suffix}`, body: 'Try a different month from the dropdown, or hit "Today" to jump back to now.' };
+  }
+  const selected = shootDates[selectedIndex];
+  const isToday = selected && ukDateKey(selected) === ukDateKey(now);
+  return {
+    title: (isToday ? 'No planned shoots today' : 'No shoots that day') + suffix,
+    body: 'Try scrubbing to a different date below, or switch to "Upcoming" to see what\u2019s coming up.'
+  };
+}
+
+// =========================================================================
+// CLICK TRACKING — "View their page" clicks
+//
+// Photographer-level click stats (popup opens, gallery clicks, page link
+// clicks) are already handled by sendStatsEvent() further down, via the
+// same Apps Script backend used for the page-view counter — no separate
+// analytics tool needed for that either. ANALYTICS_ENDPOINT below is an
+// optional extra: set it to your own webhook URL if you ever want a raw
+// record of every click somewhere else too. Leave as null to skip it.
+// =========================================================================
+const ANALYTICS_ENDPOINT = null; // e.g. "https://your-webhook-url.example.com/track"
+
+function trackClick(spot){
+  if (ANALYTICS_ENDPOINT) {
+    fetch(ANALYTICS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        photographer: spot.name,
+        location: spot.location,
+        link: spot.link,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => { /* don't block navigation if this fails */ });
+  }
+}
+
+// Sends a per-photographer click counter back to the Apps Script backend
+// (see APPS_SCRIPT_URL config near the top), so photographers can see
+// their own popup/gallery/page-link numbers in their add-shoot.html
+// dashboard. Fire-and-forget: never blocks the UI, and failures are
+// silent since a missed count isn't worth interrupting anyone over.
+//
+// IMPORTANT: deliberately no custom headers on this fetch — a string
+// body with no Content-Type set defaults to "text/plain", which lets
+// the browser treat this as a "simple request" and skip the CORS
+// preflight that Apps Script Web Apps can't respond to. Adding headers
+// here (even Content-Type: application/json) will break this silently.
+function sendStatsEvent(shootTabName, type){
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0) return;
+  if (!shootTabName) return;
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'trackEvent', p: shootTabName, type: type })
+  }).catch(() => { /* silent on purpose, see comment above */ });
+}
+
+// Site-wide visitor counter — fires once per page load, adds one to
+// today's total in the "SiteVisits" tab. No cookies, no localStorage,
+// nothing stored in the visitor's browser at all; check numbers by
+// opening that tab directly. Same no-custom-headers CORS trick as above.
+function trackPageView(){
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0) return;
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'trackPageView' })
+  }).catch(() => { /* silent on purpose — a missed count isn't worth interrupting anyone over */ });
+}
+
+// Builds a direct link to one specific shoot (?shoot=SHOOT_ID) and copies
+// it to the clipboard, with brief button feedback either way.
+function copyShootLink(shootId, btnEl){
+  const url = new URL(location.origin + location.pathname);
+  url.searchParams.set('shoot', shootId);
+  const text = url.toString();
+
+  const showCopied = () => {
+    const original = btnEl.textContent;
+    btnEl.textContent = 'Copied ✓';
+    setTimeout(() => { btnEl.textContent = original; }, 1800);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showCopied).catch(() => fallbackCopyText(text, showCopied));
+  } else {
+    fallbackCopyText(text, showCopied);
+  }
+}
+
+function fallbackCopyText(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (err) { /* clipboard unavailable */ }
+  document.body.removeChild(ta);
+}
+
+// Wire up tracking whenever a popup opens — the link itself stays a normal
+// <a href> so right-click/open-in-new-tab still works fine for visitors.
+//
+// Leaflet reuses the same popup content DOM node across repeated opens of
+// the same marker within one render cycle (it only gets rebuilt on the
+// next full render()). Without the dataset guard below, closing and
+// reopening the same popup a few times would stack up duplicate click
+// listeners on the same link, and one real click would fire multiple
+// tracked events.
+map.on('popupopen', (e) => {
+  const marker = e.popup._source;
+  const spot = (marker && marker._spotRef) || e.popup._spotRef;
+  if (!spot) return;
+  sendStatsEvent(spot.shootTabName, 'popup_open');
+
+  const node = e.popup.getElement ? e.popup.getElement() : e.popup._contentNode;
+  if (!node) return;
+
+  const link = node.querySelector('.popup-link');
+  if (link && !link.dataset.trackBound) {
+    link.dataset.trackBound = '1';
+    link.addEventListener('click', () => {
+      trackClick(spot);
+      sendStatsEvent(spot.shootTabName, 'page_link_click');
+    });
+  }
+
+  const galleryLinks = node.querySelectorAll('.popup-gallery-link');
+  galleryLinks.forEach(a => {
+    if (a.dataset.trackBound) return;
+    a.dataset.trackBound = '1';
+    a.addEventListener('click', () => sendStatsEvent(spot.shootTabName, 'gallery_click'));
+  });
+
+  const shareBtn = node.querySelector('.popup-share-btn');
+  if (shareBtn && !shareBtn.dataset.trackBound) {
+    shareBtn.dataset.trackBound = '1';
+    shareBtn.addEventListener('click', () => copyShootLink(spot.shootId, shareBtn));
+  }
+});
+
+// Tracked so a background data refresh (see REFRESH below) can skip
+// rebuilding markers while someone's actually reading a popup, rather
+// than closing it out from under them mid-read.
+let popupCurrentlyOpen = false;
+const searchWrapEl = document.getElementById('searchWrap');
+map.on('popupopen', () => {
+  popupCurrentlyOpen = true;
+  // See the CSS comment on #searchWrap.yield-to-popup — without this a
+  // popup near the top of the map renders underneath the search box
+  // rather than on top of it.
+  searchWrapEl.classList.add('yield-to-popup');
+});
+map.on('popupclose', () => {
+  popupCurrentlyOpen = false;
+  searchWrapEl.classList.remove('yield-to-popup');
+});
+
+// Leaflet's popups auto-pan the map to fit themselves on screen by default
+// (Popup's autoPan:true, which we've never turned off) — clicking a pin
+// near the viewport edge can shift the map on its own. That's the map
+// assisting the person, not them taking manual control, so it must not
+// light up "Reset view" or suppress auto-recentre the way a real drag/zoom
+// does. Reuses the same pending-move counter as programmaticMapMove so it
+// composes correctly if a popup opens as part of an already-suppressed
+// move (e.g. flyToSpot opening its own popup after flying there).
+map.on('popupopen', () => {
+  pendingProgrammaticMoves++;
+  suppressInteractionTracking = true;
+  let resolved = false;
+  const clear = () => {
+    if (resolved) return;
+    resolved = true;
+    pendingProgrammaticMoves = Math.max(0, pendingProgrammaticMoves - 1);
+    if (pendingProgrammaticMoves === 0) suppressInteractionTracking = false;
+  };
+  map.once('moveend', clear);
+  setTimeout(clear, 400); // fallback for when no autoPan actually happens — moveend would never otherwise fire
+});
+
+function render(){
+  Object.values(clusterGroups).forEach(group => group.clearLayers());
+
+  const t = new Date();
+  const baseSpots = getFilterableSpots();
+  let visible;
+
+  if (currentMode === 'live') {
+    visible = baseSpots.filter(spot => getStatus(spot) === 'live');
+  } else if (currentMode === 'upcoming') {
+    visible = baseSpots.filter(spot => spot.end >= t);
+  } else if (currentMode === 'past') {
+    visible = baseSpots.filter(spot => spot.end < t);
+  } else if (currentMode === 'month') {
+    const selected = lockedDates[selectedIndex];
+    // Range check (selected day falls anywhere between start and end),
+    // not an exact match on the start day — otherwise a multi-day shoot
+    // only ever shows up on the one day it began, vanishing from the
+    // scrubber on every subsequent day even while it's still genuinely
+    // running (it'd still show under the "Live now" chip, which checks
+    // status rather than a specific day, just not here).
+    visible = selected ? baseSpots.filter(spot => {
+      const key = ukDateKey(selected);
+      return key >= ukDateKey(spot.start) && key <= ukDateKey(spot.end);
+    }) : [];
+  } else {
+    const selected = shootDates[selectedIndex];
+    visible = selected ? baseSpots.filter(spot => {
+      const key = ukDateKey(selected);
+      return key >= ukDateKey(spot.start) && key <= ukDateKey(spot.end);
+    }) : [];
+  }
+
+  // Past spots read best most-recent-first; everything else reads best
+  // chronologically forward (soonest/live first).
+  visible = visible.slice().sort((a, b) => currentMode === 'past' ? b.start - a.start : a.start - b.start);
+
+  visible.forEach(spot => {
+    const status = getStatus(spot); // 'live', 'soon', or 'past' — matches a clusterGroups key
+    const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(spot, status), pane: `pane-${status}` });
+    marker._spotRef = spot;
+    marker.bindPopup(popupHtml(spot), { maxWidth: 240 });
+    clusterGroups[status].addLayer(marker);
+  });
+
+  // Recentre the map around whatever is currently visible (slider, filters, etc.)
+  // — but only if the person hasn't manually panned/zoomed the map themselves.
+  // Once they have, leave the view alone so scrubbing the date slider doesn't
+  // yank them away from an area they're deliberately looking at; the
+  // recenter button (bottom-left) lets them snap back on demand instead.
+  if (!userHasMovedMap){
+    if (visible.length === 1){
+      programmaticMapMove(() => map.setView([visible[0].lat, visible[0].lng], 13, { animate: true }));
+    } else if (visible.length > 1){
+      const bounds = L.latLngBounds(visible.map(s => [s.lat, s.lng]));
+      programmaticMapMove(() => map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 }));
+    }
+  }
+
+  // Empty state: no spots for this view, so explain why the map looks blank
+  if (visible.length === 0){
+    const msg = emptyStateMessage();
+    emptyStatePopup
+      .setLatLng(map.getCenter())
+      .setContent(`<p class="noShootsTitle">${msg.title}</p><p class="noShootsBody">${msg.body}</p>`)
+      .openOn(map);
+  } else {
+    map.closePopup(emptyStatePopup);
+  }
+
+  document.getElementById('countPill').textContent =
+    `${visible.length} location${visible.length === 1 ? '' : 's'} shown`;
+
+  const dateLabel = document.getElementById('dateLabel');
+  // Keeps the visible text and the slider's screen-reader announcement in
+  // sync in one place, rather than duplicating the sync at all 7 call
+  // sites below (easy to miss on a future edit). The slider's raw value
+  // is just an array index (0, 1, 2…) - meaningless if announced as-is -
+  // aria-valuetext overrides that with the actual date text instead.
+  function setDateLabel(text){
+    dateLabel.textContent = text;
+    sliderEl.setAttribute('aria-valuetext', text);
+  }
+  if (currentMode === 'live') {
+    setDateLabel('Showing live spots only');
+  } else if (currentMode === 'upcoming') {
+    setDateLabel('Showing all upcoming spots');
+  } else if (currentMode === 'past') {
+    setDateLabel('Showing all past spots');
+  } else if (currentMode === 'month') {
+    const [y, m] = selectedMonthKey.split('-').map(Number);
+    const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const selected = lockedDates[selectedIndex];
+    setDateLabel(selected
+      ? `${fmtDateLabel(selected)} - filtered to ${monthLabel}`
+      : `${monthLabel} - no shoots that month`);
+  } else if (shootDates[selectedIndex]) {
+    if (visible.length === 0) {
+      setDateLabel(`${fmtDateLabel(shootDates[selectedIndex])} - no shoots scheduled`);
+    } else {
+      setDateLabel(fmtDateLabel(shootDates[selectedIndex]));
+    }
+  } else {
+    setDateLabel('No shoot days found');
+  }
+}
+
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const alreadyActive = chip.classList.contains('active');
+
+    if (alreadyActive) {
+      // Tapping an active chip turns it off and drops back to today on the slider
+      goToDateMode(todaySnapIndex);
+      return;
+    }
+
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    exitMonthLock();
+    currentMode = chip.dataset.filter;
+
+    // "Past", "Live now", and "Upcoming" are all anchored to right now, so
+    // snap the slider to today to keep it visually consistent with the
+    // filter — dragging it away, or using the day steppers, switches back
+    // to date mode.
+    selectedIndex = todaySnapIndex;
+    sliderEl.value = selectedIndex;
+
+    render();
+  });
+});
+
+function goToDateMode(index){
+  const dates = activeDates();
+  // Clamping (rather than wrapping) is what stops the forward/back steppers
+  // from spilling out of a locked month and over into today/other months —
+  // hitting the last day just holds there.
+  selectedIndex = Math.max(0, Math.min(dates.length - 1, index));
+  sliderEl.value = selectedIndex;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  if (monthLockKey){
+    currentMode = 'month';
+  } else {
+    currentMode = 'date';
+    monthSelectEl.value = ''; // this is also "return to today/live data" — the day
+    // slider, steppers, and Today button all funnel through here (once
+    // unlocked), so resetting the month dropdown here covers all of them.
+  }
+  render();
+}
+
+sliderEl.addEventListener('input', (e) => goToDateMode(parseInt(e.target.value, 10)));
+document.getElementById('prevDay').addEventListener('click', () => goToDateMode(selectedIndex - 1));
+document.getElementById('nextDay').addEventListener('click', () => goToDateMode(selectedIndex + 1));
+document.getElementById('todayBtn').addEventListener('click', () => {
+  exitMonthLock();
+  goToDateMode(defaultDateIndex());
+});
+exitMonthLockBtn.addEventListener('click', () => {
+  exitMonthLock();
+  goToDateMode(defaultDateIndex());
+});
+
+monthSelectEl.addEventListener('change', (e) => {
+  const key = e.target.value;
+  if (!key) { exitMonthLock(); goToDateMode(defaultDateIndex()); return; } // re-picking the placeholder = same as "Today"
+  monthLockKey = key;
+  selectedMonthKey = key;
+  lockedDates = buildLockedDates(key);
+  updateSliderRange();
+  selectedIndex = 0; // land on the first day that month with a shoot on it
+  sliderEl.value = selectedIndex;
+  currentMode = 'month';
+  exitMonthLockBtn.classList.remove('hidden');
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  positionTodayMarker(); // hides the marker now that we're locked
+  render();
+});
+
+// =========================================================================
+// SEARCH — matches photographer name or location text across all records
+// (not just the ones currently visible on the date/filter selected).
+// =========================================================================
+const searchInput = document.getElementById('searchInput');
+const searchResultsEl = document.getElementById('searchResults');
+const searchClearBtn = document.getElementById('searchClear');
+
+// =========================================================================
+// GEOCODING — lets people search a postcode or place name too, not just
+// photographers/locations already on the map. Two free, commercially
+// usable services, tried in order:
+//   1. postcodes.io — free, open-source, UK postcodes, no API key, MIT
+//      licensed explicitly for commercial use.
+//   2. Nominatim (OpenStreetMap) — free general place/address search,
+//      same "reasonable light use" policy as the map tiles already used
+//      on this page — not for heavy/bulk querying, fine at this scale.
+// Debounced so normal typing doesn't fire a network request per
+// keystroke — only after a short pause, respecting Nominatim's ask not
+// to be hammered.
+// =========================================================================
+async function geocodeQuery(query){
+  const q = query.trim();
+  if (!q) return [];
+
+  try {
+    const res = await fetch(`https://api.postcodes.io/postcodes?q=${encodeURIComponent(q)}&limit=5`);
+    const data = await res.json();
+    if (data && data.result && data.result.length){
+      return data.result.map(r => ({ label: r.postcode, lat: r.latitude, lng: r.longitude }));
+    }
+  } catch (err) { /* fall through to Nominatim below */ }
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=5&q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return (data || []).map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lng: parseFloat(r.lon) }));
+  } catch (err) {
+    return [];
+  }
+}
+
+function flyToLocation(lat, lng, label){
+  // A search-driven jump, not a manual drag/zoom — routed through
+  // programmaticMapMove so it doesn't light up "Reset view" or suppress
+  // auto-recentre, the same as a popup click.
+  programmaticMapMove(() => map.setView([lat, lng], 14, { animate: true }));
+  L.popup({ maxWidth: 240 })
+    .setLatLng([lat, lng])
+    .setContent(`<p class="popup-meta" style="margin:0;">${escapeHtml(label)}</p>`)
+    .openOn(map);
+  searchResultsEl.classList.remove('show');
+}
+
+let geocodeDebounceTimer = null;
+let geocodeRequestId = 0;
+
+function runSearch(query){
+  const q = query.trim();
+  if (!q){
+    searchResultsEl.classList.remove('show');
+    searchResultsEl.innerHTML = '';
+    searchClearBtn.style.display = 'none';
+    clearTimeout(geocodeDebounceTimer);
+    return;
+  }
+  searchClearBtn.style.display = 'block';
+  const ql = q.toLowerCase();
+
+  const spotMatches = getFilterableSpots().filter(s =>
+    s.name.toLowerCase().includes(ql) ||
+    s.location.toLowerCase().includes(ql)
+  ).sort((a, b) => a.start - b.start).slice(0, 12);
+
+  renderSearchResults(spotMatches, null); // show local matches instantly
+
+  clearTimeout(geocodeDebounceTimer);
+  const thisRequestId = ++geocodeRequestId;
+  geocodeDebounceTimer = setTimeout(async () => {
+    const places = await geocodeQuery(q);
+    if (thisRequestId !== geocodeRequestId) return; // a newer search superseded this one
+    renderSearchResults(spotMatches, places);
+  }, 500);
+}
+
+function renderSearchResults(spotMatches, places){
+  let html = `<div class="resultsSectionTitle">Photographers & spots</div>`;
+  if (spotMatches.length){
+    html += spotMatches.map((spot, i) => {
+      const status = getStatus(spot);
+      const tag = status === 'past' ? '<span class="rTagPast">(past)</span>' :
+                  status === 'live' ? '<span style="color:#d4ff3f;">(live now)</span>' :
+                  '<span style="color:#d97a53;">(upcoming)</span>';
+      return `<div class="resultItem" role="option" tabindex="0" data-spot-idx="${i}">
+        <span class="rName">${escapeHtml(spot.name)} ${tag}</span>
+        <span class="rMeta">${escapeHtml(spot.location)} - ${fmtTime(spot.start)}</span>
+      </div>`;
+    }).join('');
+  } else {
+    html += `<div class="resultItem">No matches</div>`;
+  }
+
+  if (places === null) {
+    // still waiting on the geocode request — nothing to show yet
+  } else if (places.length){
+    html += `<div class="resultsSectionTitle">Places</div>`;
+    html += places.map((place, i) => `<div class="resultItem" role="option" tabindex="0" data-place-idx="${i}">
+      <span class="rName">📍 ${escapeHtml(place.label)}</span>
+    </div>`).join('');
+  }
+
+  searchResultsEl.innerHTML = html;
+  searchResultsEl.classList.add('show');
+
+  // Each result gets both a click handler and a keydown handler (Enter/Space)
+  // so someone navigating the results with Tab + Enter — not a mouse — can
+  // actually pick one. Previously these were plain divs with no keyboard
+  // path to activating them at all.
+  const activateOnKey = (el, action) => {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        action();
+      }
+    });
+  };
+
+  searchResultsEl.querySelectorAll('.resultItem[data-spot-idx]').forEach(el => {
+    const action = () => {
+      const spot = spotMatches[parseInt(el.dataset.spotIdx, 10)];
+      flyToSpot(spot);
+    };
+    el.addEventListener('click', action);
+    activateOnKey(el, action);
+  });
+  if (places && places.length){
+    searchResultsEl.querySelectorAll('.resultItem[data-place-idx]').forEach(el => {
+      const action = () => {
+        const place = places[parseInt(el.dataset.placeIdx, 10)];
+        flyToLocation(place.lat, place.lng, place.label);
+      };
+      el.addEventListener('click', action);
+      activateOnKey(el, action);
+    });
+  }
+}
+
+function flyToSpot(spot){
+  // A search/share-link-driven jump, not a manual drag/zoom — routed
+  // through programmaticMapMove so it doesn't light up "Reset view" or
+  // suppress auto-recentre. Popup autoPan is separately covered by the
+  // popupopen handler above.
+  //
+  // The popup used to open in the same tick as setView() started its
+  // animated pan — Leaflet works out where to auto-pan a just-opened
+  // popup based on the map's bounds at that instant, which mid-animation
+  // isn't the view it's about to settle on. That's what was cutting the
+  // top of the popup off under the green banner on shared-shoot links:
+  // autoPan was calculating against a view that changed out from under
+  // it a moment later. Waiting for 'moveend' means it calculates against
+  // the actual final view instead. map.once('moveend', ...) fires
+  // correctly whether setView ends up animating or snapping instantly.
+  programmaticMapMove(() => map.setView([spot.lat, spot.lng], 15, { animate: true }));
+  map.once('moveend', () => {
+    const popup = L.popup({ maxWidth: 240 })
+      .setLatLng([spot.lat, spot.lng])
+      .setContent(popupHtml(spot));
+    popup._spotRef = spot; // standalone popup, no marker — see popupopen handler below
+    popup.openOn(map);
+  });
+  searchResultsEl.classList.remove('show');
+}
+
+searchInput.addEventListener('input', (e) => runSearch(e.target.value));
+searchClearBtn.addEventListener('click', () => {
+  searchInput.value = '';
+  runSearch('');
+  searchInput.focus();
+});
+// Close the results dropdown if the person taps the map instead of a result
+map.on('click', () => searchResultsEl.classList.remove('show'));
+
+// =========================================================================
+// GET LISTED — photographers tap this to enquire about being added.
+// No backend, so it's just a pre-filled mailto: link to LISTING_EMAIL
+// (set near the top of the page).
+// =========================================================================
+const getListedBtn = document.getElementById('getListedBtn');
+const listingSubject = encodeURIComponent('Get my shoots listed on Who Shot Me?');
+const listingBody = encodeURIComponent('Hi,\n\nI run roadside motorcycle photography and would like to be listed on Who Shot Me?\n\nMy name / page:\nWhere I usually shoot:\nLink to my page:\n');
+getListedBtn.href = `mailto:${LISTING_EMAIL}?subject=${listingSubject}&body=${listingBody}`;
+
+const aboutContactLink = document.getElementById('aboutContactLink');
+if (aboutContactLink) aboutContactLink.href = `mailto:${LISTING_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
+
+// =========================================================================
+// ABOUT — purely informational modal, opened from the header link.
+// =========================================================================
+const aboutOverlay = document.getElementById('aboutOverlay');
+document.getElementById('aboutLink').addEventListener('click', () => {
+  aboutOverlay.classList.add('show');
+});
+document.getElementById('aboutCloseBtn').addEventListener('click', () => {
+  aboutOverlay.classList.remove('show');
+});
+document.getElementById('aboutCloseBtnTop').addEventListener('click', () => {
+  aboutOverlay.classList.remove('show');
+});
+aboutOverlay.addEventListener('click', (e) => {
+  if (e.target === aboutOverlay) aboutOverlay.classList.remove('show');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && aboutOverlay.classList.contains('show')) {
+    aboutOverlay.classList.remove('show');
+  }
+});
+
+trackPageView();
+
+// =========================================================================
+// INIT — fetches the live CSVs, then builds spots and renders the map.
+// Runs again from scratch if the person taps "Try again" on a failed load.
+//
+// After the first successful load, REFRESH_INTERVAL_MS keeps the map
+// current automatically: it quietly re-fetches the CSVs in the background
+// and re-renders, so nobody has to manually reload the page to see a
+// shoot a photographer just added. It won't fight the person's own
+// map interactions (see userHasMovedMap in render(), and
+// popupCurrentlyOpen above) — it just updates what's on screen without
+// yanking their view around or closing a popup they're reading.
+//
+// 3 minutes is a sensible default: Google's own "publish to web" CSV
+// export has its own lag of a few minutes before it reflects sheet
+// edits at all, so polling much more often than that wouldn't get
+// fresher data anyway — just more requests for no benefit.
+// =========================================================================
+const REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+
+const dataStateOverlay = document.getElementById('dataStateOverlay');
+const dataStateTitle = document.getElementById('dataStateTitle');
+const dataStateBody = document.getElementById('dataStateBody');
+
+function showLoadingState(){
+  dataStateOverlay.classList.remove('hidden', 'error');
+  dataStateTitle.textContent = 'Loading shoots…';
+  dataStateBody.textContent = 'Just a moment.';
+}
+
+function showErrorState(err){
+  console.error('Failed to load shoot data:', err);
+  dataStateOverlay.classList.remove('hidden');
+  dataStateOverlay.classList.add('error');
+  dataStateTitle.textContent = "Couldn't load the map";
+  dataStateBody.innerHTML = `Please check your connection and try again. <button id="dataStateRetryBtn">Try again</button>`;
+  document.getElementById('dataStateRetryBtn').addEventListener('click', init);
+}
+
+function hideLoadingState(){
+  dataStateOverlay.classList.add('hidden');
+}
+
+// Fetches + rebuilds spots from the two CSVs. Throws on failure so callers
+// (init and the background refresh) can each decide how to handle that.
+async function loadSpotsFromSheet(){
+  const [combinedRows, galleryRows] = await Promise.all([
+    fetchCsv(COMBINED_CSV_URL),
+    (GALLERIES_CSV_URL && GALLERIES_CSV_URL.indexOf('PASTE_YOUR') !== 0
+      ? fetchCsv(GALLERIES_CSV_URL).catch(err => { console.warn('Galleries CSV failed to load, continuing without galleries:', err); return []; })
+      : Promise.resolve([]))
+  ]);
+  const galleriesByShootId = groupGalleriesByShootId(galleryRows);
+  const rawSpotData = combinedRows.map(combinedRowToRawSpot);
+  return buildSpots(rawSpotData, galleriesByShootId);
+}
+
+// Decides what the map shows on a completely fresh landing (no shared-shoot
+// link, no explicit filter): prefer live/upcoming shoots since that's what
+// most visitors want, but fall back to past shoots rather than an empty map
+// if there's genuinely nothing live or upcoming right now. Only called once,
+// on first load - never overrides a person's own later interaction with the
+// chips/slider, and never runs at all if a ?shoot= link already set the mode.
+function resolveDefaultMode(){
+  const scoped = getFilterableSpots(); // respects ?photographer= if present
+  const hasLiveOrUpcoming = scoped.some(s => { const st = getStatus(s); return st === 'live' || st === 'soon'; });
+  if (hasLiveOrUpcoming) return; // 'upcoming' is already the default - dateLabel already says so, nothing else to do
+
+  const hasPast = scoped.some(s => getStatus(s) === 'past');
+  if (!hasPast) return; // genuinely nothing at all yet - the normal empty-state message already explains this clearly
+
+  currentMode = 'past';
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'past'));
+
+  // A ?photographer= link to someone with nothing live/upcoming would
+  // otherwise trigger this AND the photographer-filter banner at once -
+  // two green bars stacked, saying overlapping things. Fold this message
+  // into that same banner instead of showing a second one underneath it.
+  if (photographerFilter){
+    photographerBannerText.textContent += ' - nothing live or upcoming right now, showing recent past shoots instead';
+    map.invalidateSize(); // the longer text may wrap to a second line - same reflow issue as elsewhere, see applyPhotographerFilterFromUrl
+  } else {
+    showDefaultModeBanner('Nothing live or upcoming right now - showing recent past shoots instead.');
+  }
+}
+
+const defaultModeBanner = document.getElementById('defaultModeBanner');
+const defaultModeText = document.getElementById('defaultModeText');
+let defaultModeBannerTimer = null;
+function showDefaultModeBanner(message){
+  defaultModeText.textContent = message;
+  defaultModeBanner.classList.remove('hidden');
+  map.invalidateSize(); // same reflow issue as photographerBanner — see applyPhotographerFilterFromUrl
+  clearTimeout(defaultModeBannerTimer);
+  defaultModeBannerTimer = setTimeout(() => {
+    defaultModeBanner.classList.add('hidden');
+    map.invalidateSize();
+  }, 8000);
+}
+document.getElementById('dismissDefaultModeBtn').addEventListener('click', () => {
+  clearTimeout(defaultModeBannerTimer);
+  defaultModeBanner.classList.add('hidden');
+  map.invalidateSize();
+});
+
+async function init(){
+  showLoadingState();
+
+  if (!COMBINED_CSV_URL || COMBINED_CSV_URL.indexOf('PASTE_YOUR') === 0){
+    showErrorState(new Error('COMBINED_CSV_URL has not been set yet'));
+    return;
+  }
+
+  try {
+    spots = await loadSpotsFromSheet();
+    updateLastUpdated();
+    const wentToSharedShoot = applySharedShootFromUrl();
+    if (!wentToSharedShoot) {
+      applyPhotographerFilterFromUrl();
+      resolveDefaultMode();
+    }
+    hideLoadingState();
+    rebuildDateAxis();
+    rebuildMonthOptions();
+    render();
+    if (pendingSharedShootFocus){
+      flyToSpot(pendingSharedShootFocus);
+      pendingSharedShootFocus = null;
+    }
+    scheduleBackgroundRefresh();
+  } catch (err) {
+    showErrorState(err);
+  }
+}
+
+// =========================================================================
+// LINK-FOCUS — two kinds of shareable deep link, one shared banner:
+//
+// ?photographer=SHOOT_TAB_NAME — a photographer's own personal link
+// (grabbed from their add-shoot.html dashboard), restricts the whole page
+// to just their shoots.
+//
+// ?shoot=SHOOT_ID — a link to one specific shoot (grabbed from that
+// shoot's "Share this shoot" button in its popup), jumps to whichever
+// status bucket (live/upcoming/past) it naturally belongs to — so its
+// real marker renders alongside its peers, not a floating popup with
+// nothing under it — then zooms in and opens its popup directly.
+//
+// Both are safe to post publicly — unlike add-shoot.html's ?p=&key=
+// links, neither can edit or read anything private, they only change
+// what's displayed.
+// =========================================================================
+let sharedShootActive = false;
+let pendingSharedShootFocus = null; // set during load, focused once render() has drawn markers
+
+const photographerBanner = document.getElementById('photographerFilterBanner');
+const photographerBannerText = document.getElementById('photographerFilterText');
+
+function applyPhotographerFilterFromUrl(){
+  const requested = new URLSearchParams(location.search).get('photographer');
+  if (!requested) return;
+
+  const exists = spots.some(s => s.shootTabName === requested);
+  if (!exists){
+    console.warn(`?photographer=${requested} doesn't match any known photographer — showing everyone instead.`);
+    return;
+  }
+
+  photographerFilter = requested;
+  photographerBannerText.textContent = `Showing shoots from ${getPhotographerDisplayName(requested)} only`;
+  photographerBanner.classList.remove('hidden');
+  // Showing the banner shrinks the map (it's a normal flex item above it),
+  // but Leaflet caches container size/position at init and won't notice
+  // the reflow on its own — without this, popups opened afterwards get
+  // positioned against the map's old (taller) size and can render up
+  // under the banner instead of in the visible map area.
+  map.invalidateSize();
+}
+
+function applySharedShootFromUrl(){
+  const requestedShootId = new URLSearchParams(location.search).get('shoot');
+  if (!requestedShootId) return false;
+
+  const spot = spots.find(s => s.shootId === requestedShootId);
+  if (!spot){
+    console.warn(`?shoot=${requestedShootId} doesn't match any known shoot — showing the normal map instead.`);
+    return false;
+  }
+
+  const status = getStatus(spot); // 'live' | 'soon' | 'past'
+  const modeForStatus = status === 'soon' ? 'upcoming' : status; // chips use 'upcoming', not 'soon'
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === modeForStatus));
+  currentMode = modeForStatus;
+
+  sharedShootActive = true;
+  photographerBannerText.textContent = `Viewing a shared shoot - ${spot.name} at ${spot.location}`;
+  photographerBanner.classList.remove('hidden');
+  // See applyPhotographerFilterFromUrl above — this is the flow where it
+  // actually bites, since flyToSpot() opens a popup right after this runs.
+  map.invalidateSize();
+  pendingSharedShootFocus = spot;
+  return true;
+}
+
+document.getElementById('clearPhotographerFilterBtn').addEventListener('click', () => {
+  const url = new URL(location.href);
+  if (sharedShootActive){
+    sharedShootActive = false;
+    map.closePopup();
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'upcoming'));
+    currentMode = 'upcoming';
+    url.searchParams.delete('shoot');
+  } else {
+    photographerFilter = null;
+    url.searchParams.delete('photographer');
+  }
+  photographerBanner.classList.add('hidden');
+  map.invalidateSize(); // hiding the banner grows the map back — see the show-side comment above
+  history.replaceState(null, '', url);
+  rebuildDateAxis();
+  rebuildMonthOptions();
+  render();
+});
+
+function scheduleBackgroundRefresh(){
+  setInterval(async () => {
+    if (popupCurrentlyOpen) return; // try again next interval instead
+    try {
+      spots = await loadSpotsFromSheet();
+      updateLastUpdated();
+      rebuildDateAxis();
+      rebuildMonthOptions();
+      render();
+    } catch (err) {
+      // Quiet failure on purpose — the person already has a working map
+      // on screen from the last successful load; no need to interrupt
+      // them over a background refresh hiccup. Logged for debugging.
+      console.warn('Background refresh failed, will retry next interval:', err);
+    }
+  }, REFRESH_INTERVAL_MS);
+}
+
+init();
+</script>
+</body>
+</html>

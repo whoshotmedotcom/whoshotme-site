@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Shoots - Who Shot Me?</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
+<meta name="robots" content="noindex, nofollow">
+<!-- This page's URL contains a photographer's secret key as a query
+     param. strict-origin means only the bare origin (e.g.
+     "https://www.whoshotme.com") is ever sent as a Referer header on
+     cross-origin requests — the path and key are never included. Using
+     no-referrer here instead would hide the key too, but would also
+     suppress the Referer header to the OpenStreetMap tile server this
+     page loads, which their tile usage policy specifically asks sites
+     not to do — strict-origin satisfies both at once. -->
+<meta name="referrer" content="strict-origin">
+<!-- Photographer-only tool, personal per photographer via the ?p=&key=
+     in the URL. Not linked from the public map. noindex keeps it out of
+     search results since there's nothing here for the public. -->
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://tile.openstreetmap.org">
+<!-- Leaflet's JS loads further down, right before the map is created,
+     not here — a synchronous script tag in the head would block the rest of
+     the page from parsing until it downloads. See near the map markup. -->
+
+<style>
+  :root{
+    --asphalt:#1c1e22;
+    --asphalt-light:#2a2d33;
+    --hi-vis:#d4ff3f;
+    --hi-vis-dim:#9bbf2e;
+    --paper:#f3f1ea;
+    --rust:#d97a53; /* lightened from #c4572b - see index.html for the full
+      WCAG contrast reasoning; kept identical between the two files. */
+    --line:#3a3d44;
+    --past-grey:#868a90; /* lightened from #6c7077 — the original failed WCAG AA
+      contrast (3.36:1 on the main background, 2.77:1 on panels) at the small
+      text sizes it's actually used at; this clears 4.5:1 on both. */
+    --muted-grey:#9aa0a6; /* a second, lighter grey used for secondary/meta text — distinct from --past-grey, which is reserved for the "past" status color */
+    color-scheme: dark; /* tells the browser to draw ALL its own native UI (scrollbars,
+      form controls, etc.) in dark mode by default, rather than only the pieces we
+      happen to style ourselves — otherwise a light-OS visitor gets light-grey native
+      scrollbars sitting inside these dark panels. */
+  }
+  /* Scrollbar color, matching the site's palette rather than the browser's generic
+     dark default. Firefox uses scrollbar-color; Chrome/Edge/Safari use the
+     ::-webkit-scrollbar family below. */
+  *{ scrollbar-color: var(--line) var(--asphalt-light); scrollbar-width: thin; }
+  *::-webkit-scrollbar{ width:10px; height:10px; }
+  *::-webkit-scrollbar-track{ background:var(--asphalt-light); }
+  *::-webkit-scrollbar-thumb{ background:var(--line); border-radius:6px; }
+  *::-webkit-scrollbar-thumb:hover{ background:var(--past-grey); }
+  *{ box-sizing:border-box; }
+  /* Removes the default blue/grey tap flash mobile browsers show on
+     clickable elements — see index.html for the full note. */
+  *{ -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family:'Segoe UI', Roboto, system-ui, sans-serif;
+    background:var(--asphalt);
+    color:var(--paper);
+  }
+  header{
+    padding:14px 20px 10px;
+    border-bottom:3px solid var(--hi-vis);
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    letter-spacing:0.5px;
+    font-weight:900;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+  }
+  header h1 span{ color:var(--hi-vis); }
+  header p{
+    margin:4px 0 0;
+    color:var(--muted-grey);
+    font-size:0.82rem;
+  }
+  #aboutLink{
+    background:none;
+    border:none;
+    color:var(--hi-vis-dim);
+    text-decoration:underline;
+    font-size:0.85rem;
+    cursor:pointer;
+    padding:0;
+    margin-left:4px;
+  }
+  #aboutLink:hover{ color:var(--hi-vis); }
+  #aboutOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:4000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  #aboutOverlay.show{ display:flex; }
+  #aboutModal{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:12px;
+    max-width:420px;
+    width:100%;
+    max-height:80vh;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden; /* the body below scrolls, not this outer box, so the
+      header (title + X) stays visible the whole time regardless of scroll
+      position — the point of adding the X in the first place. */
+  }
+  #aboutModalHeader{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:22px 24px 0;
+    flex-shrink:0;
+  }
+  #aboutModalBody{
+    overflow-y:auto;
+    padding:12px 24px 22px;
+  }
+  #aboutCloseBtnTop{
+    background:var(--asphalt);
+    color:var(--hi-vis);
+    border:1px solid var(--line);
+    border-radius:50%;
+    width:32px;
+    height:32px;
+    min-width:32px;
+    flex-shrink:0;
+    font-size:1rem;
+    line-height:1;
+    cursor:pointer;
+  }
+  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
+  #aboutModal h2{
+    margin:0;
+    color:var(--hi-vis);
+    font-size:1.1rem;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-weight:900;
+  }
+  #aboutModal h3{
+    margin:16px 0 8px;
+    color:var(--hi-vis-dim);
+    font-size:0.88rem;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  #aboutModal p{
+    font-size:0.85rem;
+    color:#c7c9cd;
+    line-height:1.5;
+    margin:0 0 10px;
+  }
+  .creatorPhoto{
+    display:block;
+    width:100%;
+    max-width:280px;
+    margin:0 auto 12px;
+    border-radius:12px;
+    border:1px solid var(--line);
+  }
+  #aboutCloseBtn{
+    margin-top:6px;
+    border:1px solid var(--hi-vis-dim);
+    background:transparent;
+    color:var(--hi-vis);
+    padding:8px 18px;
+    border-radius:18px;
+    font-size:0.8rem;
+    cursor:pointer;
+  }
+  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+
+  main{
+    max-width:720px;
+    margin:0 auto;
+    padding:16px 16px 80px;
+  }
+
+  /* ---- auth gate / loading ---- */
+  #authGate{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--past-grey);
+  }
+  #authGate h2{ color:var(--paper); margin:0 0 8px; font-size:1.05rem; }
+  #authGate p{ margin:0; font-size:0.88rem; line-height:1.6; }
+  .hidden{ display:none !important; }
+
+  /* ---- generic section styling ---- */
+  section{ margin-bottom:28px; }
+  .section-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
+  h2{ margin:0; font-size:1rem; font-weight:800; letter-spacing:0.3px; }
+
+  /* ---- stats ---- */
+  #statsRow{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+  }
+  .stat{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 8px;
+    text-align:center;
+  }
+  .stat-num{ display:block; font-size:1.4rem; font-weight:800; color:var(--hi-vis); }
+  .stat-label{ display:block; font-size:0.68rem; color:var(--past-grey); margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
+  #statsHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
+
+  #shareHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 10px; line-height:1.5; }
+  #shootsHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 12px; line-height:1.5; }
+  #shareLinkRow{ display:flex; gap:8px; }
+  #shareLinkInput{
+    flex:1;
+    min-width:0;
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:0.82rem;
+    font-family:inherit;
+  }
+  #copyShareLinkBtn{ flex-shrink:0; }
+
+  /* ---- shoot cards ---- */
+  .shoot-card{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:10px;
+  }
+  .shoot-card-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .shoot-location{ font-weight:700; font-size:0.95rem; margin:0 0 3px; }
+  .shoot-time{ font-size:0.78rem; color:#c7c9cd; margin:0 0 6px; }
+  .shoot-desc{ font-size:0.82rem; color:#c7c9cd; margin:0 0 6px; }
+  .shoot-galleries{ font-size:0.76rem; color:var(--past-grey); margin:0; }
+  .gallery-list{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
+  .gallery-item{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:0.76rem;
+  }
+  .gallery-item-link{
+    color:var(--hi-vis-dim);
+    text-decoration:none;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    flex:1 1 auto;
+    min-width:0;
+  }
+  .gallery-item-link:hover{ color:var(--hi-vis); text-decoration:underline; }
+  .gallery-item-btn{
+    background:none;
+    border:1px solid var(--line);
+    border-radius:14px;
+    color:var(--past-grey);
+    font-size:0.72rem;
+    cursor:pointer;
+    padding:3px 9px;
+    flex:0 0 auto;
+  }
+  .gallery-item-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
+  .gallery-item-btn.danger:hover{ border-color:var(--rust); color:var(--rust); }
+
+  .status-badge{
+    flex:0 0 auto;
+    font-size:0.66rem;
+    font-weight:800;
+    letter-spacing:0.4px;
+    padding:3px 8px;
+    border-radius:10px;
+    white-space:nowrap;
+  }
+  .status-live{ background:var(--hi-vis); color:var(--asphalt); }
+  .status-soon{ background:var(--rust); color:var(--asphalt); }
+  .status-past{ background:var(--line); color:var(--past-grey); }
+
+  .shoot-actions{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+    flex-wrap:wrap;
+  }
+  .chip-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:16px;
+    padding:6px 12px;
+    font-size:0.76rem;
+    cursor:pointer;
+  }
+  .chip-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
+  .chip-btn.danger:hover{ border-color:var(--rust); color:var(--rust); }
+
+  #emptyState{ color:var(--past-grey); font-size:0.85rem; text-align:center; padding:20px; }
+
+  /* ---- form fields (shared with the pin-drop map) ---- */
+  .field{ margin-bottom:14px; }
+  .field label{
+    display:block;
+    font-size:0.78rem;
+    font-weight:700;
+    color:var(--hi-vis-dim);
+    margin-bottom:5px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  .field input[type="text"],
+  .field input[type="datetime-local"],
+  .field textarea{
+    width:100%;
+    background:var(--asphalt);
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:0.92rem;
+    font-family:inherit;
+  }
+  /* Browsers render the datetime-local field's calendar/clock icon using their
+     own light-theme default even with color-scheme:dark set at root — this is
+     a Chrome/Edge-specific belt-and-suspenders fix for the icon itself.
+     Firefox/Safari already theme it correctly via the root color-scheme. */
+  .field input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+    filter: invert(1) brightness(1.4);
+    cursor: pointer;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:none;
+    border-color:var(--hi-vis);
+  }
+  .field textarea{ resize:vertical; min-height:60px; }
+  .two-col{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+  @media (max-width:480px){
+    .two-col{ grid-template-columns:1fr; }
+
+    /* Zoom control + "My location" - shrunk on mobile the same way as
+       the public map, staying consistent between both pages. */
+    .leaflet-control-zoom{ border-radius:15px !important; }
+    .leaflet-control-zoom a{ width:30px !important; height:30px !important; line-height:30px !important; font-size:1rem; }
+    .leaflet-control-layers-toggle{ width:30px !important; height:30px !important; }
+    .locate-btn{ padding:5px 10px; font-size:0.7rem; }
+  }
+
+  /* Location search — jumps the map to a postcode/place before pin-dropping */
+  #locationSearchRow{
+    display:flex;
+    align-items:center;
+    background:var(--asphalt);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:2px 4px 2px 10px;
+    margin-bottom:6px;
+  }
+  /* outline:none on #locationSearchInput below removes the browser default,
+     so this is the actual visible focus indicator for keyboard users. */
+  #locationSearchRow:focus-within{
+    border-color:var(--hi-vis);
+  }
+  #locationSearchInput{
+    flex:1;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--paper);
+    font-size:0.85rem;
+    padding:9px 4px;
+    font-family:inherit;
+  }
+  #locationSearchInput::placeholder{ color:#7c8088; }
+  #locationSearchClear{
+    background:transparent;
+    border:none;
+    color:var(--muted-grey);
+    cursor:pointer;
+    font-size:0.95rem;
+    padding:6px 8px;
+    display:none;
+  }
+  #locationSearchResults{
+    margin-bottom:8px;
+    background:var(--asphalt);
+    border:1px solid var(--line);
+    border-radius:8px;
+    max-height:200px;
+    overflow-y:auto;
+    display:none;
+  }
+  #locationSearchResults.show{ display:block; }
+  #locationSearchResults .resultItem{
+    padding:9px 12px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    font-size:0.82rem;
+    color:var(--paper);
+  }
+  #locationSearchResults .resultItem:last-child{ border-bottom:none; }
+  #locationSearchResults .resultItem:hover{ background:var(--asphalt-light); }
+  #locationSearchResults .resultItem:focus-visible{ background:var(--asphalt-light); outline:2px solid var(--hi-vis); outline-offset:-2px; }
+
+  #formSection{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+  }
+
+  #mapWrap{
+    position:relative;
+    height:280px;
+    border-radius:10px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    margin-bottom:8px;
+  }
+  /* Blocks pin placement (and map panning/zooming, deliberately — this
+     map's only purpose here is picking a spot, there's little reason to
+     browse it before you know when you're going) until both times are
+     set. pointer-events intercepts clicks at the DOM level, so nothing
+     underneath can be reached while it's up — more reliable than trying
+     to gate every individual interaction (map click, drag, scroll-zoom)
+     separately. */
+  #timeGateOverlay{
+    position:absolute;
+    inset:0;
+    z-index:500;
+    background:rgba(20,22,26,0.88);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:24px;
+    color:var(--paper);
+    font-size:0.9rem;
+    font-weight:700;
+  }
+  #timeGateOverlay.hidden{ display:none; }
+  #map{ height:100%; width:100%; }
+  #mapHint{
+    font-size:0.78rem;
+    color:var(--past-grey);
+    margin:0 0 14px;
+  }
+  #coordReadout{
+    font-size:0.82rem;
+    color:var(--paper);
+    margin:0 0 14px;
+  }
+  #coordReadout strong{ color:var(--hi-vis); }
+  #coordReadout.empty{ color:var(--past-grey); }
+
+  /* Rounded into full circles (matching .locate-btn/stepBtn conventions)
+     rather than Leaflet's default near-square joined bar — see index.html
+     for the full reasoning. */
+  .leaflet-control-zoom{
+    border:none !important;
+    background:var(--asphalt-light) !important;
+    border-radius:17px !important;
+    overflow:hidden;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
+  }
+  .leaflet-control-zoom a{
+    width:34px !important;
+    height:34px !important;
+    line-height:34px !important;
+    background:none !important;
+    color:var(--hi-vis) !important;
+    border:none !important;
+    border-bottom:1px solid var(--line) !important;
+    display:block;
+  }
+  .leaflet-control-zoom a:last-child{ border-bottom:none !important; }
+  .leaflet-control-zoom a:hover{ background:var(--asphalt) !important; }
+
+  /* Basemap switcher (Map / Aerial) — matches the zoom control's look */
+  .leaflet-control-layers{
+    border:none !important;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
+    background:var(--asphalt-light) !important;
+    color:var(--paper) !important;
+    border-radius:12px !important;
+    padding:6px 10px !important;
+  }
+  .leaflet-control-layers-toggle{
+    background-color:var(--asphalt-light) !important;
+    width:34px !important;
+    height:34px !important;
+    border-radius:50% !important;
+  }
+  .leaflet-control-layers label{ font-size:0.8rem; color:var(--paper); }
+  .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
+  .leaflet-control-layers-separator{ border-color:var(--line) !important; }
+
+  /* "My location" map control — same look/position convention as the
+     public map's version. Sits bottom-left since zoom is top-left and
+     the basemap switcher is top-right here. */
+  .locate-btn{
+    padding:6px 12px;
+    background:var(--asphalt-light);
+    color:var(--paper);
+    border:2px solid rgba(0,0,0,0.2);
+    border-radius:16px;
+    font-size:0.76rem;
+    font-weight:700;
+    white-space:nowrap;
+    cursor:pointer;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4);
+  }
+  .locate-btn:hover{ background:var(--asphalt); }
+  .locate-btn:disabled{ opacity:0.6; cursor:default; }
+  #useCurrentLocationBtn{ margin-bottom:10px; }
+
+  .form-actions{ display:flex; gap:10px; margin-top:6px; }
+  .pill-btn{
+    flex:1;
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:none;
+    border-radius:24px;
+    padding:13px 18px;
+    font-size:0.92rem;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .pill-btn:hover:not(:disabled){ background:var(--hi-vis-dim); }
+  .pill-btn:disabled{ background:var(--line); color:var(--past-grey); cursor:not-allowed; }
+  .ghost-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--past-grey);
+    border-radius:24px;
+    padding:13px 18px;
+    font-size:0.88rem;
+    cursor:pointer;
+  }
+  .ghost-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); }
+
+  #newShootBtn{ width:auto; flex:none; padding:9px 16px; font-size:0.82rem; }
+
+  .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
+
+  /* Informational, not blocking — a boxed callout rather than plain error
+     text, so it doesn't read as "your submission is broken" the way
+     #formError does. Rust/amber tint fits its "worth a look" tone
+     without the harder red-only treatment reserved for real errors. */
+  #proximityWarning{
+    background:rgba(217,122,83,0.12);
+    border-left:3px solid var(--rust);
+    color:var(--paper);
+    font-size:0.82rem;
+    line-height:1.4;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-top:10px;
+  }
+  #proximityWarning a{ color:var(--hi-vis); }
+
+  /* ---- gallery modal ---- */
+  .modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    z-index:2000;
+  }
+  .modal-box{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px;
+    max-width:420px;
+    width:100%;
+  }
+  .modal-box h3{ margin:0 0 14px; font-size:1rem; }
+
+  /* ---- toast ---- */
+  #toast{
+    position:fixed;
+    left:50%;
+    bottom:24px;
+    transform:translateX(-50%);
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    font-weight:700;
+    font-size:0.85rem;
+    padding:10px 18px;
+    border-radius:20px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    z-index:3000;
+  }
+  #toast.error{ background:var(--rust); color:var(--asphalt); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>My <span>Shoots</span></h1>
+  <p>This link is personal to you - don't share it. Add, edit, or remove shoots directly here. <button id="aboutLink">About</button></p>
+</header>
+
+<div id="aboutOverlay">
+  <div id="aboutModal">
+    <div id="aboutModalHeader">
+      <h2>About this page</h2>
+      <button id="aboutCloseBtnTop" aria-label="Close">✕</button>
+    </div>
+    <div id="aboutModalBody">
+      <p>This is your personal dashboard for managing your own listings on Who Shot Me? - add, edit, or delete shoots, and attach gallery links, all without needing spreadsheet access.</p>
+
+      <h3>Meet the creator</h3>
+      <img class="creatorPhoto" src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
+      <p><strong>Hi, I'm Peter.</strong></p>
+      <p>I'm a keen motorcyclist and GIS professional from the Peak District. I first got into riding on a red 2010 Honda CB125, and these days you'll usually find me out on an orange Honda CB500F with a pillion passenger… a Charmander soft toy. It's for the kids… honest!</p>
+      <p>After seeing the same question appear time and time again in motorcycle Facebook groups - "Who was the photographer at Cat & Fiddle?", "Does anyone know who was at Snake Pass today?" - I realised there had to be a better way.</p>
+      <p>That's what inspired me to create WhoShotMe.</p>
+      <p>The aim is simple: make it easy for riders to find photographers, and help photographers reach more riders. By bringing both together in one place, I hope to save riders from endless searching while giving photographers another way to showcase their work.</p>
+      <p>WhoShotMe is an independent project that I develop in my spare time, and it's continually evolving based on feedback from the motorcycle community. Every suggestion helps shape the platform and where it goes next.</p>
+      <p>Thanks for visiting, and I hope you find WhoShotMe useful.</p>
+      <p><strong>Built by a rider, for riders and photographers.</strong></p>
+
+      <h3>Your data</h3>
+      <p>We store your name, contact email, logo and website links, and every shoot (location, description, times) and gallery link you submit here. We also keep a simple count of your popup views, gallery clicks, and page link clicks from the public map - shown to you above, visible only via your own personal link.</p>
+      <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
+      <p>"My location" and "Use current location": if you use either, your browser asks your permission directly - that's between you and your browser, not something we control. If you allow it, your coordinates are used only to show a dot on the map or set the pin, right there on your device; they're never sent to us, stored, or logged anywhere.</p>
+      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), Netlify (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+
+      <h3>Please keep in mind</h3>
+      <p>Only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Your link is effectively a password: anyone who has it can edit your listings, so don't share it.</p>
+
+      <p>Questions, or want your data removed entirely? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
+
+      <button id="aboutCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="authGate">
+    <h2>Loading…</h2>
+    <p>Just a moment.</p>
+  </div>
+
+  <div id="dashboard" class="hidden">
+    <section id="statsSection">
+      <h2>Your numbers so far</h2>
+      <div id="statsRow">
+        <div class="stat"><span class="stat-num" id="statPopups">–</span><span class="stat-label">Popup views</span></div>
+        <div class="stat"><span class="stat-num" id="statGallery">–</span><span class="stat-label">Gallery clicks</span></div>
+        <div class="stat"><span class="stat-num" id="statPage">–</span><span class="stat-label">Page link clicks</span></div>
+      </div>
+      <p id="statsHint">Counted from everyone who's viewed the public map - running totals, not per month.</p>
+    </section>
+
+    <section id="shareSection">
+      <h2>Share your listing</h2>
+      <p id="shareHint">This link shows just your shoots on the public map - safe to post anywhere, unlike this dashboard's link.</p>
+      <div id="shareLinkRow">
+        <input type="text" id="shareLinkInput" readonly aria-label="Your public share link">
+        <button id="copyShareLinkBtn" class="chip-btn">Copy</button>
+      </div>
+    </section>
+
+    <section id="listSection">
+      <div class="section-head">
+        <h2>My Shoots</h2>
+        <button id="newShootBtn" class="pill-btn">+ Add shoot</button>
+      </div>
+      <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
+      <div id="shootsList"></div>
+      <p id="emptyState" class="hidden">No shoots yet - tap "+ Add shoot" to create your first one.</p>
+    </section>
+
+    <section id="formSection" class="hidden">
+      <h2 id="formHeading">Add a shoot</h2>
+
+      <div class="two-col">
+        <div class="field">
+          <label for="startTime">Start</label>
+          <input type="datetime-local" id="startTime" step="300">
+        </div>
+        <div class="field">
+          <label for="endTime">End</label>
+          <input type="datetime-local" id="endTime" step="300">
+        </div>
+      </div>
+      <p id="timeHint" style="color:var(--past-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
+
+      <div class="field">
+        <label for="locationName">Location name</label>
+        <input type="text" id="locationName" placeholder="e.g. Winnats Pass, top of the climb">
+      </div>
+
+      <div class="field">
+        <label for="description">Description <span style="color:var(--past-grey); text-transform:none; font-weight:400;">(optional)</span></label>
+        <textarea id="description" placeholder="e.g. Good spot for hairpin shots"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Location - tap the map to drop a pin</label>
+        <div id="locationSearchRow">
+          <input type="text" id="locationSearchInput" placeholder="Search a postcode or place to jump there…" autocomplete="off" aria-label="Search a postcode or place to jump the map there">
+          <button id="locationSearchClear" type="button" aria-label="Clear">✕</button>
+        </div>
+        <div id="locationSearchResults" role="listbox" aria-label="Location search results"></div>
+        <div id="mapWrap">
+          <div id="map"></div>
+          <div id="timeGateOverlay">📅 Set your start and end time above before placing a pin</div>
+        </div>
+        <p id="mapHint">Drag the pin afterwards to fine-tune it.</p>
+        <button id="useCurrentLocationBtn" type="button" class="chip-btn">📍 Use current location</button>
+        <p id="coordReadout" class="empty">No location set yet.</p>
+        <!-- Private to this form, never shown publicly and never written
+             back to anyone else's listing — see PROXIMITY CHECK in the
+             script for the full reasoning. Purely a heads-up so you can
+             message the other photographer yourself, same as you would
+             after spotting their event on Facebook. -->
+        <p id="proximityWarning" class="hidden" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="form-actions">
+        <button id="saveShootBtn" class="pill-btn">Save shoot</button>
+        <button id="cancelFormBtn" class="ghost-btn">Cancel</button>
+      </div>
+      <p id="formError" class="error-text hidden" role="alert"></p>
+    </section>
+  </div>
+</main>
+
+<div id="galleryModal" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="galleryModalHeading">Add a gallery link</h3>
+    <div class="field">
+      <label for="galleryLabel">Label</label>
+      <input type="text" id="galleryLabel" placeholder="e.g. Full gallery">
+    </div>
+    <div class="field">
+      <label for="galleryUrl">URL</label>
+      <input type="text" id="galleryUrl" placeholder="https://...">
+    </div>
+    <div class="form-actions">
+      <button id="saveGalleryBtn" class="pill-btn">Add gallery</button>
+      <button id="cancelGalleryBtn" class="ghost-btn">Cancel</button>
+    </div>
+    <p id="galleryError" class="error-text hidden"></p>
+  </div>
+</div>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<!-- ====================================================================
+  Set this to your Apps Script Web App URL (Deploy > New deployment >
+  Web app in the script editor — ends in /exec). The same URL is used in
+  index.html for click tracking.
+===================================================================== -->
+<script>
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
+  const CONTACT_EMAIL = 'peterrastall@gmail.com'; // shown in the About modal's "email us" link
+  // Same public feed index.html reads from — used here only for the
+  // nearby-photographer awareness on the map and the proximity warning
+  // (see PROXIMITY CHECK below), never written to from this page.
+  const COMBINED_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1737338184&single=true&output=csv';
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<script>
+// =========================================================================
+// AUTH — this page identifies the photographer purely from the URL:
+//   add-shoot.html?p=DavesShots&key=THEIR_SECRET_KEY
+// "p" is their Shoot Tab Name (Photographers tab, column E), "key" is
+// their Secret Key (column F). Nothing works without both.
+// =========================================================================
+const params = new URLSearchParams(window.location.search);
+const P = params.get('p');
+const KEY = params.get('key');
+
+const authGate = document.getElementById('authGate');
+const dashboard = document.getElementById('dashboard');
+
+function showAuthGateMessage(title, body){
+  authGate.innerHTML = `<h2>${title}</h2><p>${body}</p>`;
+  authGate.classList.remove('hidden');
+  dashboard.classList.add('hidden');
+}
+
+// =========================================================================
+// API helpers
+//
+// IMPORTANT: POST calls deliberately set no custom headers. A plain
+// string body with no Content-Type defaults to "text/plain", which
+// counts as a "simple request" and skips the CORS preflight that Apps
+// Script Web Apps can't respond to. Adding a Content-Type header (even
+// application/json) will break every write silently — see app-script.gs
+// for the fuller explanation of why.
+// =========================================================================
+async function apiGet(action, extraParams){
+  const qs = new URLSearchParams({ action, p: P, key: KEY, ...(extraParams || {}) });
+  const res = await fetch(`${APPS_SCRIPT_URL}?${qs.toString()}`);
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+
+async function apiPost(body){
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ p: P, key: KEY, ...body })
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+
+// =========================================================================
+// Toast
+// =========================================================================
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(text, isError){
+  clearTimeout(toastTimer);
+  toastEl.textContent = text;
+  toastEl.classList.toggle('error', !!isError);
+  toastEl.classList.remove('hidden');
+  toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2600);
+}
+
+// =========================================================================
+// UK date handling — same logic as index.html, kept in sync so status
+// badges (LIVE NOW / UPCOMING / PAST) mean the same thing on both pages.
+// =========================================================================
+function londonOffsetMinutes(utcDate){
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour12: false,
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+  const parts = fmt.formatToParts(utcDate).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour === '24' ? 0 : parts.hour, parts.minute, parts.second);
+  return (asUTC - utcDate.getTime()) / 60000;
+}
+function parseUKDateTime(str){
+  // See index.html's parseUKDateTime for the full explanation — this
+  // guards against an already-corrupted ISO string with a trailing Z
+  // (from Sheets auto-converting a date-like cell) being parsed twice.
+  if (/Z$/.test(str)) {
+    return new Date(str);
+  }
+  const utcGuess = new Date(str.replace(' ', 'T') + 'Z');
+  const offsetMin = londonOffsetMinutes(utcGuess);
+  return new Date(utcGuess.getTime() - offsetMin * 60000);
+}
+function fmtTime(d){
+  return d.toLocaleString('en-GB', { timeZone: 'Europe/London', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+function getStatus(start, end){
+  const t = new Date();
+  if (t >= start && t <= end) return 'live';
+  if (t < start) return 'soon';
+  return 'past';
+}
+
+// =========================================================================
+// PROXIMITY CHECK — reads the same public feed index.html shows, purely to
+// let a photographer see who else is already booked nearby before they
+// commit to a spot. Deliberately informational only: nothing here writes
+// anything back to anyone else's listing, and nothing is shown publicly —
+// it's just a private heads-up to the person filling in this form, same
+// as spotting someone else's event on Facebook before creating your own.
+// =========================================================================
+const PROXIMITY_METRES = 150;
+
+function haversineMeters(lat1, lng1, lat2, lng2){
+  const R = 6371000; // Earth's mean radius, metres
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function parseCsv(text){
+  // Identical to index.html's parser — see there for the full walkthrough.
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i + 1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if (c === '"'){
+      inQuotes = true;
+    } else if (c === ','){
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r'){
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length){ row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(cell => cell.trim() !== ''))
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (r[idx] !== undefined ? r[idx] : '').trim(); });
+      return obj;
+    });
+}
+
+async function fetchCsv(url){
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  let text = await res.text();
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  return parseCsv(text);
+}
+
+// Lightweight on purpose — only the fields the proximity check and the
+// "who else is around" map markers actually need, not the full spot
+// pipeline index.html builds (no galleries, no logo fallback, etc.).
+let otherPhotographersShoots = [];
+async function loadOtherPhotographersShoots(){
+  try {
+    const rows = await fetchCsv(COMBINED_CSV_URL);
+    otherPhotographersShoots = rows
+      .map(row => ({
+        name: row['Photographer Name'] || '',
+        shootTabName: row['Shoot Tab Name'] || '',
+        lat: Number(row['Lat']),
+        lng: Number(row['Lng']),
+        start: parseUKDateTime(row['Start'] || ''),
+        end: parseUKDateTime(row['End'] || ''),
+        link: row['Website URL'] || ''
+      }))
+      // Exclude this photographer's own shoots (nothing to warn them
+      // about relative to themselves) and anything with unusable
+      // coordinates or dates.
+      .filter(s => s.shootTabName !== P
+        && Number.isFinite(s.lat) && Number.isFinite(s.lng)
+        && !isNaN(s.start) && !isNaN(s.end));
+  } catch (err) {
+    console.warn('Could not load other photographers\' shoots for the proximity check — continuing without it:', err);
+    otherPhotographersShoots = [];
+  }
+}
+
+// Two time ranges overlap if each starts before the other ends — the
+// same interval-overlap test used for multi-day shoots on the public map.
+function timeRangesOverlap(aStart, aEnd, bStart, bEnd){
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function findNearbyConflict(lat, lng, startDate, endDate){
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !startDate || !endDate || isNaN(startDate) || isNaN(endDate)) return null;
+  let closest = null;
+  for (const shoot of otherPhotographersShoots){
+    if (!timeRangesOverlap(startDate, endDate, shoot.start, shoot.end)) continue;
+    const distance = haversineMeters(lat, lng, shoot.lat, shoot.lng);
+    if (distance <= PROXIMITY_METRES && (!closest || distance < closest.distance)){
+      closest = { ...shoot, distance };
+    }
+  }
+  return closest;
+}
+function escapeHtml(str){
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// =========================================================================
+// Map + pin (used by the add/edit form)
+//
+// Same switchable basemaps as the public map — OS Road (default),
+// OpenStreetMap, and Aerial (Esri World Imagery, keyless legacy endpoint
+// — see index.html for the full note on why this isn't guaranteed to
+// work indefinitely, and on the OS Maps API key below). OS Light and OS
+// Outdoor are temporarily disabled (commented out below).
+// =========================================================================
+const OS_MAPS_API_KEY = 'Yt6QlfesQxgEbJ7b0zj0ezkKqFuktRL6';
+const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database right ' + new Date().getFullYear();
+
+// tap:false — see index.html for the full explanation. Disables Leaflet's
+// touch-to-click simulation, which is the known source of popups (and
+// here, the placement pin) opening/reacting then immediately reverting on
+// some Android touch browsers, Samsung Internet included.
+const map = L.map('map', { zoomControl: true, attributionControl: false, tap: false, maxBoundsViscosity: 1.0 }).setView([53.18, -1.72], 10);
+// Keep the UK in view — see index.html for the full reasoning. Same box,
+// same hard-stop viscosity, so a photographer placing a pin can't drift
+// off the map entirely by accident.
+const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
+map.setMaxBounds(UK_BOUNDS);
+L.control.attribution({ prefix: false }).addTo(map);
+
+// The free OpenData plan only serves OS Maps API tiles up to z16 — z17+
+// requires a Premium plan. maxNativeZoom caps requests at 16 while
+// maxZoom lets Leaflet overzoom (stretch the z16 tile) beyond that, so
+// riders zoomed in to street/village scale still see a background map
+// instead of a blank one.
+//
+// minZoom:5 + minNativeZoom:7 — see index.html for the full reasoning:
+// all five basemaps now share the same zoom-out floor (14 clicks from
+// the shared maxZoom:19 ceiling). minZoom:5 is a hard floor that keeps
+// the map above the low-zoom "world wrap" territory that caused the
+// original lock-up; minNativeZoom:7 fills the small remaining gap by
+// stretching the z7 tile over z5–z6, now safely bounded rather than
+// open-ended.
+/* OS Light — temporarily disabled, may bring back later.
+const osLightLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Light_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+*/
+const osRoadLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Road_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+/* OS Outdoor — temporarily disabled, may bring back later.
+const osOutdoorLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Outdoor_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
+  maxZoom: 19,
+  maxNativeZoom: 16,
+  minZoom: 5,
+  minNativeZoom: 7,
+  attribution: OS_ATTRIBUTION
+});
+*/
+const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  minZoom: 5,
+  subdomains: 'abc',
+  attribution: '&copy; OpenStreetMap contributors'
+});
+// maxZoom:19 (was 23) — see index.html for the full reasoning: Esri's
+// cache structurally allows z23, but the real imagery for this area
+// runs out around z19 and shows a placeholder beyond that. minZoom:5
+// matches OSM/OS's floor for the same reason maxZoom matches their
+// ceiling.
+const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Tiles &copy; Esri - Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+});
+// Hybrid reference overlays — same as index.html's Aerial basemap: place
+// names/boundaries plus road names, drawn on top of the imagery. Same
+// keyless server.arcgisonline.com endpoint family as aerialLayer above.
+const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Esri, DeLorme'
+});
+const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  minZoom: 5,
+  attribution: 'Esri'
+});
+const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
+osRoadLayer.addTo(map);
+L.control.layers({
+  // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
+  'OS Road': osRoadLayer,
+  // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
+  'OpenStreetMap': streetsLayer,
+  'Aerial': aerialWithLabels
+}, null, { position: 'topright' }).addTo(map);
+
+let marker = null;
+let currentLat = null;
+let currentLng = null;
+
+function roundCoord(n){ return Math.round(n * 10000) / 10000; }
+function formatCoord(n){ return n.toFixed(4); }
+
+function makePinIcon(){
+  const size = 28;
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      background:#d4ff3f;
+      border:2px solid #1c1e22;
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+    "></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size/2, size]
+  });
+}
+
+function setCoords(lat, lng){
+  currentLat = roundCoord(lat);
+  currentLng = roundCoord(lng);
+  const readout = document.getElementById('coordReadout');
+  readout.classList.remove('empty');
+  readout.innerHTML = `Location set: <strong>${formatCoord(currentLat)}, ${formatCoord(currentLng)}</strong>`;
+  updateProximityWarning();
+}
+
+function dropPin(latlng, recenter){
+  const lat = roundCoord(latlng.lat);
+  const lng = roundCoord(latlng.lng);
+  const snapped = L.latLng(lat, lng);
+  if (!marker) {
+    marker = L.marker(snapped, { draggable: true, icon: makePinIcon() }).addTo(map);
+    marker.on('dragend', () => {
+      const p = marker.getLatLng();
+      const snappedAfterDrag = L.latLng(roundCoord(p.lat), roundCoord(p.lng));
+      marker.setLatLng(snappedAfterDrag);
+      setCoords(snappedAfterDrag.lat, snappedAfterDrag.lng);
+    });
+  } else {
+    marker.setLatLng(snapped);
+  }
+  setCoords(lat, lng);
+  if (recenter) map.setView(snapped, 13);
+}
+
+map.on('click', (e) => dropPin(e.latlng, false));
+
+function clearPin(){
+  if (marker) { map.removeLayer(marker); marker = null; }
+  currentLat = null;
+  currentLng = null;
+  const readout = document.getElementById('coordReadout');
+  readout.classList.add('empty');
+  readout.textContent = 'No location set yet.';
+  updateProximityWarning();
+}
+
+// Circle markers for other photographers' shoots that overlap the
+// currently-entered time window — purely so this photographer can see
+// who else is around before placing their own pin. Rebuilt from scratch
+// each time the time window changes rather than diffed, since there's
+// only ever a handful of these on screen at once.
+const nearbyShootsLayer = L.layerGroup().addTo(map);
+const proximityWarningEl = document.getElementById('proximityWarning');
+const timeGateOverlay = document.getElementById('timeGateOverlay');
+const useCurrentLocationBtnEl = document.getElementById('useCurrentLocationBtn');
+
+// Times are required before the map becomes usable at all — this is the
+// whole point of asking for them first (see the PROXIMITY CHECK section
+// below): without a time window there's nothing to check a pin against,
+// and dropping a pin blind then having a conflict warning appear
+// retroactively is worse than not letting them get that far.
+function updateTimeGate(){
+  const gated = !(startEl.value && endEl.value);
+  timeGateOverlay.classList.toggle('hidden', !gated);
+  useCurrentLocationBtnEl.disabled = gated;
+}
+
+function updateProximityWarning(){
+  const start = startEl.value ? parseUKDateTime(formatSheetDateTime(startEl.value)) : null;
+  const end = endEl.value ? parseUKDateTime(formatSheetDateTime(endEl.value)) : null;
+  const hasValidWindow = start && end && !isNaN(start) && !isNaN(end);
+
+  nearbyShootsLayer.clearLayers();
+  if (hasValidWindow){
+    otherPhotographersShoots
+      .filter(s => timeRangesOverlap(start, end, s.start, s.end))
+      .forEach(s => {
+        L.circleMarker([s.lat, s.lng], {
+          radius: 8, weight: 2, color: '#9aa0a6', fillColor: '#9aa0a6', fillOpacity: 0.5
+        }).addTo(nearbyShootsLayer).bindTooltip(escapeHtml(s.name), { direction: 'top', offset: [0, -8] });
+      });
+  }
+
+  if (!hasValidWindow || currentLat === null || currentLng === null){
+    proximityWarningEl.classList.add('hidden');
+    return;
+  }
+
+  const conflict = findNearbyConflict(currentLat, currentLng, start, end);
+  if (!conflict){
+    proximityWarningEl.classList.add('hidden');
+    return;
+  }
+  const metres = Math.round(conflict.distance);
+  const linkPart = conflict.link ? ` You could reach out via <a href="${escapeHtml(conflict.link)}" target="_blank" rel="noopener">their listed link</a>.` : '';
+  proximityWarningEl.innerHTML = `📍 You're about ${metres}m from a shoot by <strong>${escapeHtml(conflict.name)}</strong> at an overlapping time - might be worth a quick message to check before you commit to this spot.${linkPart}`;
+  proximityWarningEl.classList.remove('hidden');
+}
+
+// =========================================================================
+// GEOLOCATION — two separate affordances sharing one browser lookup:
+//
+// 1. The "My location" map control just shows a blue "you are here" dot,
+//    same as the public map — a reference point while you find the shoot
+//    spot yourself, doesn't touch the form.
+// 2. "Use current location" actually fills the form, by feeding the
+//    coordinates through the exact same dropPin() a manual tap uses —
+//    so it behaves identically (draggable pin, recentres, updates the
+//    readout), it's just a different way of choosing the starting point.
+//
+// Both are one-shot lookups (getCurrentPosition, not watchPosition) and
+// entirely client-side — coordinates never go anywhere but into Leaflet.
+// =========================================================================
+function getBrowserLocation(onSuccess, onError){
+  if (!navigator.geolocation){
+    onError("This browser doesn't support location.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => onSuccess(pos.coords.latitude, pos.coords.longitude),
+    (err) => {
+      const message = err.code === err.PERMISSION_DENIED
+        ? "Location access was denied - check your browser's site settings if you'd like to allow it."
+        : "Couldn't get your location - please try again.";
+      onError(message);
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+let myLocationMarker = null;
+
+const LocateControl = L.Control.extend({
+  options: { position: 'bottomleft' },
+  onAdd: function(){
+    const btn = L.DomUtil.create('button', 'locate-btn');
+    btn.textContent = '📍 My location';
+    btn.title = "Show your current location on the map (your browser will ask permission first)";
+    L.DomEvent.disableClickPropagation(btn);
+    btn.addEventListener('click', () => {
+      const originalLabel = btn.textContent;
+      btn.textContent = 'Locating…';
+      btn.disabled = true;
+      getBrowserLocation(
+        (lat, lng) => {
+          btn.textContent = originalLabel;
+          btn.disabled = false;
+          if (myLocationMarker){
+            myLocationMarker.setLatLng([lat, lng]);
+          } else {
+            myLocationMarker = L.circleMarker([lat, lng], {
+              radius: 8,
+              weight: 3,
+              color: '#4aa3ff',
+              fillColor: '#4aa3ff',
+              fillOpacity: 0.35
+            }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+          }
+          map.setView([lat, lng], 13, { animate: true });
+        },
+        (message) => { btn.textContent = originalLabel; btn.disabled = false; showToast(message, true); }
+      );
+    });
+    return btn;
+  }
+});
+map.addControl(new LocateControl());
+
+useCurrentLocationBtnEl.addEventListener('click', () => {
+  if (useCurrentLocationBtnEl.disabled) return; // belt-and-braces — the disabled attribute already prevents this while gated
+  const btn = useCurrentLocationBtnEl;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Locating…';
+  btn.disabled = true;
+  getBrowserLocation(
+    (lat, lng) => {
+      btn.textContent = originalLabel;
+      btn.disabled = false;
+      dropPin(L.latLng(lat, lng), true);
+      showToast('Pin set to your current location - drag it to fine-tune.');
+    },
+    (message) => { btn.textContent = originalLabel; btn.disabled = false; showToast(message, true); }
+  );
+});
+
+// =========================================================================
+// LOCATION SEARCH — jumps the map to a postcode or place name so it's
+// quick to get to the right area, then the photographer still taps the
+// map themselves to drop the actual pin (a postcode covers an area, not
+// one exact point, so this deliberately doesn't drop the pin for them).
+//
+// Same combined lookup as the public map: postcodes.io first (free, UK
+// postcodes, no key needed), falling back to Nominatim (OpenStreetMap)
+// for general place names — same "reasonable light use" policy as the
+// map tiles already used here. Debounced so normal typing doesn't fire a
+// network request per keystroke.
+// =========================================================================
+async function geocodeQuery(query){
+  const q = query.trim();
+  if (!q) return [];
+
+  try {
+    const res = await fetch(`https://api.postcodes.io/postcodes?q=${encodeURIComponent(q)}&limit=5`);
+    const data = await res.json();
+    if (data && data.result && data.result.length){
+      return data.result.map(r => ({ label: r.postcode, lat: r.latitude, lng: r.longitude }));
+    }
+  } catch (err) { /* fall through to Nominatim below */ }
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=gb&limit=5&q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return (data || []).map(r => ({ label: r.display_name, lat: parseFloat(r.lat), lng: parseFloat(r.lon) }));
+  } catch (err) {
+    return [];
+  }
+}
+
+const locationSearchInput = document.getElementById('locationSearchInput');
+const locationSearchClear = document.getElementById('locationSearchClear');
+const locationSearchResults = document.getElementById('locationSearchResults');
+let locationSearchDebounceTimer = null;
+let locationSearchRequestId = 0;
+
+locationSearchInput.addEventListener('input', (e) => {
+  const q = e.target.value;
+  locationSearchClear.style.display = q ? 'block' : 'none';
+  clearTimeout(locationSearchDebounceTimer);
+  if (!q.trim()){
+    locationSearchResults.classList.remove('show');
+    locationSearchResults.innerHTML = '';
+    return;
+  }
+  const thisRequestId = ++locationSearchRequestId;
+  locationSearchDebounceTimer = setTimeout(async () => {
+    const places = await geocodeQuery(q);
+    if (thisRequestId !== locationSearchRequestId) return; // a newer search superseded this one
+    if (!places.length){
+      locationSearchResults.innerHTML = '<div class="resultItem">No matches</div>';
+      locationSearchResults.classList.add('show');
+      return;
+    }
+    locationSearchResults.innerHTML = places.map((place, i) =>
+      `<div class="resultItem" role="option" tabindex="0" data-place-idx="${i}">📍 ${escapeHtml(place.label)}</div>`
+    ).join('');
+    locationSearchResults.classList.add('show');
+    // Each result gets both a click handler and a keydown handler
+    // (Enter/Space) so this is reachable via Tab + Enter, not just a mouse.
+    locationSearchResults.querySelectorAll('.resultItem[data-place-idx]').forEach(el => {
+      const action = () => {
+        const place = places[parseInt(el.dataset.placeIdx, 10)];
+        map.setView([place.lat, place.lng], 15, { animate: true });
+        locationSearchResults.classList.remove('show');
+        setTimeout(() => map.invalidateSize(), 200);
+      };
+      el.addEventListener('click', action);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' '){
+          e.preventDefault();
+          action();
+        }
+      });
+    });
+  }, 500);
+});
+
+locationSearchClear.addEventListener('click', () => {
+  locationSearchInput.value = '';
+  locationSearchClear.style.display = 'none';
+  locationSearchResults.classList.remove('show');
+  locationSearchResults.innerHTML = '';
+  locationSearchInput.focus();
+});
+
+// =========================================================================
+// Form (shared between "add" and "edit")
+// =========================================================================
+const locationNameEl = document.getElementById('locationName');
+const descriptionEl = document.getElementById('description');
+const startEl = document.getElementById('startTime');
+const endEl = document.getElementById('endTime');
+startEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
+endEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
+const formSection = document.getElementById('formSection');
+const formHeading = document.getElementById('formHeading');
+const formError = document.getElementById('formError');
+const saveShootBtn = document.getElementById('saveShootBtn');
+
+let editingShootId = null; // null = creating a new shoot
+
+function formatSheetDateTime(value){
+  if (!value) return '';
+  return value.replace('T', ' ');
+}
+function toDatetimeLocalValue(sheetValue){
+  if (!sheetValue) return '';
+  return sheetValue.replace(' ', 'T');
+}
+
+function openFormForCreate(){
+  editingShootId = null;
+  formHeading.textContent = 'Add a shoot';
+  saveShootBtn.textContent = 'Save shoot';
+  locationNameEl.value = '';
+  descriptionEl.value = '';
+  startEl.value = '';
+  endEl.value = '';
+  updateTimeGate(); // both times just got cleared — re-lock the map
+  clearPin();
+  formError.classList.add('hidden');
+  formSection.classList.remove('hidden');
+  formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => map.invalidateSize(), 200); // map was hidden, Leaflet needs a nudge
+}
+
+function openFormForEdit(shoot){
+  editingShootId = shoot.shootId;
+  formHeading.textContent = 'Edit shoot';
+  saveShootBtn.textContent = 'Save changes';
+  locationNameEl.value = shoot.location;
+  descriptionEl.value = shoot.description || '';
+  startEl.value = toDatetimeLocalValue(shoot.start);
+  endEl.value = toDatetimeLocalValue(shoot.end);
+  updateTimeGate(); // an existing shoot always has both times already — map should be unlocked
+  clearPin();
+  dropPin(L.latLng(shoot.lat, shoot.lng), true);
+  formError.classList.add('hidden');
+  formSection.classList.remove('hidden');
+  formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => map.invalidateSize(), 200);
+}
+
+document.getElementById('newShootBtn').addEventListener('click', openFormForCreate);
+document.getElementById('cancelFormBtn').addEventListener('click', () => {
+  formSection.classList.add('hidden');
+});
+
+saveShootBtn.addEventListener('click', async () => {
+  formError.classList.add('hidden');
+
+  const location = locationNameEl.value.trim();
+  if (!location){ formError.textContent = 'Location name is required.'; formError.classList.remove('hidden'); return; }
+  if (currentLat === null || currentLng === null){ formError.textContent = 'Tap the map to drop a pin.'; formError.classList.remove('hidden'); return; }
+  if (!startEl.value || !endEl.value){ formError.textContent = 'Start and end times are both required.'; formError.classList.remove('hidden'); return; }
+  if (endEl.value <= startEl.value){ formError.textContent = 'End time must be after the start time.'; formError.classList.remove('hidden'); return; }
+
+  const shoot = {
+    location,
+    description: descriptionEl.value.trim(),
+    lat: currentLat,
+    lng: currentLng,
+    start: formatSheetDateTime(startEl.value),
+    end: formatSheetDateTime(endEl.value)
+  };
+
+  // Not blocked — a past start date is a legitimate use (e.g. adding
+  // galleries to a shoot that already happened), just worth a nudge in
+  // case it was meant to be a typo-free future date.
+  if (parseUKDateTime(shoot.start) < new Date()){
+    const proceed = confirm("This shoot's start time is in the past. That's fine if you're logging a shoot that already happened - otherwise, double-check the date.\n\nSave anyway?");
+    if (!proceed) return;
+  }
+
+  saveShootBtn.disabled = true;
+  saveShootBtn.textContent = 'Saving…';
+  try {
+    const result = editingShootId
+      ? await apiPost({ action: 'updateShoot', shootId: editingShootId, shoot })
+      : await apiPost({ action: 'createShoot', shoot });
+
+    if (result.error){
+      formError.textContent = result.error;
+      formError.classList.remove('hidden');
+    } else {
+      formSection.classList.add('hidden');
+      showToast((editingShootId ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
+      await loadShoots();
+    }
+  } catch (err) {
+    formError.textContent = "Couldn't save - check your connection and try again.";
+    formError.classList.remove('hidden');
+    console.error(err);
+  } finally {
+    saveShootBtn.disabled = false;
+    saveShootBtn.textContent = editingShootId ? 'Save changes' : 'Save shoot';
+  }
+});
+
+// =========================================================================
+// Gallery modal
+// =========================================================================
+const galleryModal = document.getElementById('galleryModal');
+const galleryModalHeading = document.getElementById('galleryModalHeading');
+const galleryLabelEl = document.getElementById('galleryLabel');
+const galleryUrlEl = document.getElementById('galleryUrl');
+const galleryError = document.getElementById('galleryError');
+const saveGalleryBtn = document.getElementById('saveGalleryBtn');
+let galleryShootId = null;
+let galleryEditRow = null; // null = adding a new gallery, otherwise the row of the one being edited
+
+function openGalleryModal(shootId){
+  galleryShootId = shootId;
+  galleryEditRow = null;
+  galleryModalHeading.textContent = 'Add a gallery link';
+  saveGalleryBtn.textContent = 'Add gallery';
+  galleryLabelEl.value = '';
+  galleryUrlEl.value = '';
+  galleryError.classList.add('hidden');
+  galleryModal.classList.remove('hidden');
+}
+function openGalleryModalForEdit(shootId, gallery){
+  galleryShootId = shootId;
+  galleryEditRow = gallery.row;
+  galleryModalHeading.textContent = 'Edit gallery link';
+  saveGalleryBtn.textContent = 'Save changes';
+  galleryLabelEl.value = gallery.label || '';
+  galleryUrlEl.value = gallery.url || '';
+  galleryError.classList.add('hidden');
+  galleryModal.classList.remove('hidden');
+}
+document.getElementById('cancelGalleryBtn').addEventListener('click', () => galleryModal.classList.add('hidden'));
+
+saveGalleryBtn.addEventListener('click', async () => {
+  galleryError.classList.add('hidden');
+  const url = galleryUrlEl.value.trim();
+  if (!url){ galleryError.textContent = 'A URL is required.'; galleryError.classList.remove('hidden'); return; }
+
+  const isEdit = galleryEditRow !== null;
+  saveGalleryBtn.disabled = true;
+  saveGalleryBtn.textContent = isEdit ? 'Saving…' : 'Adding…';
+  try {
+    const result = isEdit
+      ? await apiPost({
+          action: 'updateGallery',
+          shootId: galleryShootId,
+          row: galleryEditRow,
+          label: galleryLabelEl.value.trim(),
+          url
+        })
+      : await apiPost({
+          action: 'addGallery',
+          shootId: galleryShootId,
+          label: galleryLabelEl.value.trim(),
+          url
+        });
+    if (result.error){
+      galleryError.textContent = result.error;
+      galleryError.classList.remove('hidden');
+    } else {
+      galleryModal.classList.add('hidden');
+      showToast(isEdit ? 'Gallery updated' : 'Gallery added');
+      await loadShoots();
+    }
+  } catch (err) {
+    galleryError.textContent = "Couldn't save - check your connection and try again.";
+    galleryError.classList.remove('hidden');
+    console.error(err);
+  } finally {
+    saveGalleryBtn.disabled = false;
+    saveGalleryBtn.textContent = isEdit ? 'Save changes' : 'Add gallery';
+  }
+});
+
+// =========================================================================
+// Shoot list
+// =========================================================================
+const shootsListEl = document.getElementById('shootsList');
+const emptyStateEl = document.getElementById('emptyState');
+let currentShoots = [];
+
+function statusMeta(status){
+  if (status === 'live') return { label: 'LIVE NOW', cls: 'status-live' };
+  if (status === 'soon') return { label: 'UPCOMING', cls: 'status-soon' };
+  return { label: 'PAST', cls: 'status-past' };
+}
+
+function renderShoots(shoots){
+  currentShoots = shoots;
+
+  const withDates = shoots.map(s => ({ ...s, startDate: parseUKDateTime(s.start), endDate: parseUKDateTime(s.end) }));
+  const order = { live: 0, soon: 1, past: 2 };
+  withDates.sort((a, b) => {
+    const sa = getStatus(a.startDate, a.endDate), sb = getStatus(b.startDate, b.endDate);
+    if (order[sa] !== order[sb]) return order[sa] - order[sb];
+    return sa === 'past' ? (b.startDate - a.startDate) : (a.startDate - b.startDate);
+  });
+
+  if (!withDates.length){
+    shootsListEl.innerHTML = '';
+    emptyStateEl.classList.remove('hidden');
+    return;
+  }
+  emptyStateEl.classList.add('hidden');
+
+  shootsListEl.innerHTML = withDates.map(s => {
+    const status = getStatus(s.startDate, s.endDate);
+    const meta = statusMeta(status);
+    const galleries = s.galleries || [];
+    const galleryList = galleries.length
+      ? `<div class="gallery-list">${galleries.map(g => `
+          <div class="gallery-item">
+            <a class="gallery-item-link" href="${escapeHtml(g.url)}" target="_blank" rel="noopener">${escapeHtml(g.label || 'Gallery')}</a>
+            <button class="gallery-item-btn" data-gallery-action="edit" data-row="${g.row}">Edit</button>
+            <button class="gallery-item-btn danger" data-gallery-action="delete" data-row="${g.row}">Delete</button>
+          </div>
+        `).join('')}</div>`
+      : `<p class="shoot-galleries">No galleries yet</p>`;
+    return `
+      <div class="shoot-card" data-shoot-id="${escapeHtml(s.shootId)}">
+        <div class="shoot-card-top">
+          <div>
+            <p class="shoot-location">${escapeHtml(s.location)}</p>
+            <p class="shoot-time">${fmtTime(s.startDate)} – ${fmtTime(s.endDate)}</p>
+            ${s.description ? `<p class="shoot-desc">${escapeHtml(s.description)}</p>` : ''}
+            ${galleryList}
+          </div>
+          <span class="status-badge ${meta.cls}">${meta.label}</span>
+        </div>
+        <div class="shoot-actions">
+          <button class="chip-btn" data-action="edit">Edit</button>
+          <button class="chip-btn" data-action="gallery">+ Gallery</button>
+          <button class="chip-btn danger" data-action="delete">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+shootsListEl.addEventListener('click', async (e) => {
+  const galleryBtn = e.target.closest('button[data-gallery-action]');
+  if (galleryBtn){
+    const card = e.target.closest('.shoot-card');
+    const shootId = card.getAttribute('data-shoot-id');
+    const shoot = currentShoots.find(s => s.shootId === shootId);
+    if (!shoot) return;
+    const row = Number(galleryBtn.dataset.row);
+    const gallery = (shoot.galleries || []).find(g => g.row === row);
+    if (!gallery) return;
+
+    if (galleryBtn.dataset.galleryAction === 'edit'){
+      openGalleryModalForEdit(shootId, gallery);
+    } else if (galleryBtn.dataset.galleryAction === 'delete'){
+      if (!confirm('Delete this gallery link? This can\'t be undone.')) return;
+      galleryBtn.disabled = true;
+      galleryBtn.textContent = '…';
+      try {
+        const result = await apiPost({ action: 'deleteGallery', shootId, row });
+        if (result.error){
+          showToast(result.error, true);
+          galleryBtn.disabled = false;
+          galleryBtn.textContent = 'Delete';
+        } else {
+          showToast('Gallery deleted');
+          await loadShoots();
+        }
+      } catch (err) {
+        showToast("Couldn't delete - check your connection.", true);
+        console.error(err);
+        galleryBtn.disabled = false;
+        galleryBtn.textContent = 'Delete';
+      }
+    }
+    return;
+  }
+
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const card = e.target.closest('.shoot-card');
+  const shootId = card.getAttribute('data-shoot-id');
+  const shoot = currentShoots.find(s => s.shootId === shootId);
+  if (!shoot) return;
+
+  if (btn.dataset.action === 'edit'){
+    openFormForEdit(shoot);
+  } else if (btn.dataset.action === 'gallery'){
+    openGalleryModal(shootId);
+  } else if (btn.dataset.action === 'delete'){
+    const galleryCount = shoot.galleries ? shoot.galleries.length : 0;
+    const warning = galleryCount > 0
+      ? `Delete this shoot? This can't be undone, and will also remove its ${galleryCount} attached gallery link${galleryCount === 1 ? '' : 's'}.`
+      : "Delete this shoot? This can't be undone.";
+    if (!confirm(warning)) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    try {
+      const result = await apiPost({ action: 'deleteShoot', shootId });
+      if (result.error){
+        showToast(result.error, true);
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      } else {
+        showToast('Shoot deleted');
+        await loadShoots();
+      }
+    } catch (err) {
+      showToast("Couldn't delete - check your connection.", true);
+      console.error(err);
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+    }
+  }
+});
+
+// =========================================================================
+// Load + init
+// =========================================================================
+async function loadShoots(){
+  const result = await apiGet('myShoots');
+  if (result.error) throw new Error(result.error);
+  renderShoots(result.shoots || []);
+}
+
+async function loadStats(){
+  const result = await apiGet('stats');
+  if (result.error) return; // non-fatal — stats are a nice-to-have, not required to use the dashboard
+  document.getElementById('statPopups').textContent = result.popupOpens ?? '–';
+  document.getElementById('statGallery').textContent = result.galleryClicks ?? '–';
+  document.getElementById('statPage').textContent = result.pageLinkClicks ?? '–';
+}
+
+async function init(){
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0){
+    showAuthGateMessage("This page isn't set up yet", 'APPS_SCRIPT_URL needs to be set near the bottom of this file.');
+    return;
+  }
+  if (!P || !KEY){
+    showAuthGateMessage('Missing your details', "This link is missing your photographer ID or key - ask whoever set this up for your personal link.");
+    return;
+  }
+
+  try {
+    await loadShoots();
+    authGate.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    populateShareLink();
+    loadStats(); // fire-and-forget — dashboard works fine even if this fails
+    loadOtherPhotographersShoots().then(updateProximityWarning); // fire-and-forget too — proximity check just has less to work with until this resolves
+  } catch (err) {
+    console.error(err);
+    showAuthGateMessage("Link not recognised", "This link doesn't seem to be working - ask whoever set this up to double-check it.");
+  }
+}
+
+// =========================================================================
+// SHARE LINK — a public, non-secret URL that filters the main map down to
+// just this photographer's shoots. Safe to post anywhere, unlike this
+// dashboard's own ?p=&key= link, since it can only filter what's shown.
+// =========================================================================
+function buildShareLink(){
+  const url = new URL(location.origin + '/');
+  url.searchParams.set('photographer', P);
+  return url.toString();
+}
+
+function populateShareLink(){
+  document.getElementById('shareLinkInput').value = buildShareLink();
+}
+
+document.getElementById('copyShareLinkBtn').addEventListener('click', () => {
+  const input = document.getElementById('shareLinkInput');
+  const btn = document.getElementById('copyShareLinkBtn');
+  const showCopied = () => {
+    const original = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = original; }, 1800);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(showCopied).catch(() => {
+      input.select();
+      try { document.execCommand('copy'); showCopied(); } catch (err) { /* clipboard unavailable */ }
+    });
+  } else {
+    input.select();
+    try { document.execCommand('copy'); showCopied(); } catch (err) { /* clipboard unavailable */ }
+  }
+});
+
+// =========================================================================
+// ABOUT — purely informational modal, opened from the header link.
+// =========================================================================
+const aboutOverlay = document.getElementById('aboutOverlay');
+const aboutContactLink = document.getElementById('aboutContactLink');
+if (aboutContactLink) aboutContactLink.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
+document.getElementById('aboutLink').addEventListener('click', () => {
+  aboutOverlay.classList.add('show');
+});
+document.getElementById('aboutCloseBtn').addEventListener('click', () => {
+  aboutOverlay.classList.remove('show');
+});
+document.getElementById('aboutCloseBtnTop').addEventListener('click', () => {
+  aboutOverlay.classList.remove('show');
+});
+aboutOverlay.addEventListener('click', (e) => {
+  if (e.target === aboutOverlay) aboutOverlay.classList.remove('show');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (aboutOverlay.classList.contains('show')) {
+    aboutOverlay.classList.remove('show');
+  } else if (!galleryModal.classList.contains('hidden')) {
+    galleryModal.classList.add('hidden');
+  }
+});
+
+init();
+</script>
+
+</body>
+</html>
