@@ -2202,16 +2202,35 @@ function popupHtml(spot){
   `;
 }
 
-// Reserves space for the floating search box (#searchWrap, top:12px + its
-// own ~41px height) in every popup's auto-pan calculation, so a popup
-// that would otherwise open underneath it instead auto-pans the map to
-// clear it — same mechanism Leaflet already uses to keep a popup from
-// opening off the edge of the map, just with the search box treated as
-// an extra edge. Spread into every L.popup()/bindPopup() options object
-// below. Bottom/right kept at a smaller, normal margin.
+// Reserves space for every floating control sitting on top of the map in
+// every popup's auto-pan calculation, so a popup that would otherwise
+// open underneath one instead auto-pans the map to clear it — same
+// mechanism Leaflet already uses to keep a popup from opening off the
+// edge of the map, just with these controls treated as extra edges.
+// Spread into every L.popup()/bindPopup() options object below.
+//   - top-left: the search box (#searchWrap, top:12px + its own ~41px
+//     height)
+//   - bottom-right: whichever is taller/wider of the bottom-left control
+//     stack (zoom + Reset view + My location together, measured ~146px
+//     tall from the map's bottom edge to the top of the stack - My
+//     location is the topmost since controls stack upward in the order
+//     they're added) and the bottom-right layer switcher (measured
+//     ~60px wide) - Leaflet only takes one padding value per corner
+//     pair, not one per actual control, so this has to cover the
+//     largest of them; a small buffer is added on top of the measured
+//     values.
+// maxHeight caps how tall a popup's content can grow before it scrolls
+// internally instead — a spot with a long description and several
+// galleries could otherwise grow tall enough that no amount of autoPan
+// padding could keep both ends clear at once on a short mobile viewport
+// (there's only so much map height to work with). 320px comfortably
+// fits within a typical mobile map area alongside both padding amounts
+// above; anything past that scrolls within the popup rather than
+// pushing its edges past where auto-pan can still guarantee clearance.
 const POPUP_AUTOPAN_PADDING = {
   autoPanPaddingTopLeft: L.point(20, 70),
-  autoPanPaddingBottomRight: L.point(20, 20)
+  autoPanPaddingBottomRight: L.point(75, 165),
+  maxHeight: 320
 };
 
 // =========================================================================
