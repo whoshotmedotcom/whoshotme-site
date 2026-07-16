@@ -1470,25 +1470,38 @@ const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database rig
 // (github.com/Leaflet/Leaflet/issues/7330). Modern touch browsers don't
 // need Leaflet's tap polyfill anyway (native click has no delay these
 // days), so disabling it is safe and removes the race entirely.
-const map = L.map('map', { zoomControl: false, attributionControl: false, tap: false, maxBoundsViscosity: 1.0 }).setView([53.18, -1.72], 10);
+// maxBoundsViscosity: lower = softer resistance when dragging past
+// MAP_PAN_BOUNDS (0 = no resistance at all, drags freely past with an
+// elastic snap back; 1 = a hard wall, can't drag past it even a little).
+// Was 1.0 (hard wall) - dropped to ~1/3 of that since a full hard stop
+// felt harsh, especially coming off a fast fling near the edge.
+const map = L.map('map', { zoomControl: false, attributionControl: false, tap: false, maxBoundsViscosity: 0.33 }).setView([53.18, -1.72], 10);
 // Keep the UK in view — Leaflet's built-in bounds constraint, not custom
 // drag logic. One box works correctly at every zoom level with no extra
 // code: zoomed in, it's vastly bigger than the viewport so panning feels
 // completely free; zoomed out, it's what stops the map drifting off to
-// another continent. maxBoundsViscosity:1.0 (set above) makes it a hard
-// stop rather than a rubber-band bounce-back.
+// another continent.
 // Deliberately much wider than the UK's actual coastline (which is
 // roughly 49.9–60.9 lat, -8.6–1.8 lng) - this is just how far you can pan
-// before hitting a hard stop, not a claim about where the UK actually is,
-// so there's no reason to hug the coastline tightly. Original span +50%
-// on both axes, extended symmetrically so the centre doesn't shift.
-// Longitude padding doubled again on top of the +50% below - Web
-// Mercator (what Leaflet uses) stretches latitude increasingly at higher
-// latitudes but keeps longitude linear, so the same degree-padding reads
-// as a much smaller visual gap east-west than north-south at the UK's
-// latitude. Centre (-4.4) unchanged, span doubled from the original
-// 13deg to 26deg.
-const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.4], [64.125, 8.6]);
+// before resistance kicks in, not a claim about where the UK actually
+// is, so there's no reason to hug the coastline tightly.
+//
+// Latitude: original span +50%, extended symmetrically from the
+// original box's own centre (survives unchanged below).
+//
+// Longitude: NOT simply "+50% like latitude" - two compounding reasons.
+// (1) Web Mercator (what Leaflet uses) stretches latitude increasingly
+// at higher latitudes but keeps longitude linear, so equal degree-padding
+// on both axes doesn't read as an equal visual gap at the UK's latitude.
+// (2) The map's actual default view (setView above) is centred on
+// lng -1.72, not the UK box's own geometric centre (-4.4) - padding
+// symmetrically around the wrong centre quietly shortchanged the east
+// side specifically. Fix: computed the real Mercator-projected pan
+// distance from the actual default centre (53.18, -1.72) to the north
+// and south edges below, then sized east/west from that same centre so
+// total east-west pan room matches total north-south pan room exactly
+// (see the commit this landed in for the full calculation).
+const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.48], [64.125, 14.04]);
 map.setMaxBounds(MAP_PAN_BOUNDS);
 // Same reflow issue as the banners (see applyPhotographerFilterFromUrl) but
 // triggered by rotation or the on-screen keyboard opening/closing (e.g.

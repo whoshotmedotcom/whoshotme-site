@@ -1072,19 +1072,18 @@ const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database rig
 // touch-to-click simulation, which is the known source of popups (and
 // here, the placement pin) opening/reacting then immediately reverting on
 // some Android touch browsers, Samsung Internet included.
-const map = L.map('map', { zoomControl: true, attributionControl: false, tap: false, maxBoundsViscosity: 1.0 }).setView([53.18, -1.72], 10);
+// maxBoundsViscosity dropped from 1.0 (hard wall) to ~1/3 of that - see
+// index.html for the full reasoning, same change here for consistency.
+const map = L.map('map', { zoomControl: true, attributionControl: false, tap: false, maxBoundsViscosity: 0.33 }).setView([53.18, -1.72], 10);
 // UK_BOUNDS stays the tight coordinate-validation box (checked below at
 // save time, and mirrored in app-script.gs's validateShoot - keep all
 // three in sync if this ever changes). Panning uses a deliberately much
-// wider MAP_PAN_BOUNDS instead - see index.html for the full reasoning -
+// wider MAP_PAN_BOUNDS instead - see index.html for the full reasoning,
+// including why longitude isn't just "the same treatment as latitude" -
 // so a photographer can't drift off the map entirely by accident, but
 // isn't hemmed in right at the coastline while placing a pin either.
 const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
-// Longitude span doubled again on top of the y-axis's +50% - see
-// index.html for the full reasoning (Mercator stretches latitude more
-// than longitude at the UK's latitude, so equal degree-padding on both
-// axes didn't read as visually equal).
-const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.4], [64.125, 8.6]);
+const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.48], [64.125, 14.04]);
 map.setMaxBounds(MAP_PAN_BOUNDS);
 L.control.attribution({ prefix: false }).addTo(map);
 
