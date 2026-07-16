@@ -686,6 +686,21 @@
     border-radius:8px;
     margin-top:10px;
   }
+
+  #emailHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 14px; line-height:1.5; }
+  /* Same "worth a look, not broken" callout as #proximityWarning - shown
+     while a requested email change is still awaiting its confirmation
+     click, so it doesn't just silently vanish from view. */
+  #emailPendingHint{
+    background:rgba(217,122,83,0.12);
+    border-left:3px solid var(--rust);
+    color:var(--paper);
+    font-size:0.82rem;
+    line-height:1.4;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-top:12px;
+  }
   #proximityWarning a{ color:var(--hi-vis); }
 
   /* ---- gallery modal ---- */
@@ -889,6 +904,23 @@
         </div>
         <button id="saveProfileBtn" class="pill-btn">Save profile</button>
         <p id="profileError" class="error-text hidden"></p>
+      </section>
+
+      <!-- Separate section with its own save button, not folded into
+           "My profile" above - unlike name/website this doesn't take
+           effect immediately, since Contact Email is the lookup key
+           "lost your link?" depends on. See requestEmailChange in
+           app-script.gs for the confirm-new-address flow. -->
+      <section id="emailSection">
+        <h2>Contact email</h2>
+        <p id="emailHint">Used for "lost your link?" recovery - changing this emails a confirmation link to the new address first, so your current one keeps working until you click it.</p>
+        <div class="field">
+          <label for="profileEmailInput">Email</label>
+          <input type="email" id="profileEmailInput" maxlength="200" placeholder="you@example.com">
+        </div>
+        <button id="saveEmailBtn" class="pill-btn">Update email</button>
+        <p id="emailError" class="error-text hidden"></p>
+        <p id="emailPendingHint" class="hidden"></p>
       </section>
     </div>
   </div>
@@ -2011,9 +2043,10 @@ shootsListEl.addEventListener('click', async (e) => {
 // PROFILE — self-editing name/website, piggybacked on the same myShoots
 // call that already runs on load (see getMyShoots's profile field in
 // app-script.gs) rather than a separate request. Logo isn't editable
-// here yet (parked as a possible pro feature) and neither is Contact
-// Email (it's resendLink's lookup key - needs its own confirm-the-new-
-// address flow before it's safe to self-edit, tracked separately).
+// here yet (parked as a possible pro feature). Contact Email has its own
+// section below with its own save flow, since - unlike name/website -
+// it doesn't take effect immediately (see the EMAIL section further
+// down for why).
 // =========================================================================
 const profileNameInput = document.getElementById('profileNameInput');
 const profileWebsiteInput = document.getElementById('profileWebsiteInput');
@@ -2056,6 +2089,58 @@ saveProfileBtn.addEventListener('click', async () => {
 });
 
 // =========================================================================
+// EMAIL — Contact Email is resendLink's lookup key (see app-script.gs's
+// findPhotographerRowByEmail), so unlike name/website above, saving here
+// doesn't take effect immediately. requestEmailChange emails a
+// confirmation link to the NEW address; the old one keeps working as the
+// lookup key until that link is clicked. See getMyShoots' pendingEmail
+// field for how the "still waiting to be confirmed" state gets shown.
+// =========================================================================
+const profileEmailInput = document.getElementById('profileEmailInput');
+const saveEmailBtn = document.getElementById('saveEmailBtn');
+const emailError = document.getElementById('emailError');
+const emailPendingHint = document.getElementById('emailPendingHint');
+
+function showPendingEmailHint(pendingEmail){
+  if (!pendingEmail){
+    emailPendingHint.classList.add('hidden');
+    return;
+  }
+  emailPendingHint.textContent = `Confirmation email sent to ${pendingEmail} - click the link there to finish the change.`;
+  emailPendingHint.classList.remove('hidden');
+}
+
+saveEmailBtn.addEventListener('click', async () => {
+  emailError.classList.add('hidden');
+  const newEmail = profileEmailInput.value.trim();
+  if (!newEmail || !newEmail.includes('@')) {
+    emailError.textContent = 'Enter a valid email address.';
+    emailError.classList.remove('hidden');
+    return;
+  }
+
+  saveEmailBtn.disabled = true;
+  saveEmailBtn.textContent = 'Sending…';
+  try {
+    const result = await apiPost({ action: 'requestEmailChange', newEmail });
+    if (result.error) {
+      emailError.textContent = result.error;
+      emailError.classList.remove('hidden');
+    } else {
+      showToast('Confirmation email sent - check your inbox to finish the change');
+      showPendingEmailHint(newEmail);
+    }
+  } catch (err) {
+    console.error(err);
+    emailError.textContent = "Couldn't save - check your connection.";
+    emailError.classList.remove('hidden');
+  } finally {
+    saveEmailBtn.disabled = false;
+    saveEmailBtn.textContent = 'Update email';
+  }
+});
+
+// =========================================================================
 // Load + init
 // =========================================================================
 async function loadShoots(){
@@ -2066,6 +2151,8 @@ async function loadShoots(){
     profileNameInput.value = result.profile.name || '';
     profileWebsiteInput.value = result.profile.website || '';
     updateProfileFieldStyles();
+    profileEmailInput.value = result.profile.email || '';
+    showPendingEmailHint(result.profile.pendingEmail || '');
   }
 }
 

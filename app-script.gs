@@ -18,6 +18,10 @@
  *      sign up (email-confirmed, no approval needed from you) and, if
  *      they lose their link later, get a fresh one resent to themselves —
  *      see ADDING A NEW PHOTOGRAPHER below.
+ *   5. Lets an already-listed photographer change their own Contact
+ *      Email from add-shoot.html's Profile tab — confirm-new-address
+ *      flow, same trust model as signup (see requestEmailChange/
+ *      confirmEmailChange below).
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -51,6 +55,16 @@
  *              waiting on the photographer to click their email link, or
  *              abandoned. Safe to delete old rows by hand if it gets
  *              cluttered; nothing else depends on them.
+ *   EmailChanges: A=Token, B=Shoot Tab Name, C=New Email, D=Requested At.
+ *              Also in the Photographers workbook. Same "pending until
+ *              confirmed" shape as Signups but for an EXISTING
+ *              photographer changing their Contact Email (see
+ *              requestEmailChange/confirmEmailChange below) — kept as its
+ *              own tab rather than overloading Signups, since a signup
+ *              creates a brand new photographer and this changes an
+ *              existing one, different enough shapes that sharing one tab
+ *              would mean unused columns either way. A row is removed the
+ *              moment its token is redeemed, same lifecycle as Signups.
  *
  * SETUP (one-time):
  * 1. Open the Google Sheet, then Extensions > Apps Script.
@@ -58,6 +72,9 @@
  *    add a "Signups" tab to the Photographers workbook (private one),
  *    with header row: Token | Name | Email | Website | Shoot Tab Name |
  *    Requested At — see SIGNUPS_SHEET / the SHEET LAYOUTS note above.
+ *    Also add an "EmailChanges" tab (same workbook), header row: Token |
+ *    Shoot Tab Name | New Email | Requested At — see EMAIL_CHANGES_SHEET /
+ *    the SHEET LAYOUTS note above.
  * 3. Click the clock icon (Triggers) > Add Trigger.
  *      Function to run: stampShootId
  *      Event source: From spreadsheet
@@ -118,6 +135,7 @@
 
 const PHOTOGRAPHERS_SHEET = 'Photographers';
 const SIGNUPS_SHEET = 'Signups';
+const EMAIL_CHANGES_SHEET = 'EmailChanges';
 const SHOOTS_SHEET = 'Shoots';
 const GALLERIES_SHEET = 'Galleries';
 const STATS_SHEET = 'Stats';
@@ -168,6 +186,15 @@ function getSignupsSheet() {
     return SpreadsheetApp.openById(PHOTOGRAPHERS_SPREADSHEET_ID).getSheetByName(SIGNUPS_SHEET);
   }
   return SpreadsheetApp.getActive().getSheetByName(SIGNUPS_SHEET);
+}
+
+// EmailChanges lives in the same spreadsheet as Photographers too — same
+// reasoning as PHOTOGRAPHERS_SPREADSHEET_ID above.
+function getEmailChangesSheet() {
+  if (PHOTOGRAPHERS_SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(PHOTOGRAPHERS_SPREADSHEET_ID).getSheetByName(EMAIL_CHANGES_SHEET);
+  }
+  return SpreadsheetApp.getActive().getSheetByName(EMAIL_CHANGES_SHEET);
 }
 
 // Google Sheets treats a cell value starting with =, +, -, or @ as a
@@ -287,6 +314,9 @@ function doGet(e) {
     // be human-readable, not a JSON blob. Read-only - see confirmSignup
     // below and the rule above doGet's own declaration.
     if (action === 'confirmSignup') return confirmSignupPage(e.parameter.token);
+    // Same pattern, for confirming a changed Contact Email instead of a
+    // brand new signup — see confirmEmailChange below.
+    if (action === 'confirmEmailChange') return confirmEmailChangePage(e.parameter.token);
 
     var p = e.parameter.p;
     var key = e.parameter.key;
@@ -335,6 +365,12 @@ function doPost(e) {
     if (action === 'confirmSignupCommit') {
       return jsonOut(confirmSignup(body.token));
     }
+    // Same "button click, not the GET link itself" reasoning as
+    // confirmSignupCommit above, for a changed Contact Email instead of a
+    // new signup - see confirmEmailChangePage/confirmEmailChange.
+    if (action === 'confirmEmailChangeCommit') {
+      return jsonOut(confirmEmailChange(body.token));
+    }
     // Also public, same "prove you own the inbox" reasoning as above —
     // see resendLink. Deliberately returns the same {ok:true} whether or
     // not that email is actually registered, so this can't be used to
@@ -349,6 +385,7 @@ function doPost(e) {
     }
 
     if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website));
+    if (action === 'requestEmailChange') return jsonOut(requestEmailChange(body.p, body.newEmail));
     if (action === 'createShoot') return jsonOut(createShoot(body.p, body.shoot));
     if (action === 'updateShoot') return jsonOut(updateShoot(body.p, body.shootId, body.shoot));
     if (action === 'deleteShoot') return jsonOut(deleteShoot(body.p, body.shootId));
@@ -815,16 +852,21 @@ function getMyShoots(p, key) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
   if (!sheet) return { error: 'Shoots tab not found' };
 
-  // Piggybacks the profile fields (name/website) onto this same call
-  // rather than adding a separate GET action just for them - the
+  // Piggybacks the profile fields (name/website/email) onto this same
+  // call rather than adding a separate GET action just for them - the
   // dashboard always calls this on load anyway. Logo deliberately left
   // out here - not self-editable yet, see updateProfile's comment.
+  // pendingEmail lets the dashboard show "confirmation sent to X" if a
+  // requestEmailChange is still awaiting its confirmation click, rather
+  // than the change silently vanishing from view until it lands.
   var photographer = findPhotographerRow(p);
-  var profile = { name: '', website: '' };
+  var profile = { name: '', website: '', email: '', pendingEmail: '' };
   if (photographer) {
-    var profileCols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL']);
+    var profileCols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Contact Email']);
     profile.name = photographer.row[profileCols['Photographer Name']] || '';
     profile.website = photographer.row[profileCols['Website URL']] || '';
+    profile.email = photographer.row[profileCols['Contact Email']] || '';
+    profile.pendingEmail = findPendingEmailChange(p);
   }
 
   var galleries = getGalleriesForTab(p);
@@ -850,14 +892,14 @@ function getMyShoots(p, key) {
 }
 
 // Lets a photographer self-edit their own display name and website/
-// social link - the two profile fields that were only ever settable
+// social link - two of the profile fields that were only ever settable
 // once, at signup, with no way back in afterwards. Logo URL
 // deliberately NOT included here yet - it's a candidate pro feature, so
 // not exposed as self-editable for now. Contact Email also deliberately
-// excluded - it's the lookup key resendLink depends on, so changing it
-// needs its own confirm-the-new-address flow (mirroring signup) rather
-// than a plain text field a typo could lock someone out with; tracked
-// as a separate follow-up, not done here.
+// excluded from this function specifically - it's the lookup key
+// resendLink depends on, so it gets its own confirm-the-new-address flow
+// instead of a plain text field a typo could lock someone out with; see
+// requestEmailChange/confirmEmailChange below.
 function updateProfile(p, name, website) {
   name = String(name || '').trim();
   website = String(website || '').trim();
@@ -873,6 +915,194 @@ function updateProfile(p, name, website) {
     var cleanWebsite = website ? normalizeGalleryUrl(website) : '';
     photographer.sheet.getRange(photographer.rowIndex, cols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
     photographer.sheet.getRange(photographer.rowIndex, cols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---- contact email self-editing (confirm-new-address flow) -------------
+//
+// Contact Email is the lookup key resendLink depends on, so unlike
+// Name/Website above it can't just be overwritten directly - a typo
+// would silently lock the photographer out of their own recovery path.
+// Mirrors the signup flow: submit the new address -> a confirmation link
+// is emailed to that NEW address -> the change only takes effect once
+// that link is clicked (proving they can actually receive mail there).
+// The OLD email stays the lookup key until then, so a typo just means
+// the confirmation email goes nowhere and nothing changes - not a
+// lockout. See notes.txt for the original plan this follows.
+
+// Looks up any EmailChanges row still pending for this photographer -
+// used by getMyShoots to show "confirmation sent to X" in the dashboard,
+// and to make sure requestEmailChange only ever has one pending request
+// per photographer at a time.
+function findPendingEmailChange(p) {
+  var changes = getEmailChangesSheet();
+  if (!changes || changes.getLastRow() < 2) return '';
+  var data = changes.getRange('A2:C' + changes.getLastRow()).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][1] === p) return data[i][2];
+  }
+  return '';
+}
+
+function requestEmailChange(p, newEmail) {
+  newEmail = String(newEmail || '').trim();
+  if (!SIGNUP_EMAIL_RE.test(newEmail)) return { error: 'Enter a valid email address' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var photographer = findPhotographerRow(p);
+    if (!photographer) return { error: 'Not found' };
+
+    var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Contact Email']);
+    var currentEmail = String(photographer.row[cols['Contact Email']] || '').trim();
+    if (currentEmail.toLowerCase() === newEmail.toLowerCase()) {
+      return { error: "That's already your contact email" };
+    }
+
+    // Must not already belong to a DIFFERENT photographer - same check
+    // requestPhotographer does at signup time.
+    var allPhotographers = photographer.sheet.getDataRange().getValues();
+    for (var i = 1; i < allPhotographers.length; i++) {
+      if (i + 1 === photographer.rowIndex) continue; // skip themselves
+      if (String(allPhotographers[i][cols['Contact Email']]).trim().toLowerCase() === newEmail.toLowerCase()) {
+        return { error: 'That email address is already registered to another photographer' };
+      }
+    }
+
+    var changes = getEmailChangesSheet();
+    if (!changes) return { error: 'EmailChanges tab not found' };
+
+    // Only one pending change per photographer at a time - clear out any
+    // earlier pending request for this Shoot Tab Name before adding the
+    // new one, so an old confirmation link can't resurface later and
+    // silently apply a stale, previously-abandoned address.
+    if (changes.getLastRow() >= 2) {
+      var existing = changes.getRange('A2:B' + changes.getLastRow()).getValues();
+      for (var j = existing.length - 1; j >= 0; j--) {
+        if (existing[j][1] === p) changes.deleteRow(j + 2);
+      }
+    }
+
+    var token = Utilities.getUuid();
+    var now = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd HH:mm');
+    changes.appendRow([token, p, sanitizeForCell(newEmail), now]);
+
+    var name = photographer.row[cols['Photographer Name']];
+    var confirmUrl = ScriptApp.getService().getUrl() + '?action=confirmEmailChange&token=' + encodeURIComponent(token);
+    MailApp.sendEmail({
+      to: newEmail,
+      subject: 'Confirm your new Who Shot Me? contact email',
+      body: 'Hi ' + name + ',\n\n' +
+        'Click the link below to confirm this as your new contact email for Who Shot Me:\n\n' +
+        confirmUrl + '\n\n' +
+        "If you didn't request this, you can just ignore this email - your contact email won't change."
+    });
+
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Read-only lookup used by the GET preview page below — never mutates
+// anything, so it's safe for an automated link-scanner to fetch. Same
+// reasoning as findSignupByToken.
+function findEmailChangeByToken(token) {
+  if (!token) return null;
+  var changes = getEmailChangesSheet();
+  if (!changes || changes.getLastRow() < 2) return null;
+  var data = changes.getRange('A2:D' + changes.getLastRow()).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0] === token) return { shootTabName: data[i][1], newEmail: data[i][2] };
+  }
+  return null;
+}
+
+// GET preview, deliberately read-only - same reasoning as
+// confirmSignupPage (an email-scanner pre-fetching this link must not be
+// able to consume the token itself). The actual change only happens via
+// confirmEmailChange, called from the "Confirm new email" button's POST.
+function confirmEmailChangePage(token) {
+  token = String(token || '').trim();
+  var found = findEmailChangeByToken(token);
+  var html;
+  if (!found) {
+    html = confirmPageHtml('That link didn\'t work', '<p>This confirmation link is invalid or has already been used.</p>');
+  } else {
+    var postUrl = ScriptApp.getService().getUrl();
+    var safeToken = token.replace(/[^a-zA-Z0-9-]/g, '');
+    html = confirmPageHtml('Confirm your new email',
+      '<p>Set <strong>' + escapeHtmlServer(found.newEmail) + '</strong> as your contact email for Who Shot Me?</p>' +
+      '<p><button id="confirmBtn" class="btn">Confirm new email</button></p>' +
+      '<p id="confirmMsg" class="err"></p>' +
+      '<script>' +
+      'document.getElementById("confirmBtn").addEventListener("click", function(){' +
+      'this.disabled = true; this.textContent = "Confirming…";' +
+      'fetch(' + JSON.stringify(postUrl) + ', {method:"POST", body: JSON.stringify({action:"confirmEmailChangeCommit", token:' + JSON.stringify(safeToken) + '})})' +
+      '.then(function(r){ return r.json(); }).then(function(result){' +
+      'if (result.error) { document.getElementById("confirmMsg").textContent = result.error; document.getElementById("confirmBtn").textContent = "Confirm new email"; document.getElementById("confirmBtn").disabled = false; return; }' +
+      'document.body.innerHTML = "<div class=\\"card\\"><h1>All set!<\\/h1><p>Your contact email has been updated.<\\/p><\\/div>";' +
+      '}).catch(function(){' +
+      'document.getElementById("confirmMsg").textContent = "Something went wrong - please try again.";' +
+      'document.getElementById("confirmBtn").textContent = "Confirm new email"; document.getElementById("confirmBtn").disabled = false;' +
+      '});' +
+      '});' +
+      '</script>');
+  }
+  return HtmlService.createHtmlOutput(html);
+}
+
+// The actual redemption logic - only ever called from doPost's
+// confirmEmailChangeCommit action (a POST triggered by the "Confirm new
+// email" button's click handler above), never directly from a GET.
+function confirmEmailChange(token) {
+  token = String(token || '').trim();
+  if (!token) return { error: 'Missing confirmation token.' };
+
+  var changes = getEmailChangesSheet();
+  var photographers = getPhotographersSheet();
+  if (!changes || !photographers) return { error: 'EmailChanges or Photographers tab not found.' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (changes.getLastRow() < 2) return { error: 'This confirmation link is invalid or has already been used.' };
+    var data = changes.getRange('A2:D' + changes.getLastRow()).getValues();
+    var rowIndex = -1;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === token) { rowIndex = i; break; }
+    }
+    if (rowIndex === -1) return { error: 'This confirmation link is invalid or has already been used.' };
+
+    var shootTabName = data[rowIndex][1], newEmail = data[rowIndex][2];
+
+    // Re-check the target still exists and the address is still unique at
+    // confirm time too, not just at request time - same reasoning as
+    // confirmSignup re-checking Photographers before redeeming.
+    var allPhotographers = photographers.getDataRange().getValues();
+    var headers = allPhotographers[0];
+    var cols = requireColumnIndexes(headers, ['Contact Email', 'Shoot Tab Name']);
+    var targetRow = -1;
+    for (var p = 1; p < allPhotographers.length; p++) {
+      if (allPhotographers[p][cols['Shoot Tab Name']] === shootTabName) { targetRow = p; continue; }
+      if (String(allPhotographers[p][cols['Contact Email']]).trim().toLowerCase() === String(newEmail).trim().toLowerCase()) {
+        changes.deleteRow(rowIndex + 2);
+        return { error: 'That email address is already registered to another photographer.' };
+      }
+    }
+    if (targetRow === -1) {
+      changes.deleteRow(rowIndex + 2);
+      return { error: 'That photographer account no longer exists.' };
+    }
+
+    // Delete the pending row BEFORE committing the change - fail-closed,
+    // same reasoning as confirmSignup's delete-before-append ordering.
+    changes.deleteRow(rowIndex + 2);
+    photographers.getRange(targetRow + 1, cols['Contact Email'] + 1).setValue(sanitizeForCell(newEmail));
     return { ok: true };
   } finally {
     lock.releaseLock();
