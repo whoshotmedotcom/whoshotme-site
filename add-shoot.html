@@ -248,6 +248,31 @@
   }
   #copyShareLinkBtn{ flex-shrink:0; }
 
+  /* ---- shoot status groups ---- */
+  /* One rectangle per status, colour matching the exact same
+     live/upcoming/past colours used everywhere else on this page (see
+     .status-live/.status-soon/.status-past below) - groups same-status
+     shoot-cards visually rather than leaving them as a flat sorted list. */
+  .shoot-status-group{
+    border:2px solid var(--line);
+    border-radius:12px;
+    padding:14px 14px 4px;
+    margin-bottom:16px;
+  }
+  .shoot-status-group-label{
+    font-size:0.72rem;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    margin:0 0 10px;
+  }
+  .shoot-status-group.status-group-live{ border-color:var(--hi-vis); }
+  .shoot-status-group.status-group-live .shoot-status-group-label{ color:var(--hi-vis); }
+  .shoot-status-group.status-group-soon{ border-color:var(--rust); }
+  .shoot-status-group.status-group-soon .shoot-status-group-label{ color:var(--rust); }
+  .shoot-status-group.status-group-past{ border-color:var(--past-grey); }
+  .shoot-status-group.status-group-past .shoot-status-group-label{ color:var(--past-grey); }
+
   /* ---- shoot cards ---- */
   .shoot-card{
     background:var(--asphalt-light);
@@ -1738,7 +1763,7 @@ function renderShoots(shoots){
   }
   emptyStateEl.classList.add('hidden');
 
-  shootsListEl.innerHTML = withDates.map(s => {
+  function shootCardHtml(s){
     const status = getStatus(s.startDate, s.endDate);
     const meta = statusMeta(status);
     const galleries = s.galleries || [];
@@ -1767,6 +1792,28 @@ function renderShoots(shoots){
           <button class="chip-btn" data-action="gallery">+ Gallery</button>
           <button class="chip-btn danger" data-action="delete">Delete</button>
         </div>
+      </div>
+    `;
+  }
+
+  // One coloured rectangle per status (live/upcoming/past) containing all
+  // of that status's shoot-cards, rather than a flat list that just
+  // happens to be sorted - makes the grouping something you see at a
+  // glance, not something you have to read the badges to notice. Reuses
+  // the exact colours already meaning "live"/"upcoming"/"past" everywhere
+  // else on this page (see statusMeta/.status-badge above).
+  const groups = [
+    { status: 'live', label: 'Live now', cls: 'status-group-live' },
+    { status: 'soon', label: 'Upcoming', cls: 'status-group-soon' },
+    { status: 'past', label: 'Past', cls: 'status-group-past' }
+  ];
+  shootsListEl.innerHTML = groups.map(g => {
+    const inGroup = withDates.filter(s => getStatus(s.startDate, s.endDate) === g.status);
+    if (!inGroup.length) return '';
+    return `
+      <div class="shoot-status-group ${g.cls}">
+        <p class="shoot-status-group-label">${g.label} (${inGroup.length})</p>
+        ${inGroup.map(shootCardHtml).join('')}
       </div>
     `;
   }).join('');
