@@ -494,17 +494,6 @@
     max-width:360px;
     z-index:1000;
   }
-  /* Toggled on/off by the popupopen/popupclose handlers below. z-index:0
-     (not removing the property, and not a smaller positive number) is
-     deliberate — explicit z-index:0 lands in the exact same stacking
-     tier as #map's unset z-index (both "auto or 0" per the CSS stacking
-     spec), whereas ANY positive z-index, however small, always outranks
-     that tier regardless of its numeric value. At that shared tier, DOM
-     order breaks the tie: #searchWrap comes before #map in the markup,
-     so #map (and the popup inside it) renders on top. Without this, a
-     popup near the top of the map was rendering underneath the search
-     box on mobile, where the box takes up proportionally more space. */
-  #searchWrap.yield-to-popup{ z-index:0; }
   #searchBox{
     display:flex;
     align-items:center;
@@ -2213,12 +2202,24 @@ function popupHtml(spot){
   `;
 }
 
+// Reserves space for the floating search box (#searchWrap, top:12px + its
+// own ~41px height) in every popup's auto-pan calculation, so a popup
+// that would otherwise open underneath it instead auto-pans the map to
+// clear it — same mechanism Leaflet already uses to keep a popup from
+// opening off the edge of the map, just with the search box treated as
+// an extra edge. Spread into every L.popup()/bindPopup() options object
+// below. Bottom/right kept at a smaller, normal margin.
+const POPUP_AUTOPAN_PADDING = {
+  autoPanPaddingTopLeft: L.point(20, 70),
+  autoPanPaddingBottomRight: L.point(20, 20)
+};
+
 // =========================================================================
 // EMPTY STATE — when a view (a given day, "live now", etc.) has zero
 // spots, show a small popup on the map explaining that rather than
 // leaving an unexplained blank map.
 // =========================================================================
-const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false });
+const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false, ...POPUP_AUTOPAN_PADDING });
 
 function emptyStateMessage(){
   const who = photographerFilter ? getPhotographerDisplayName(photographerFilter) : null;
@@ -2390,17 +2391,11 @@ map.on('popupopen', (e) => {
 // rebuilding markers while someone's actually reading a popup, rather
 // than closing it out from under them mid-read.
 let popupCurrentlyOpen = false;
-const searchWrapEl = document.getElementById('searchWrap');
 map.on('popupopen', () => {
   popupCurrentlyOpen = true;
-  // See the CSS comment on #searchWrap.yield-to-popup — without this a
-  // popup near the top of the map renders underneath the search box
-  // rather than on top of it.
-  searchWrapEl.classList.add('yield-to-popup');
 });
 map.on('popupclose', () => {
   popupCurrentlyOpen = false;
-  searchWrapEl.classList.remove('yield-to-popup');
 });
 
 // Leaflet's popups auto-pan the map to fit themselves on screen by default
@@ -2466,7 +2461,7 @@ function render(){
     const status = getStatus(spot); // 'live', 'soon', or 'past' — matches a clusterGroups key
     const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(spot, status), pane: `pane-${status}` });
     marker._spotRef = spot;
-    marker.bindPopup(popupHtml(spot), { maxWidth: 240 });
+    marker.bindPopup(popupHtml(spot), { maxWidth: 240, ...POPUP_AUTOPAN_PADDING });
     clusterGroups[status].addLayer(marker);
   });
 
@@ -2652,7 +2647,7 @@ function flyToLocation(lat, lng, label){
   // programmaticMapMove so it doesn't light up "Reset view" or suppress
   // auto-recentre, the same as a popup click.
   programmaticMapMove(() => map.setView([lat, lng], 14, { animate: true }));
-  L.popup({ maxWidth: 240 })
+  L.popup({ maxWidth: 240, ...POPUP_AUTOPAN_PADDING })
     .setLatLng([lat, lng])
     .setContent(`<p class="popup-meta" style="margin:0;">${escapeHtml(label)}</p>`)
     .openOn(map);
@@ -2790,7 +2785,7 @@ function flyToSpot(spot){
   // correctly whether setView ends up animating or snapping instantly.
   programmaticMapMove(() => map.setView([spot.lat, spot.lng], 15, { animate: true }));
   map.once('moveend', () => {
-    const popup = L.popup({ maxWidth: 240 })
+    const popup = L.popup({ maxWidth: 240, ...POPUP_AUTOPAN_PADDING })
       .setLatLng([spot.lat, spot.lng])
       .setContent(popupHtml(spot));
     popup._spotRef = spot; // standalone popup, no marker — see popupopen handler below
