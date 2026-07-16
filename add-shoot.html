@@ -1769,14 +1769,21 @@ saveShootBtn.addEventListener('click', async () => {
       formError.classList.remove('hidden');
     } else {
       const wasEditing = !!editingShootId;
+      const savedShootId = wasEditing ? editingShootId : result.shootId;
+      const savedStatus = getStatus(parseUKDateTime(shoot.start), parseUKDateTime(shoot.end));
       resetShootForm();
       showToast((wasEditing ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
       // Switch tabs immediately - the save itself already succeeded, so
       // don't make the photographer sit on this page waiting for the
       // list to re-fetch before they're allowed to see it. The list
-      // itself fills in moments later, fire-and-forget.
+      // itself fills in moments later, fire-and-forget - once it lands,
+      // scroll straight to whichever Live/Upcoming/Past group the saved
+      // shoot actually falls into, rather than leaving them wherever the
+      // page happened to be scrolled to on the previous tab.
       switchTab('shoots');
-      loadShoots().catch(err => console.error(err));
+      loadShoots()
+        .then(() => scrollToSavedShoot(savedShootId, savedStatus))
+        .catch(err => console.error(err));
     }
   } catch (err) {
     formError.textContent = "Couldn't save - check your connection and try again.";
@@ -1965,6 +1972,19 @@ function renderShoots(shoots){
       </details>
     `;
   }).join('');
+}
+
+// Called after a save, once the freshly-fetched list has re-rendered -
+// jumps straight to the shoot just saved (by ID) rather than leaving the
+// photographer wherever the page happened to be scrolled to on the
+// previous tab. Falls back to just the status group if the exact card
+// can't be found for some reason (still better than nothing).
+function scrollToSavedShoot(shootId, status){
+  const card = shootId ? shootsListEl.querySelector(`.shoot-card[data-shoot-id="${CSS.escape(shootId)}"]`) : null;
+  const group = shootsListEl.querySelector(`.shoot-status-group.status-group-${status}`);
+  if (group instanceof HTMLDetailsElement) group.open = true; // in case it had been manually collapsed
+  const target = card || group;
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 shootsListEl.addEventListener('click', async (e) => {
