@@ -314,6 +314,15 @@ function doPost(e) {
     if (action === 'requestPhotographer') {
       return jsonOut(requestPhotographer(body));
     }
+    // Public too, but only ever called by the "Confirm my signup" button
+    // on the page confirmSignupPage renders (see doGet) - deliberately a
+    // POST, not folded into the GET link itself, so an automated
+    // link-scanner fetching the email's URL can't silently consume the
+    // token before the real person clicks. See confirmSignupPage's
+    // comment for the full story.
+    if (action === 'confirmSignupCommit') {
+      return jsonOut(confirmSignup(body.token));
+    }
     // Also public, same "prove you own the inbox" reasoning as above —
     // see resendLink. Deliberately returns the same {ok:true} whether or
     // not that email is actually registered, so this can't be used to
@@ -521,21 +530,72 @@ function notifySignup(name, email, website, shootTabName) {
 // The photographer's half of the signup loop — they land here from the
 // link in sendConfirmationEmail above. Renders an actual HTML page
 // (there's no separate static page for this) since a human reads this
-// directly, not JS. On success, moves them from Signups into a real
-// Photographers row with a freshly generated Secret Key.
+// directly, not JS.
+//
+// Deliberately read-only — it looks the token up but does NOT redeem it.
+// Email providers (Gmail's Safe Browsing among others) routinely
+// pre-fetch links in emails server-side to scan them for malware, before
+// a human ever clicks. If this GET request were the thing that actually
+// created the account, that automated pre-fetch would silently consume
+// the single-use token first, and the real person would land on an
+// "invalid link" page moments later despite everything having actually
+// worked - confusing and defeats the "prove you clicked from your own
+// inbox" point of the token in the first place. Confirmed this exact
+// failure mode happened in testing on 16/07/2026.
+//
+// The actual account creation only happens from the "Confirm my signup"
+// button below, which does a POST via fetch() to confirmSignupCommit
+// (see doPost) - link-scanners fetch resources, they don't execute page
+// JS or click buttons, so this is immune to the same problem.
 function confirmSignupPage(token) {
-  var result = confirmSignup(token);
+  token = String(token || '').trim();
+  var found = findSignupByToken(token);
   var html;
-  if (result.error) {
-    html = confirmPageHtml('That link didn\'t work', '<p>' + escapeHtmlServer(result.error) + '</p>');
+  if (!found) {
+    html = confirmPageHtml('That link didn\'t work', '<p>This confirmation link is invalid or has already been used.</p>');
   } else {
-    html = confirmPageHtml("You're all set!",
-      '<p>Your Who Shot Me dashboard is ready. We\'ve also emailed this link to you so you don\'t lose it:</p>' +
-      '<p><a class="btn" href="' + escapeHtmlServer(result.link) + '">Open my dashboard</a></p>');
+    var postUrl = ScriptApp.getService().getUrl();
+    // Token is always our own Utilities.getUuid() output (hex + dashes
+    // only), but strip anything else defensively before it goes into a
+    // JS string literal below.
+    var safeToken = token.replace(/[^a-zA-Z0-9-]/g, '');
+    html = confirmPageHtml('Confirm your signup',
+      '<p>Hi ' + escapeHtmlServer(found.name) + ', click below to activate your Who Shot Me dashboard.</p>' +
+      '<p><button id="confirmBtn" class="btn">Confirm my signup</button></p>' +
+      '<p id="confirmMsg" class="err"></p>' +
+      '<script>' +
+      'document.getElementById("confirmBtn").addEventListener("click", function(){' +
+      'this.disabled = true; this.textContent = "Confirming…";' +
+      'fetch(' + JSON.stringify(postUrl) + ', {method:"POST", body: JSON.stringify({action:"confirmSignupCommit", token:' + JSON.stringify(safeToken) + '})})' +
+      '.then(function(r){ return r.json(); }).then(function(result){' +
+      'if (result.error) { document.getElementById("confirmMsg").textContent = result.error; document.getElementById("confirmBtn").textContent = "Confirm my signup"; document.getElementById("confirmBtn").disabled = false; return; }' +
+      'document.body.innerHTML = "<div class=\\"card\\"><h1>You\'re all set!<\\/h1><p>Your dashboard is ready. We\'ve also emailed this link so you don\'t lose it:<\\/p><p><a class=\\"btn\\" href=\\"" + result.link + "\\">Open my dashboard<\\/a><\\/p><\\/div>";' +
+      '}).catch(function(){' +
+      'document.getElementById("confirmMsg").textContent = "Something went wrong - please try again.";' +
+      'document.getElementById("confirmBtn").textContent = "Confirm my signup"; document.getElementById("confirmBtn").disabled = false;' +
+      '});' +
+      '});' +
+      '</script>');
   }
   return HtmlService.createHtmlOutput(html);
 }
 
+// Read-only lookup used by the GET preview page above — never mutates
+// anything, so it's safe for an automated link-scanner to fetch.
+function findSignupByToken(token) {
+  if (!token) return null;
+  var signups = getSignupsSheet();
+  if (!signups || signups.getLastRow() < 2) return null;
+  var data = signups.getRange('A2:E' + signups.getLastRow()).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0] === token) return { name: data[i][1], email: data[i][2] };
+  }
+  return null;
+}
+
+// The actual redemption logic - only ever called from doPost's
+// confirmSignupCommit action (a POST triggered by the "Confirm my
+// signup" button's click handler above), never directly from a GET.
 function confirmSignup(token) {
   token = String(token || '').trim();
   if (!token) return { error: 'Missing confirmation token.' };
@@ -644,7 +704,9 @@ function confirmPageHtml(title, bodyHtml) {
     'h1{font-size:1.3rem;margin:0 0 14px;}' +
     'p{line-height:1.5;font-size:0.95rem;}' +
     '.btn{display:inline-block;margin-top:10px;background:#d4ff3f;color:#1c1e22;text-decoration:none;' +
-    'font-weight:800;padding:13px 22px;border-radius:24px;}' +
+    'font-weight:800;padding:13px 22px;border-radius:24px;border:none;cursor:pointer;font-family:inherit;font-size:0.92rem;}' +
+    '.btn:disabled{opacity:0.6;cursor:default;}' +
+    '.err{color:#d97a53;font-size:0.85rem;}' +
     '</style></head><body><div class="card"><h1>' + escapeHtmlServer(title) + '</h1>' + bodyHtml + '</div></body></html>';
 }
 
