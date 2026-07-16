@@ -1473,9 +1473,9 @@ const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database rig
 // maxBoundsViscosity: lower = softer resistance when dragging past
 // MAP_PAN_BOUNDS (0 = no resistance at all, drags freely past with an
 // elastic snap back; 1 = a hard wall, can't drag past it even a little).
-// Was 1.0 (hard wall) - dropped to ~1/3 of that since a full hard stop
-// felt harsh, especially coming off a fast fling near the edge.
-const map = L.map('map', { zoomControl: false, attributionControl: false, tap: false, maxBoundsViscosity: 0.33 }).setView([53.18, -1.72], 10);
+// Was 1.0 (hard wall), tried 0.33, settled on 0.15 - soft enough that
+// hitting the edge doesn't feel harsh even off a fast fling.
+const map = L.map('map', { zoomControl: false, attributionControl: false, tap: false, maxBoundsViscosity: 0.15 }).setView([53.18, -1.72], 10);
 // Keep the UK in view — Leaflet's built-in bounds constraint, not custom
 // drag logic. One box works correctly at every zoom level with no extra
 // code: zoomed in, it's vastly bigger than the viewport so panning feels
