@@ -470,12 +470,11 @@
   @media (max-width:480px){
     .two-col{ grid-template-columns:1fr; }
 
-    /* Zoom control + "My location" - shrunk on mobile the same way as
-       the public map, staying consistent between both pages. */
+    /* Zoom control - shrunk on mobile the same way as the public map,
+       staying consistent between both pages. */
     .leaflet-control-zoom{ border-radius:15px !important; }
     .leaflet-control-zoom a{ width:30px !important; height:30px !important; line-height:30px !important; font-size:1rem; }
     .leaflet-control-layers-toggle{ width:30px !important; height:30px !important; }
-    .locate-btn{ width:30px; height:30px; font-size:0.9rem; }
   }
 
   /* Location search — jumps the map to a postcode/place before pin-dropping */
@@ -591,9 +590,9 @@
   #coordReadout strong{ color:var(--hi-vis); }
   #coordReadout.empty{ color:var(--past-grey); }
 
-  /* Rounded into full circles (matching .locate-btn/stepBtn conventions)
-     rather than Leaflet's default near-square joined bar — see index.html
-     for the full reasoning. */
+  /* Rounded into full circles (matching .stepBtn convention) rather than
+     Leaflet's default near-square joined bar — see index.html for the
+     full reasoning. */
   .leaflet-control-zoom{
     border:none !important;
     background:var(--asphalt-light) !important;
@@ -644,28 +643,6 @@
   .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
   .leaflet-control-layers-separator{ border-color:var(--line) !important; }
 
-  /* "My location" map control — circular icon-only button matching the
-     layer switcher's sizing/style (.leaflet-control-layers-toggle above),
-     same convention as the public map's version. Sits bottom-left since
-     zoom is top-left and the basemap switcher is top-right here. */
-  .locate-btn{
-    width:34px;
-    height:34px;
-    border-radius:50%;
-    background:var(--asphalt-light);
-    border:2px solid rgba(0,0,0,0.2);
-    box-shadow:0 1px 5px rgba(0,0,0,0.4);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:1rem;
-    line-height:1;
-    padding:0;
-    cursor:pointer;
-    transition:background 0.2s ease;
-  }
-  .locate-btn:hover{ background:var(--asphalt); }
-  .locate-btn:disabled{ opacity:0.5; cursor:default; }
   #useCurrentLocationBtn{ margin-bottom:10px; }
 
   .form-actions{ display:flex; gap:10px; margin-top:6px; }
@@ -783,7 +760,7 @@
       <h3>Your data</h3>
       <p>We store your name, contact email, logo and website links, and every shoot (location, description, times) and gallery link you submit here. We also keep a simple count of your popup views, gallery clicks, and page link clicks from the public map - shown to you above, visible only via your own personal link.</p>
       <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
-      <p>"My location" and "Use current location": if you use either, your browser asks your permission directly - that's between you and your browser, not something we control. If you allow it, your coordinates are used only to show a dot on the map or set the pin, right there on your device; they're never sent to us, stored, or logged anywhere.</p>
+      <p>"Use current location": if you use it, your browser asks your permission directly - that's between you and your browser, not something we control. If you allow it, your coordinates are used only to set the pin right there on your device; they're never sent to us, stored, or logged anywhere.</p>
       <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
 
       <h3>Please keep in mind</h3>
@@ -1466,18 +1443,13 @@ function updateProximityWarning(){
 }
 
 // =========================================================================
-// GEOLOCATION — two separate affordances sharing one browser lookup:
+// GEOLOCATION — "Use current location" fills the form, by feeding the
+// coordinates through the exact same dropPin() a manual tap uses, so it
+// behaves identically (draggable pin, recentres, updates the readout) -
+// just a different way of choosing the starting point.
 //
-// 1. The "My location" map control just shows a blue "you are here" dot,
-//    same as the public map — a reference point while you find the shoot
-//    spot yourself, doesn't touch the form.
-// 2. "Use current location" actually fills the form, by feeding the
-//    coordinates through the exact same dropPin() a manual tap uses —
-//    so it behaves identically (draggable pin, recentres, updates the
-//    readout), it's just a different way of choosing the starting point.
-//
-// Both are one-shot lookups (getCurrentPosition, not watchPosition) and
-// entirely client-side — coordinates never go anywhere but into Leaflet.
+// One-shot lookup (getCurrentPosition, not watchPosition) and entirely
+// client-side — coordinates never go anywhere but into Leaflet.
 // =========================================================================
 function getBrowserLocation(onSuccess, onError){
   if (!navigator.geolocation){
@@ -1495,45 +1467,6 @@ function getBrowserLocation(onSuccess, onError){
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
   );
 }
-
-let myLocationMarker = null;
-
-// Circular icon-only button matching the layer switcher's visual language
-// (see .leaflet-control-layers-toggle) - see index.html's LocateControl
-// comment for the full reasoning. Disabled state during lookup is a
-// dimmed icon, not swapped-out text.
-const LocateControl = L.Control.extend({
-  options: { position: 'bottomleft' },
-  onAdd: function(){
-    const btn = L.DomUtil.create('button', 'locate-btn');
-    btn.textContent = '🧭';
-    btn.title = "Show your current location on the map (your browser will ask permission first)";
-    L.DomEvent.disableClickPropagation(btn);
-    btn.addEventListener('click', () => {
-      btn.disabled = true;
-      getBrowserLocation(
-        (lat, lng) => {
-          btn.disabled = false;
-          if (myLocationMarker){
-            myLocationMarker.setLatLng([lat, lng]);
-          } else {
-            myLocationMarker = L.circleMarker([lat, lng], {
-              radius: 8,
-              weight: 3,
-              color: '#4aa3ff',
-              fillColor: '#4aa3ff',
-              fillOpacity: 0.35
-            }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
-          }
-          map.setView([lat, lng], 15, { animate: true }); // 2 zoom levels closer than it used to be
-        },
-        (message) => { btn.disabled = false; showToast(message, true); }
-      );
-    });
-    return btn;
-  }
-});
-map.addControl(new LocateControl());
 
 useCurrentLocationBtnEl.addEventListener('click', () => {
   if (useCurrentLocationBtnEl.disabled) return; // belt-and-braces — the disabled attribute already prevents this while gated
