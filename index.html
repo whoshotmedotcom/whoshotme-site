@@ -1039,7 +1039,7 @@
     <h1>Who <span>Shot</span> Me?</h1>
     <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
   </div>
-  <a id="getListedBtn" href="#" rel="noopener">📷 Get listed</a>
+  <a id="getListedBtn" href="become-photographer.html">📷 Get listed</a>
 </header>
 
 <div id="aboutOverlay">
@@ -2827,15 +2827,11 @@ searchClearBtn.addEventListener('click', () => {
 map.on('click', () => searchResultsEl.classList.remove('show'));
 
 // =========================================================================
-// GET LISTED — photographers tap this to enquire about being added.
-// No backend, so it's just a pre-filled mailto: link to LISTING_EMAIL
-// (set near the top of the page).
+// GET LISTED — photographers tap this to sign up. Links to
+// become-photographer.html, a self-service form (see app-script.gs's
+// requestPhotographer action) — no JS needed here any more, the href is
+// set directly in the markup.
 // =========================================================================
-const getListedBtn = document.getElementById('getListedBtn');
-const listingSubject = encodeURIComponent('Get my shoots listed on Who Shot Me?');
-const listingBody = encodeURIComponent('Hi,\n\nI run roadside motorcycle photography and would like to be listed on Who Shot Me?\n\nMy name / page:\nWhere I usually shoot:\nLink to my page:\n');
-getListedBtn.href = `mailto:${LISTING_EMAIL}?subject=${listingSubject}&body=${listingBody}`;
-
 const aboutContactLink = document.getElementById('aboutContactLink');
 if (aboutContactLink) aboutContactLink.href = `mailto:${LISTING_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
 

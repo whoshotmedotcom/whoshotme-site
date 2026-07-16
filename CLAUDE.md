@@ -1,7 +1,7 @@
 # WhoShotMe.com
 
 A community site connecting motorcycle riders in the Peak District/Derbyshire
-with photographers shooting them on the road. Two pages:
+with photographers shooting them on the road. Three pages:
 
 - **`index.html`** — public map. Riders browse/search for photographers
   currently shooting (live/upcoming/past), filter by date, view a photographer's
@@ -9,6 +9,10 @@ with photographers shooting them on the road. Two pages:
 - **`add-shoot.html`** — private photographer dashboard, accessed via a personal
   link (`?p=<shootTabName>&key=<KEY>`). Photographers add/edit/delete their own
   shoot listings, manage gallery links, and see basic stats.
+- **`become-photographer.html`** — public self-service signup form.
+  Photographers submit their name/email/website; it creates a pending row
+  in the Photographers workbook for the site owner to review and activate
+  (see item #12 below).
 
 No build step. Plain HTML/CSS/JS, single `<script>` blocks per page, no
 framework, no bundler. Edit the files directly and refresh the browser.
@@ -225,11 +229,17 @@ framework, no bundler. Edit the files directly and refresh the browser.
     header comment for the full picture. Adding a photographer no longer
     needs new tabs or formula edits, just one row in the Photographers
     workbook.
-12. **Self-service "become a photographer" signup form** — not done, a
-    stated future direction. A web form would append a row to the
-    Photographers workbook (via a new Apps Script action) and notify the
-    site owner, who reviews and sends the personal link — same trust
-    model as today, just removing the manual row-adding step. The #11
-    redesign was specifically done with this in mind: the Photographers
-    workbook is already the single source of truth for onboarding, so
-    this needs no further schema changes when it's picked up.
+12. **Self-service "become a photographer" signup form** — **done**
+    16/07/2026. New page `become-photographer.html`, linked from
+    `index.html`'s "Get listed" button. Posts to a new `requestPhotographer`
+    action in `app-script.gs` (public, no key needed — same pattern as the
+    click-tracking actions), which appends a PENDING row to the
+    Photographers workbook (name, contact email, website, an
+    auto-generated unique Shoot Tab Name; Secret Key deliberately left
+    blank) and emails `SIGNUP_NOTIFY_EMAIL`. A blank Secret Key can never
+    authenticate, so this can only ever create a pending request, never
+    grant dashboard access directly — same trust model as before, you
+    still generate the Secret Key and send the personal link yourself
+    once you've reviewed the row. Has a honeypot field for basic spam
+    filtering. Redeploying `app-script.gs` after this change will prompt
+    for an extra permission grant (sending email via `MailApp`).

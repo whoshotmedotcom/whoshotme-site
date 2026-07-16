@@ -1,7 +1,7 @@
 /**
  * WHO SHOT ME — backend script for the Google Sheet.
  *
- * Does three jobs:
+ * Does four jobs:
  *   1. Auto-stamps a permanent Shoot ID onto any row a photographer edits
  *      directly in the sheet (same as before).
  *   2. Runs as a Web App so add-shoot.html can create/edit/delete shoots,
@@ -14,6 +14,9 @@
  *      without any third-party analytics tool. Check numbers by opening
  *      those tabs directly. SiteEvents needs three columns: Date,
  *      EventType, Count.
+ *   4. Lets a photographer self-request via become-photographer.html,
+ *      which appends a pending row to the Photographers workbook and
+ *      emails you — see ADDING A NEW PHOTOGRAPHER below.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -50,8 +53,10 @@
  * 4. Click Deploy > New deployment > gear icon > Web app.
  *      Execute as: Me
  *      Who has access: Anyone
- *    Deploy, grant permissions again if asked, and copy the URL it gives
- *    you (ends in /exec). That's your APPS_SCRIPT_URL for both HTML files.
+ *    Deploy, grant permissions again if asked (this now includes sending
+ *    email, for the signup notification — see requestPhotographer below),
+ *    and copy the URL it gives you (ends in /exec). That's your
+ *    APPS_SCRIPT_URL for all three HTML files.
  * 5. Every photographer needs a "Secret Key" — see the Photographers tab,
  *    column F. Generate a random one for each (anything unguessable — a
  *    password generator's fine) and share it with them privately, along
@@ -62,12 +67,16 @@
  *    that spreadsheet's ID. Leave it blank if Photographers still lives in
  *    this same spreadsheet.
  *
- * ADDING A NEW PHOTOGRAPHER (this is now the entire process):
- * 1. Add a row for them in the Photographers workbook: name, logo,
- *    website, contact email, a new unique Shoot Tab Name (any short
- *    identifier with no spaces, e.g. "NewPhotographer" - it's just a
- *    value in a column now, not an actual sheet tab), and a freshly
- *    generated Secret Key.
+ * ADDING A NEW PHOTOGRAPHER:
+ * Photographers can self-request via become-photographer.html, which
+ * calls the requestPhotographer web app action (see below) — it appends
+ * a PENDING row (name, contact email, website, an auto-generated unique
+ * Shoot Tab Name, Secret Key left blank) to the Photographers workbook
+ * and emails SIGNUP_NOTIFY_EMAIL. A blank Secret Key can never
+ * authenticate, so this can only ever create a pending request, not
+ * dashboard access. To finish onboarding a pending row (or to add one
+ * manually yourself, which still works fine):
+ * 1. Generate a Secret Key and paste it into their row, column F.
  * 2. Send them their personal add-shoot.html link (see step 5 above).
  * That's it - no tabs to create, no formulas to touch. Their shoots will
  * appear in Combined/Combined Galleries automatically the moment they
@@ -105,6 +114,12 @@ const SITE_EVENT_TYPE_RE = /^[a-z0-9_]{1,40}$/;
 // here, since this repo is public and that spreadsheet holds every
 // photographer's Secret Key.
 const PHOTOGRAPHERS_SPREADSHEET_ID = '';
+
+// Where a new self-service signup notification email gets sent (see
+// requestPhotographer below). Same address as LISTING_EMAIL in
+// index.html and CONTACT_EMAIL in add-shoot.html — not sensitive, so
+// unlike PHOTOGRAPHERS_SPREADSHEET_ID this one's fine to commit.
+const SIGNUP_NOTIFY_EMAIL = 'whoshotmedotcom@gmail.com';
 
 function getPhotographersSheet() {
   if (PHOTOGRAPHERS_SPREADSHEET_ID) {
@@ -242,6 +257,15 @@ function doPost(e) {
     if (action === 'trackSiteEvent') {
       return jsonOut(trackSiteEvent(body.type));
     }
+    // Also intentionally public — this is the whole point of the
+    // self-service signup form (become-photographer.html): anyone can
+    // submit a request, but it only ever appends a pending row (no
+    // Secret Key) to the Photographers workbook and emails the site
+    // owner. It can't grant dashboard access on its own — see
+    // requestPhotographer for the rest of that trust model.
+    if (action === 'requestPhotographer') {
+      return jsonOut(requestPhotographer(body));
+    }
 
     if (!authenticate(body.p, body.key)) {
       return jsonOut({ error: 'Not authorized' });
@@ -284,6 +308,112 @@ function authenticate(tabName, key) {
   var found = findPhotographerRow(tabName);
   if (!found || !key) return false;
   return String(found.row[found.keyCol]) === String(key);
+}
+
+// ---- photographer signup (become-photographer.html) ---------------------
+
+// Appends a PENDING row to the Photographers workbook — same trust model
+// as manually adding a row yourself, just triggered by the photographer
+// instead of you. "Pending" here just means Secret Key (column F) is left
+// blank; there's no separate status column. You review the new row,
+// generate + paste in a real Secret Key, then send them their personal
+// add-shoot.html link the same way as always (see ADDING A NEW
+// PHOTOGRAPHER at the top of this file). A blank Secret Key can never
+// authenticate (see authenticate() above), so this endpoint can only ever
+// create a pending request, never grant dashboard access on its own.
+var SIGNUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function requestPhotographer(data) {
+  var name = String((data && data.name) || '').trim();
+  var email = String((data && data.email) || '').trim();
+  var website = String((data && data.website) || '').trim();
+  // Honeypot — a hidden field real visitors never fill in. A non-empty
+  // value means a bot filled in every field it found, so pretend success
+  // without actually writing anything or emailing anyone.
+  var honeypot = String((data && data.company) || '').trim();
+  if (honeypot) return { ok: true };
+
+  if (!name) return { error: 'Your name / page name is required' };
+  if (!SIGNUP_EMAIL_RE.test(email)) return { error: 'A valid contact email is required' };
+
+  var sheet = getPhotographersSheet();
+  if (!sheet) return { error: 'Photographers tab not found' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var all = sheet.getDataRange().getValues();
+    var headers = all[0];
+    var nameCol = headers.indexOf('Photographer Name');
+    var websiteCol = headers.indexOf('Website URL');
+    var emailCol = headers.indexOf('Contact Email');
+    var tabCol = headers.indexOf('Shoot Tab Name');
+
+    for (var i = 1; i < all.length; i++) {
+      if (String(all[i][emailCol]).toLowerCase() === email.toLowerCase()) {
+        return { error: "That email address has already signed up - we'll be in touch." };
+      }
+    }
+
+    var shootTabName = makeUniqueShootTabName(all, tabCol, name);
+    var newRow = new Array(headers.length).fill('');
+    newRow[nameCol] = sanitizeForCell(name);
+    newRow[emailCol] = sanitizeForCell(email);
+    newRow[tabCol] = shootTabName;
+    if (website && websiteCol > -1) newRow[websiteCol] = sanitizeForCell(normalizeGalleryUrl(website));
+
+    sheet.appendRow(newRow);
+    notifySignup(name, email, website, shootTabName);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Derives a Shoot Tab Name candidate from the submitted name (letters/
+// digits only, same idea as makeShootId's prefix logic) and appends a
+// number if that candidate's already taken — same reasoning as
+// makeShootId's collision retry, just against name collisions here
+// instead of random-suffix ones.
+function makeUniqueShootTabName(existingRows, tabCol, name) {
+  var base = String(name || '').replace(/[^A-Za-z0-9]/g, '');
+  if (!base) base = 'Photographer';
+  var candidate = base;
+  var suffix = 2;
+  while (shootTabNameTaken(existingRows, tabCol, candidate)) {
+    candidate = base + suffix;
+    suffix++;
+  }
+  return candidate;
+}
+
+function shootTabNameTaken(existingRows, tabCol, candidate) {
+  for (var i = 1; i < existingRows.length; i++) {
+    if (String(existingRows[i][tabCol]) === candidate) return true;
+  }
+  return false;
+}
+
+// Best-effort — a failed notification email shouldn't fail the signup
+// itself, since the row's already saved and visible next time you open
+// the sheet either way.
+function notifySignup(name, email, website, shootTabName) {
+  try {
+    MailApp.sendEmail({
+      to: SIGNUP_NOTIFY_EMAIL,
+      subject: 'Who Shot Me? - new photographer signup: ' + name,
+      body: 'A new photographer signed up via become-photographer.html:\n\n' +
+        'Name: ' + name + '\n' +
+        'Email: ' + email + '\n' +
+        'Website: ' + (website || '(none given)') + '\n' +
+        'Suggested Shoot Tab Name: ' + shootTabName + '\n\n' +
+        "They've been added as a pending row in the Photographers workbook " +
+        '(no Secret Key yet). Generate one, paste it into their row, and ' +
+        'send them their personal add-shoot.html link when ready.'
+    });
+  } catch (err) {
+    // Ignore — see comment above.
+  }
 }
 
 // ---- shoots ---------------------------------------------------------------

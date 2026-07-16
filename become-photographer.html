@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Become a listed photographer - Who Shot Me?</title>
+<meta name="description" content="Shoot roadside motorcycle photos in the Peak District? Get listed on Who Shot Me so riders can find you.">
+<link rel="canonical" href="https://whoshotme.com/become-photographer.html">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Non-render-blocking load - see the matching comment in index.html. -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet"></noscript>
+
+<style>
+  :root{
+    --asphalt:#1c1e22;
+    --asphalt-light:#2a2d33;
+    --hi-vis:#d4ff3f;
+    --hi-vis-dim:#9bbf2e;
+    --paper:#f3f1ea;
+    --rust:#d97a53;
+    --line:#3a3d44;
+    --past-grey:#868a90;
+    color-scheme: dark;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  *{ scrollbar-color: var(--line) var(--asphalt-light); scrollbar-width: thin; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family:'Segoe UI', Roboto, system-ui, sans-serif;
+    background:var(--asphalt);
+    color:var(--paper);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-height:100%;
+  }
+  header{
+    width:100%;
+    padding:14px 20px 10px;
+    border-bottom:3px solid var(--hi-vis);
+    text-align:center;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    letter-spacing:0.5px;
+    font-weight:900;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+  }
+  header h1 span{ color:var(--hi-vis); }
+  #backLink{
+    display:inline-block;
+    margin-top:6px;
+    color:var(--hi-vis-dim);
+    font-size:0.82rem;
+    text-decoration:none;
+  }
+  #backLink:hover{ color:var(--hi-vis); }
+
+  main{
+    width:100%;
+    max-width:480px;
+    padding:24px 20px 60px;
+  }
+  main > p{
+    color:var(--past-grey);
+    font-size:0.92rem;
+    line-height:1.5;
+    margin-top:0;
+  }
+
+  .field{ margin-bottom:14px; }
+  .field label{
+    display:block;
+    font-size:0.78rem;
+    font-weight:700;
+    color:var(--hi-vis-dim);
+    margin-bottom:5px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  .required-mark{ color:var(--rust); }
+  .requiredLegend{
+    color:var(--past-grey);
+    font-size:0.78rem;
+    margin:-6px 0 16px;
+  }
+  .requiredLegend .required-mark{ font-weight:700; }
+  .field input[type="text"],
+  .field input[type="email"],
+  .field input[type="url"]{
+    width:100%;
+    background:var(--asphalt);
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:0.92rem;
+    font-family:inherit;
+  }
+  .field input:focus{
+    outline:none;
+    border-color:var(--hi-vis);
+  }
+  .field small{
+    display:block;
+    color:var(--past-grey);
+    font-size:0.76rem;
+    margin-top:4px;
+  }
+  /* Honeypot field - kept in the layout flow (not display:none, which some
+     bots skip filling in precisely because it's an obvious tell) but
+     visually and semantically hidden from real visitors. */
+  .honeypot{
+    position:absolute;
+    left:-9999px;
+    width:1px;
+    height:1px;
+    overflow:hidden;
+  }
+
+  .pill-btn{
+    width:100%;
+    background:var(--hi-vis);
+    color:var(--asphalt);
+    border:none;
+    border-radius:24px;
+    padding:13px 18px;
+    font-size:0.92rem;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .pill-btn:disabled{ opacity:0.6; cursor:default; }
+
+  .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
+  .hidden{ display:none !important; }
+
+  #confirmPanel{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-left:3px solid var(--hi-vis);
+    border-radius:8px;
+    padding:16px 18px;
+    font-size:0.92rem;
+    line-height:1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Become a <span>listed photographer</span></h1>
+  <a id="backLink" href="index.html">&larr; Back to the map</a>
+</header>
+
+<main>
+  <p>Shoot roadside motorcycle photos around the Peak District/Derbyshire? Tell us a bit about you below and we'll be in touch with your own personal dashboard link to start listing your shoots.</p>
+
+  <form id="signupForm">
+    <div class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</div>
+
+    <div class="field">
+      <label for="nameInput">Your name / page name <span class="required-mark" aria-hidden="true">*</span></label>
+      <input type="text" id="nameInput" required maxlength="80" autocomplete="name">
+    </div>
+
+    <div class="field">
+      <label for="emailInput">Contact email <span class="required-mark" aria-hidden="true">*</span></label>
+      <input type="email" id="emailInput" required maxlength="120" autocomplete="email">
+      <small>We'll send your personal add-shoot link here once we've reviewed your details.</small>
+    </div>
+
+    <div class="field">
+      <label for="websiteInput">Website, Facebook, or Instagram link</label>
+      <input type="url" id="websiteInput" maxlength="200" autocomplete="url" placeholder="https://facebook.com/yourpage">
+    </div>
+
+    <!-- Not a real field - see the .honeypot comment above. -->
+    <div class="field honeypot" aria-hidden="true">
+      <label for="companyInput">Company</label>
+      <input type="text" id="companyInput" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit" id="submitBtn" class="pill-btn">Send my details</button>
+    <p id="formError" class="error-text hidden"></p>
+  </form>
+
+  <div id="confirmPanel" class="hidden">
+    <p><strong>Thanks - we've got your details.</strong></p>
+    <p>We'll review them and email you your personal dashboard link shortly.</p>
+  </div>
+</main>
+
+<script>
+  // Same deployed Apps Script Web App both other pages already use.
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
+
+  const form = document.getElementById('signupForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const formError = document.getElementById('formError');
+  const confirmPanel = document.getElementById('confirmPanel');
+
+  form.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    formError.classList.add('hidden');
+
+    const name = document.getElementById('nameInput').value.trim();
+    const email = document.getElementById('emailInput').value.trim();
+    const website = document.getElementById('websiteInput').value.trim();
+    const company = document.getElementById('companyInput').value; // honeypot
+
+    if (!name || !email) {
+      formError.textContent = 'Please fill in your name and contact email.';
+      formError.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+    try {
+      // Sent as text/plain (no custom Content-Type) so the browser treats
+      // this as a "simple request" and skips a CORS preflight - Apps
+      // Script Web Apps can't respond to preflight OPTIONS requests. See
+      // the matching note in add-shoot.html's save-shoot code.
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'requestPhotographer', name, email, website, company })
+      });
+      const result = await res.json();
+      if (result.error) {
+        formError.textContent = result.error;
+        formError.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send my details';
+        return;
+      }
+      form.classList.add('hidden');
+      confirmPanel.classList.remove('hidden');
+    } catch (err) {
+      console.error('Signup request failed:', err);
+      formError.textContent = "Something went wrong sending that - please try again, or email us directly.";
+      formError.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send my details';
+    }
+  });
+</script>
+
+</body>
+</html>
