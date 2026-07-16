@@ -233,6 +233,7 @@
   #statsHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
 
   #shareHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 10px; line-height:1.5; }
+  #profileHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
   #shootsHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 12px; line-height:1.5; }
   #shareLinkRow{ display:flex; gap:8px; }
   #shareLinkInput{
@@ -746,6 +747,26 @@
   </div>
 
   <div id="dashboard" class="hidden">
+    <section id="profileSection">
+      <h2>My profile</h2>
+      <div class="field">
+        <label for="profileNameInput">Name / page name <span class="required-mark" aria-hidden="true">*</span></label>
+        <input type="text" id="profileNameInput" required maxlength="80">
+      </div>
+      <div class="field">
+        <label for="profileWebsiteInput">Website, Facebook, or Instagram link</label>
+        <!-- type="text" not "url" - same reasoning as the gallery URL
+             field: native type="url" rejects a scheme-less value like
+             "facebook.com/you", which is what most people paste.
+             normalizeGalleryUrl() on the server adds http:// if it's
+             missing, same as gallery links. -->
+        <input type="text" id="profileWebsiteInput" maxlength="200" placeholder="facebook.com/yourpage">
+      </div>
+      <button id="saveProfileBtn" class="pill-btn">Save profile</button>
+      <p id="profileError" class="error-text hidden"></p>
+      <p id="profileHint">Want a logo/photo on your listing? That's coming soon.</p>
+    </section>
+
     <section id="statsSection">
       <h2>Your numbers so far</h2>
       <div id="statsRow">
@@ -1907,12 +1928,65 @@ shootsListEl.addEventListener('click', async (e) => {
 });
 
 // =========================================================================
+// PROFILE — self-editing name/website, piggybacked on the same myShoots
+// call that already runs on load (see getMyShoots's profile field in
+// app-script.gs) rather than a separate request. Logo isn't editable
+// here yet (parked as a possible pro feature) and neither is Contact
+// Email (it's resendLink's lookup key - needs its own confirm-the-new-
+// address flow before it's safe to self-edit, tracked separately).
+// =========================================================================
+const profileNameInput = document.getElementById('profileNameInput');
+const profileWebsiteInput = document.getElementById('profileWebsiteInput');
+const saveProfileBtn = document.getElementById('saveProfileBtn');
+const profileError = document.getElementById('profileError');
+
+function updateProfileFieldStyles(){
+  profileNameInput.classList.toggle('needs-input', !profileNameInput.value.trim());
+}
+profileNameInput.addEventListener('input', updateProfileFieldStyles);
+
+saveProfileBtn.addEventListener('click', async () => {
+  profileError.classList.add('hidden');
+  const name = profileNameInput.value.trim();
+  const website = profileWebsiteInput.value.trim();
+  if (!name) {
+    profileError.textContent = 'Your name / page name is required.';
+    profileError.classList.remove('hidden');
+    return;
+  }
+
+  saveProfileBtn.disabled = true;
+  saveProfileBtn.textContent = 'Saving…';
+  try {
+    const result = await apiPost({ action: 'updateProfile', name, website });
+    if (result.error) {
+      profileError.textContent = result.error;
+      profileError.classList.remove('hidden');
+    } else {
+      showToast('Profile saved');
+    }
+  } catch (err) {
+    console.error(err);
+    profileError.textContent = "Couldn't save - check your connection.";
+    profileError.classList.remove('hidden');
+  } finally {
+    saveProfileBtn.disabled = false;
+    saveProfileBtn.textContent = 'Save profile';
+  }
+});
+
+// =========================================================================
 // Load + init
 // =========================================================================
 async function loadShoots(){
   const result = await apiGet('myShoots');
   if (result.error) throw new Error(result.error);
   renderShoots(result.shoots || []);
+  if (result.profile){
+    profileNameInput.value = result.profile.name || '';
+    profileWebsiteInput.value = result.profile.website || '';
+    updateProfileFieldStyles();
+  }
 }
 
 async function loadStats(){

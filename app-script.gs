@@ -348,6 +348,7 @@ function doPost(e) {
       return jsonOut({ error: 'Not authorized' });
     }
 
+    if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website));
     if (action === 'createShoot') return jsonOut(createShoot(body.p, body.shoot));
     if (action === 'updateShoot') return jsonOut(updateShoot(body.p, body.shootId, body.shoot));
     if (action === 'deleteShoot') return jsonOut(deleteShoot(body.p, body.shootId));
@@ -375,7 +376,11 @@ function findPhotographerRow(tabName) {
   var keyCol = headers.indexOf('Secret Key');
   for (var i = 1; i < data.length; i++) {
     if (data[i][tabCol] === tabName) {
-      return { row: data[i], keyCol: keyCol };
+      // sheet/rowIndex/headers included alongside the original row/keyCol
+      // so callers that need to write back (updateProfile) or look up
+      // other columns (getMyShoots' profile fields) don't need their own
+      // separate lookup - same shape as findPhotographerRowByEmail below.
+      return { sheet: sheet, rowIndex: i + 1, row: data[i], keyCol: keyCol, headers: headers };
     }
   }
   return null;
@@ -810,6 +815,18 @@ function getMyShoots(p, key) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
   if (!sheet) return { error: 'Shoots tab not found' };
 
+  // Piggybacks the profile fields (name/website) onto this same call
+  // rather than adding a separate GET action just for them - the
+  // dashboard always calls this on load anyway. Logo deliberately left
+  // out here - not self-editable yet, see updateProfile's comment.
+  var photographer = findPhotographerRow(p);
+  var profile = { name: '', website: '' };
+  if (photographer) {
+    var profileCols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL']);
+    profile.name = photographer.row[profileCols['Photographer Name']] || '';
+    profile.website = photographer.row[profileCols['Website URL']] || '';
+  }
+
   var galleries = getGalleriesForTab(p);
   var data = sheet.getDataRange().getValues();
   var shoots = [];
@@ -829,7 +846,37 @@ function getMyShoots(p, key) {
       galleries: galleries[shootId] || []
     });
   }
-  return { shoots: shoots };
+  return { shoots: shoots, profile: profile };
+}
+
+// Lets a photographer self-edit their own display name and website/
+// social link - the two profile fields that were only ever settable
+// once, at signup, with no way back in afterwards. Logo URL
+// deliberately NOT included here yet - it's a candidate pro feature, so
+// not exposed as self-editable for now. Contact Email also deliberately
+// excluded - it's the lookup key resendLink depends on, so changing it
+// needs its own confirm-the-new-address flow (mirroring signup) rather
+// than a plain text field a typo could lock someone out with; tracked
+// as a separate follow-up, not done here.
+function updateProfile(p, name, website) {
+  name = String(name || '').trim();
+  website = String(website || '').trim();
+  if (!name) return { error: 'Your name / page name is required' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var photographer = findPhotographerRow(p);
+    if (!photographer) return { error: 'Not found' };
+
+    var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL']);
+    var cleanWebsite = website ? normalizeGalleryUrl(website) : '';
+    photographer.sheet.getRange(photographer.rowIndex, cols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
+    photographer.sheet.getRange(photographer.rowIndex, cols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function validateShoot(shoot) {
