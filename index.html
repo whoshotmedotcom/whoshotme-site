@@ -957,6 +957,7 @@
   .whoshotme-cluster.cluster-live{
     background:var(--hi-vis);
     color:var(--asphalt);
+    border:2px solid var(--asphalt);
     box-shadow:0 0 0 3px rgba(212,255,63,0.35);
     position:relative;
   }
@@ -965,11 +966,16 @@
      box-shadow directly on the marker - box-shadow can't be composited, so
      an infinite box-shadow animation forces a real repaint every frame for
      as long as any live marker is on screen. See the matching per-marker
-     ring in makeIcon() below for the same fix applied there. */
+     ring in makeIcon() below for the same fix applied there.
+     inset is -6px, not just -3px (enough to clear the ring's own 3px
+     border) - at -3px the ring's inner edge landed exactly ON the
+     cluster's dark static border above, right at the start of each cycle
+     when the ring is brightest (opacity 0.9), which read as the dark
+     border itself blinking. -6px leaves a real gap so they never touch. */
   .whoshotme-cluster.cluster-live::after{
     content:'';
     position:absolute;
-    inset:-3px;
+    inset:-6px;
     border-radius:50%;
     border:3px solid var(--hi-vis);
     animation:clusterPulse 1.6s infinite;
