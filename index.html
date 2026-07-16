@@ -119,6 +119,10 @@
      first paint. -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="preconnect" href="https://tile.openstreetmap.org">
+<!-- OS Road is the default basemap (see the layer definitions below), so
+     its tile server gets the earliest possible connection too - same
+     reasoning as the other two preconnects above. -->
+<link rel="preconnect" href="https://api.os.uk">
 <!-- Preload (not preconnect) for the two scripts themselves - starts the
      actual download in parallel with the rest of the page parsing,
      without changing WHEN they execute (still only runs from the
