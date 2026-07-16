@@ -1772,6 +1772,7 @@ saveShootBtn.addEventListener('click', async () => {
       resetShootForm();
       showToast((wasEditing ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
       await loadShoots();
+      switchTab('shoots'); // so they land right on the shoot they just saved
     }
   } catch (err) {
     formError.textContent = "Couldn't save - check your connection and try again.";
