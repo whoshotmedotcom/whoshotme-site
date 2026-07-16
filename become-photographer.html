@@ -324,6 +324,14 @@
     signupSection.classList.remove('hidden');
   });
 
+  // Lets other pages (the About modals, mainly) link straight into the
+  // resend form instead of just the plain signup page - a visitor who
+  // lost their link isn't looking to sign up again.
+  if (new URLSearchParams(location.search).get('resend') === '1') {
+    signupSection.classList.add('hidden');
+    resendSection.classList.remove('hidden');
+  }
+
   const resendForm = document.getElementById('resendForm');
   const resendSubmitBtn = document.getElementById('resendSubmitBtn');
   const resendConfirmPanel = document.getElementById('resendConfirmPanel');
