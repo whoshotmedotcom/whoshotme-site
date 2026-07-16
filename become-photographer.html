@@ -142,7 +142,7 @@
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
   .hidden{ display:none !important; }
 
-  #confirmPanel{
+  #confirmPanel, #resendConfirmPanel{
     background:var(--asphalt-light);
     border:1px solid var(--line);
     border-left:3px solid var(--hi-vis);
@@ -151,6 +151,20 @@
     font-size:0.92rem;
     line-height:1.5;
   }
+
+  .toggleLink{
+    display:inline-block;
+    margin-top:18px;
+    background:none;
+    border:none;
+    padding:0;
+    color:var(--hi-vis-dim);
+    font-size:0.85rem;
+    text-decoration:underline;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .toggleLink:hover{ color:var(--hi-vis); }
 </style>
 </head>
 <body>
@@ -161,45 +175,68 @@
 </header>
 
 <main>
-  <p>Shoot roadside motorcycle photos around the Peak District/Derbyshire? Tell us a bit about you below and we'll be in touch with your own personal dashboard link to start listing your shoots.</p>
+  <div id="signupSection">
+    <p>Shoot roadside motorcycle photos around the Peak District/Derbyshire? Tell us a bit about you below - we'll email you a link to confirm it's really you, then your personal dashboard is ready straight away.</p>
 
-  <form id="signupForm">
-    <div class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</div>
+    <form id="signupForm">
+      <div class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</div>
 
-    <div class="field">
-      <label for="nameInput">Your name / page name <span class="required-mark" aria-hidden="true">*</span></label>
-      <input type="text" id="nameInput" required maxlength="80" autocomplete="name">
+      <div class="field">
+        <label for="nameInput">Your name / page name <span class="required-mark" aria-hidden="true">*</span></label>
+        <input type="text" id="nameInput" required maxlength="80" autocomplete="name">
+      </div>
+
+      <div class="field">
+        <label for="emailInput">Contact email <span class="required-mark" aria-hidden="true">*</span></label>
+        <input type="email" id="emailInput" required maxlength="120" autocomplete="email">
+        <small>We'll email a confirmation link here - click it to activate your dashboard.</small>
+      </div>
+
+      <div class="field">
+        <label for="websiteInput">Website, Facebook, or Instagram link</label>
+        <!-- type="text" not "url" - same reasoning as add-shoot.html's
+             gallery URL field: native type="url" validation rejects a
+             scheme-less value like "facebook.com/you", which is what most
+             people paste. normalizeGalleryUrl() on the server adds http://
+             automatically if it's missing, same as gallery links. -->
+        <input type="text" id="websiteInput" maxlength="200" autocomplete="url" placeholder="facebook.com/yourpage">
+      </div>
+
+      <!-- Not a real field - see the .honeypot comment above. -->
+      <div class="field honeypot" aria-hidden="true">
+        <label for="companyInput">Company</label>
+        <input type="text" id="companyInput" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button type="submit" id="submitBtn" class="pill-btn">Send my details</button>
+      <p id="formError" class="error-text hidden"></p>
+    </form>
+
+    <div id="confirmPanel" class="hidden">
+      <p><strong>Almost there!</strong></p>
+      <p>Check your inbox (and spam folder, just in case) for a confirmation link - click it and your dashboard is ready to use straight away.</p>
     </div>
 
-    <div class="field">
-      <label for="emailInput">Contact email <span class="required-mark" aria-hidden="true">*</span></label>
-      <input type="email" id="emailInput" required maxlength="120" autocomplete="email">
-      <small>We'll send your personal add-shoot link here once we've reviewed your details.</small>
+    <button type="button" id="showResendBtn" class="toggleLink">Already signed up? Lost your link &rarr;</button>
+  </div>
+
+  <div id="resendSection" class="hidden">
+    <p>Enter the email address you signed up with and we'll send you a fresh dashboard link. Your old link will stop working once the new one's sent.</p>
+
+    <form id="resendForm">
+      <div class="field">
+        <label for="resendEmailInput">Contact email</label>
+        <input type="email" id="resendEmailInput" required maxlength="120" autocomplete="email">
+      </div>
+      <button type="submit" id="resendSubmitBtn" class="pill-btn">Resend my link</button>
+    </form>
+
+    <div id="resendConfirmPanel" class="hidden">
+      <p><strong>Check your inbox.</strong></p>
+      <p>If that email's on our list, a fresh dashboard link is on its way (check spam too, just in case).</p>
     </div>
 
-    <div class="field">
-      <label for="websiteInput">Website, Facebook, or Instagram link</label>
-      <!-- type="text" not "url" - same reasoning as add-shoot.html's
-           gallery URL field: native type="url" validation rejects a
-           scheme-less value like "facebook.com/you", which is what most
-           people paste. normalizeGalleryUrl() on the server adds http://
-           automatically if it's missing, same as gallery links. -->
-      <input type="text" id="websiteInput" maxlength="200" autocomplete="url" placeholder="facebook.com/yourpage">
-    </div>
-
-    <!-- Not a real field - see the .honeypot comment above. -->
-    <div class="field honeypot" aria-hidden="true">
-      <label for="companyInput">Company</label>
-      <input type="text" id="companyInput" tabindex="-1" autocomplete="off">
-    </div>
-
-    <button type="submit" id="submitBtn" class="pill-btn">Send my details</button>
-    <p id="formError" class="error-text hidden"></p>
-  </form>
-
-  <div id="confirmPanel" class="hidden">
-    <p><strong>Thanks - we've got your details.</strong></p>
-    <p>We'll review them and email you your personal dashboard link shortly.</p>
+    <button type="button" id="showSignupBtn" class="toggleLink">New here? Sign up instead &rarr;</button>
   </div>
 </main>
 
@@ -266,6 +303,50 @@
       formError.classList.remove('hidden');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Send my details';
+    }
+  });
+
+  // =========================================================================
+  // LOST YOUR LINK — a toggle between the signup section above and this
+  // smaller "resend my link" one, rather than a separate page, since
+  // they're really two entry points into the same photographer-access flow.
+  // =========================================================================
+  const signupSection = document.getElementById('signupSection');
+  const resendSection = document.getElementById('resendSection');
+  document.getElementById('showResendBtn').addEventListener('click', () => {
+    signupSection.classList.add('hidden');
+    resendSection.classList.remove('hidden');
+  });
+  document.getElementById('showSignupBtn').addEventListener('click', () => {
+    resendSection.classList.add('hidden');
+    signupSection.classList.remove('hidden');
+  });
+
+  const resendForm = document.getElementById('resendForm');
+  const resendSubmitBtn = document.getElementById('resendSubmitBtn');
+  const resendConfirmPanel = document.getElementById('resendConfirmPanel');
+
+  resendForm.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    const email = document.getElementById('resendEmailInput').value.trim();
+    if (!email) return;
+
+    resendSubmitBtn.disabled = true;
+    resendSubmitBtn.textContent = 'Sending…';
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'resendLink', email })
+      });
+      // Always shows the same success message regardless of whether that
+      // email actually matched anything - see resendLink in app-script.gs
+      // for why (avoids confirming/denying who's a registered photographer).
+      resendForm.classList.add('hidden');
+      resendConfirmPanel.classList.remove('hidden');
+    } catch (err) {
+      console.error('Resend-link request failed:', err);
+      resendSubmitBtn.disabled = false;
+      resendSubmitBtn.textContent = 'Resend my link';
     }
   });
 </script>

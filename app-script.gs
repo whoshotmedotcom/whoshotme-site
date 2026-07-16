@@ -14,9 +14,10 @@
  *      without any third-party analytics tool. Check numbers by opening
  *      those tabs directly. SiteEvents needs three columns: Date,
  *      EventType, Count.
- *   4. Lets a photographer self-request via become-photographer.html,
- *      which appends a pending row to the Photographers workbook and
- *      emails you — see ADDING A NEW PHOTOGRAPHER below.
+  *   4. Lets a photographer fully self-serve via become-photographer.html:
+ *      sign up (email-confirmed, no approval needed from you) and, if
+ *      they lose their link later, get a fresh one resent to themselves —
+ *      see ADDING A NEW PHOTOGRAPHER below.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -41,10 +42,22 @@
  *              row 2 (no more 3-row per-tab header block).
  *   Galleries: A=Shoot ID, B=Gallery Label, C=Gallery URL,
  *              D=Shoot Tab Name. Header row 1, data from row 2.
+ *   Signups:   A=Token, B=Name, C=Email, D=Website, E=Shoot Tab Name,
+ *              F=Requested At. Lives in the Photographers workbook (same
+ *              spreadsheet as Photographers, private). Header row 1, data
+ *              from row 2. Holds only UNCONFIRMED signups — a row is
+ *              removed the moment its token is redeemed via
+ *              confirmSignup, so anything still sitting here is either
+ *              waiting on the photographer to click their email link, or
+ *              abandoned. Safe to delete old rows by hand if it gets
+ *              cluttered; nothing else depends on them.
  *
  * SETUP (one-time):
  * 1. Open the Google Sheet, then Extensions > Apps Script.
- * 2. Delete any starter code and paste this whole file in. Save.
+ * 2. Delete any starter code and paste this whole file in. Save. Also
+ *    add a "Signups" tab to the Photographers workbook (private one),
+ *    with header row: Token | Name | Email | Website | Shoot Tab Name |
+ *    Requested At — see SIGNUPS_SHEET / the SHEET LAYOUTS note above.
  * 3. Click the clock icon (Triggers) > Add Trigger.
  *      Function to run: stampShootId
  *      Event source: From spreadsheet
@@ -68,17 +81,31 @@
  *    this same spreadsheet.
  *
  * ADDING A NEW PHOTOGRAPHER:
- * Photographers can self-request via become-photographer.html, which
- * calls the requestPhotographer web app action (see below) — it appends
- * a PENDING row (name, contact email, website, an auto-generated unique
- * Shoot Tab Name, Secret Key left blank) to the Photographers workbook
- * and emails SIGNUP_NOTIFY_EMAIL. A blank Secret Key can never
- * authenticate, so this can only ever create a pending request, not
- * dashboard access. To finish onboarding a pending row (or to add one
- * manually yourself, which still works fine):
- * 1. Generate a Secret Key and paste it into their row, column F.
- * 2. Send them their personal add-shoot.html link (see step 5 above).
- * That's it - no tabs to create, no formulas to touch. Their shoots will
+ * Fully self-service via become-photographer.html now, no action needed
+ * from you:
+ * 1. They submit the form -> requestPhotographer writes a row to the
+ *    Signups tab with a random confirmation token, and emails a
+ *    confirmation link to the address THEY gave. You also get an
+ *    informational email (SIGNUP_NOTIFY_EMAIL) but don't need to act on
+ *    it - it's just a heads-up.
+ * 2. They click the link -> confirmSignup verifies the token, generates
+ *    a real Secret Key, moves them into a proper Photographers row, and
+ *    shows/emails them their personal add-shoot.html link.
+ * A signup can't grant itself access without proving it controls the
+ * email address it claimed - that's the whole trust boundary now, in
+ * place of manual review.
+ *
+ * You can still add someone manually if you ever want to (e.g. skipping
+ * email confirmation for someone you already know): add a row directly
+ * to the Photographers tab with a Shoot Tab Name and a generated Secret
+ * Key, then send them their link yourself - same as always.
+ *
+ * If a photographer loses their link later, become-photographer.html also
+ * has a "lost your link?" option (resendLink action) - enter your email,
+ * get a fresh link emailed to you, no need to contact you at all. The old
+ * link stops working the moment a new one's issued.
+ *
+ * No tabs to create, no formulas to touch either way. Their shoots will
  * appear in Combined/Combined Galleries automatically the moment they
  * save their first one, because those formulas read the shared Shoots/
  * Galleries tabs directly rather than naming tabs individually.
@@ -90,6 +117,7 @@
  */
 
 const PHOTOGRAPHERS_SHEET = 'Photographers';
+const SIGNUPS_SHEET = 'Signups';
 const SHOOTS_SHEET = 'Shoots';
 const GALLERIES_SHEET = 'Galleries';
 const STATS_SHEET = 'Stats';
@@ -121,11 +149,25 @@ const PHOTOGRAPHERS_SPREADSHEET_ID = '';
 // unlike PHOTOGRAPHERS_SPREADSHEET_ID this one's fine to commit.
 const SIGNUP_NOTIFY_EMAIL = 'whoshotmedotcom@gmail.com';
 
+// Used to build full add-shoot.html links in emails (confirmSignup,
+// resendLink) — relative links don't make sense inside an email. Not
+// sensitive, fine to commit.
+const SITE_BASE_URL = 'https://whoshotme.com/';
+
 function getPhotographersSheet() {
   if (PHOTOGRAPHERS_SPREADSHEET_ID) {
     return SpreadsheetApp.openById(PHOTOGRAPHERS_SPREADSHEET_ID).getSheetByName(PHOTOGRAPHERS_SHEET);
   }
   return SpreadsheetApp.getActive().getSheetByName(PHOTOGRAPHERS_SHEET);
+}
+
+// Signups lives in the same spreadsheet as Photographers (private
+// workbook) — same reasoning as PHOTOGRAPHERS_SPREADSHEET_ID above.
+function getSignupsSheet() {
+  if (PHOTOGRAPHERS_SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(PHOTOGRAPHERS_SPREADSHEET_ID).getSheetByName(SIGNUPS_SHEET);
+  }
+  return SpreadsheetApp.getActive().getSheetByName(SIGNUPS_SHEET);
 }
 
 // Google Sheets treats a cell value starting with =, +, -, or @ as a
@@ -228,6 +270,12 @@ function shootTabNamePrefix(shootTabName) {
 function doGet(e) {
   try {
     var action = e.parameter.action;
+
+    // Renders an actual HTML page, not JSON — this is the link a
+    // photographer clicks from their confirmation email, so it needs to
+    // be human-readable, not a JSON blob. See confirmSignup below.
+    if (action === 'confirmSignup') return confirmSignupPage(e.parameter.token);
+
     var p = e.parameter.p;
     var key = e.parameter.key;
 
@@ -259,12 +307,20 @@ function doPost(e) {
     }
     // Also intentionally public — this is the whole point of the
     // self-service signup form (become-photographer.html): anyone can
-    // submit a request, but it only ever appends a pending row (no
-    // Secret Key) to the Photographers workbook and emails the site
-    // owner. It can't grant dashboard access on its own — see
-    // requestPhotographer for the rest of that trust model.
+    // submit a request, but it only ever creates a pending Signups row
+    // and emails a confirmation link to the address THEY gave — nothing
+    // becomes a working login until they click that link (see
+    // requestPhotographer/confirmSignup for the rest of that trust model).
     if (action === 'requestPhotographer') {
       return jsonOut(requestPhotographer(body));
+    }
+    // Also public, same "prove you own the inbox" reasoning as above —
+    // see resendLink. Deliberately returns the same {ok:true} whether or
+    // not that email is actually registered, so this can't be used to
+    // check who's a photographer on the site (same reasoning as the
+    // generic "not found" errors elsewhere in this file).
+    if (action === 'resendLink') {
+      return jsonOut(resendLink(body.email));
     }
 
     if (!authenticate(body.p, body.key)) {
@@ -310,17 +366,48 @@ function authenticate(tabName, key) {
   return String(found.row[found.keyCol]) === String(key);
 }
 
+// Used by resendLink — looks a photographer up by their Contact Email
+// instead of Shoot Tab Name. Returns the same {row, keyCol} shape as
+// findPhotographerRow, plus rowIndex (1-based sheet row) since resendLink
+// needs to write a new key back, not just read one.
+function findPhotographerRowByEmail(email) {
+  var sheet = getPhotographersSheet();
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var emailCol = headers.indexOf('Contact Email');
+  var keyCol = headers.indexOf('Secret Key');
+  var lower = String(email || '').toLowerCase();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][emailCol]).toLowerCase() === lower) {
+      return { sheet: sheet, rowIndex: i + 1, row: data[i], keyCol: keyCol };
+    }
+  }
+  return null;
+}
+
+// A random, URL-safe key with plenty of entropy (two combined UUID
+// fragments, dashes stripped) — used for both the initial Secret Key
+// generated on signup confirmation and any later regenerated one from
+// resendLink.
+function generateSecretKey() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').substring(0, 24);
+}
+
+function addShootLink(shootTabName, key) {
+  return SITE_BASE_URL + 'add-shoot.html?p=' + encodeURIComponent(shootTabName) + '&key=' + encodeURIComponent(key);
+}
+
 // ---- photographer signup (become-photographer.html) ---------------------
 
-// Appends a PENDING row to the Photographers workbook — same trust model
-// as manually adding a row yourself, just triggered by the photographer
-// instead of you. "Pending" here just means Secret Key (column F) is left
-// blank; there's no separate status column. You review the new row,
-// generate + paste in a real Secret Key, then send them their personal
-// add-shoot.html link the same way as always (see ADDING A NEW
-// PHOTOGRAPHER at the top of this file). A blank Secret Key can never
-// authenticate (see authenticate() above), so this endpoint can only ever
-// create a pending request, never grant dashboard access on its own.
+// Fully self-service now: requestPhotographer creates a pending row in
+// the Signups tab (not Photographers) with a random confirmation token,
+// and emails that token as a link to the address THEY gave. Nothing
+// becomes a working login until confirmSignup verifies that token —
+// which only happens if they can read the email at that address. This is
+// the whole trust boundary: you don't review or approve anything by
+// hand any more, but a signup can't grant itself access without proving
+// it controls the inbox it claimed. See confirmSignup below for the
+// second half of this flow.
 var SIGNUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function requestPhotographer(data) {
@@ -336,33 +423,43 @@ function requestPhotographer(data) {
   if (!name) return { error: 'Your name / page name is required' };
   if (!SIGNUP_EMAIL_RE.test(email)) return { error: 'A valid contact email is required' };
 
-  var sheet = getPhotographersSheet();
-  if (!sheet) return { error: 'Photographers tab not found' };
+  var photographers = getPhotographersSheet();
+  var signups = getSignupsSheet();
+  if (!photographers) return { error: 'Photographers tab not found' };
+  if (!signups) return { error: 'Signups tab not found' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    var all = sheet.getDataRange().getValues();
-    var headers = all[0];
-    var nameCol = headers.indexOf('Photographer Name');
-    var websiteCol = headers.indexOf('Website URL');
-    var emailCol = headers.indexOf('Contact Email');
-    var tabCol = headers.indexOf('Shoot Tab Name');
+    var existingPhotographers = photographers.getDataRange().getValues();
+    var photographerHeaders = existingPhotographers[0];
+    var photographerEmailCol = photographerHeaders.indexOf('Contact Email');
+    var photographerTabCol = photographerHeaders.indexOf('Shoot Tab Name');
 
-    for (var i = 1; i < all.length; i++) {
-      if (String(all[i][emailCol]).toLowerCase() === email.toLowerCase()) {
-        return { error: "That email address has already signed up - we'll be in touch." };
+    for (var i = 1; i < existingPhotographers.length; i++) {
+      if (String(existingPhotographers[i][photographerEmailCol]).toLowerCase() === email.toLowerCase()) {
+        return { error: "That email address is already registered - try 'lost your link?' instead." };
       }
     }
 
-    var shootTabName = makeUniqueShootTabName(all, tabCol, name);
-    var newRow = new Array(headers.length).fill('');
-    newRow[nameCol] = sanitizeForCell(name);
-    newRow[emailCol] = sanitizeForCell(email);
-    newRow[tabCol] = shootTabName;
-    if (website && websiteCol > -1) newRow[websiteCol] = sanitizeForCell(normalizeGalleryUrl(website));
+    var existingSignups = signups.getLastRow() >= 2 ? signups.getRange('A2:E' + signups.getLastRow()).getValues() : [];
+    for (var j = 0; j < existingSignups.length; j++) {
+      if (String(existingSignups[j][2]).toLowerCase() === email.toLowerCase()) {
+        return { error: "That email address already has a confirmation email waiting - check your inbox (and spam folder)." };
+      }
+    }
 
-    sheet.appendRow(newRow);
+    // Unique against BOTH sheets — a second person could otherwise pick
+    // the same name while the first signup is still unconfirmed.
+    var takenTabNames = existingPhotographers.slice(1).map(function (r) { return r[photographerTabCol]; })
+      .concat(existingSignups.map(function (r) { return r[4]; }));
+    var shootTabName = makeUniqueShootTabName(takenTabNames, name);
+
+    var token = Utilities.getUuid();
+    var now = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd HH:mm');
+    signups.appendRow([token, sanitizeForCell(name), sanitizeForCell(email), website ? sanitizeForCell(normalizeGalleryUrl(website)) : '', shootTabName, now]);
+
+    sendConfirmationEmail(name, email, token);
     notifySignup(name, email, website, shootTabName);
     return { ok: true };
   } finally {
@@ -374,24 +471,30 @@ function requestPhotographer(data) {
 // digits only, same idea as makeShootId's prefix logic) and appends a
 // number if that candidate's already taken — same reasoning as
 // makeShootId's collision retry, just against name collisions here
-// instead of random-suffix ones.
-function makeUniqueShootTabName(existingRows, tabCol, name) {
+// instead of random-suffix ones. takenTabNames is a flat array of
+// already-used names (from both Photographers and pending Signups).
+function makeUniqueShootTabName(takenTabNames, name) {
   var base = String(name || '').replace(/[^A-Za-z0-9]/g, '');
   if (!base) base = 'Photographer';
   var candidate = base;
   var suffix = 2;
-  while (shootTabNameTaken(existingRows, tabCol, candidate)) {
+  while (takenTabNames.indexOf(candidate) !== -1) {
     candidate = base + suffix;
     suffix++;
   }
   return candidate;
 }
 
-function shootTabNameTaken(existingRows, tabCol, candidate) {
-  for (var i = 1; i < existingRows.length; i++) {
-    if (String(existingRows[i][tabCol]) === candidate) return true;
-  }
-  return false;
+function sendConfirmationEmail(name, email, token) {
+  var confirmUrl = ScriptApp.getService().getUrl() + '?action=confirmSignup&token=' + encodeURIComponent(token);
+  MailApp.sendEmail({
+    to: email,
+    subject: 'Confirm your Who Shot Me? signup',
+    body: 'Hi ' + name + ',\n\n' +
+      "Thanks for signing up to list your shoots on Who Shot Me. Click the link below to confirm it's really you and get your personal dashboard link:\n\n" +
+      confirmUrl + '\n\n' +
+      "If you didn't request this, you can just ignore this email."
+  });
 }
 
 // Best-effort — a failed notification email shouldn't fail the signup
@@ -407,13 +510,142 @@ function notifySignup(name, email, website, shootTabName) {
         'Email: ' + email + '\n' +
         'Website: ' + (website || '(none given)') + '\n' +
         'Suggested Shoot Tab Name: ' + shootTabName + '\n\n' +
-        "They've been added as a pending row in the Photographers workbook " +
-        '(no Secret Key yet). Generate one, paste it into their row, and ' +
-        'send them their personal add-shoot.html link when ready.'
+        "No action needed from you - they'll get full access automatically " +
+        "once they click the confirmation link we've just emailed them."
     });
   } catch (err) {
     // Ignore — see comment above.
   }
+}
+
+// The photographer's half of the signup loop — they land here from the
+// link in sendConfirmationEmail above. Renders an actual HTML page
+// (there's no separate static page for this) since a human reads this
+// directly, not JS. On success, moves them from Signups into a real
+// Photographers row with a freshly generated Secret Key.
+function confirmSignupPage(token) {
+  var result = confirmSignup(token);
+  var html;
+  if (result.error) {
+    html = confirmPageHtml('That link didn\'t work', '<p>' + escapeHtmlServer(result.error) + '</p>');
+  } else {
+    html = confirmPageHtml("You're all set!",
+      '<p>Your Who Shot Me dashboard is ready. We\'ve also emailed this link to you so you don\'t lose it:</p>' +
+      '<p><a class="btn" href="' + escapeHtmlServer(result.link) + '">Open my dashboard</a></p>');
+  }
+  return HtmlService.createHtmlOutput(html);
+}
+
+function confirmSignup(token) {
+  token = String(token || '').trim();
+  if (!token) return { error: 'Missing confirmation token.' };
+
+  var signups = getSignupsSheet();
+  var photographers = getPhotographersSheet();
+  if (!signups || !photographers) return { error: 'Signups or Photographers tab not found.' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (signups.getLastRow() < 2) return { error: 'This confirmation link is invalid or has already been used.' };
+    var data = signups.getRange('A2:F' + signups.getLastRow()).getValues();
+    var rowIndex = -1;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === token) { rowIndex = i; break; }
+    }
+    if (rowIndex === -1) return { error: 'This confirmation link is invalid or has already been used.' };
+
+    var name = data[rowIndex][1], email = data[rowIndex][2], website = data[rowIndex][3], shootTabName = data[rowIndex][4];
+    var key = generateSecretKey();
+
+    var headers = photographers.getRange(1, 1, 1, photographers.getLastColumn()).getValues()[0];
+    var newRow = new Array(headers.length).fill('');
+    newRow[headers.indexOf('Photographer Name')] = name;
+    newRow[headers.indexOf('Website URL')] = website;
+    newRow[headers.indexOf('Contact Email')] = email;
+    newRow[headers.indexOf('Shoot Tab Name')] = shootTabName;
+    newRow[headers.indexOf('Secret Key')] = key;
+    photographers.appendRow(newRow);
+
+    // Single-use token — remove the Signups row now it's redeemed.
+    signups.deleteRow(rowIndex + 2);
+
+    var link = addShootLink(shootTabName, key);
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject: 'Your Who Shot Me? dashboard link',
+        body: 'Hi ' + name + ',\n\nYou\'re all confirmed! Here\'s your personal dashboard link - keep it safe, it acts as your password:\n\n' + link
+      });
+    } catch (err) {
+      // Ignore — they'll also see the link directly on the confirmation page.
+    }
+
+    return { link: link };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---- lost link (self-service "password reset") -------------------------
+
+// Regenerates a photographer's Secret Key and emails them a fresh
+// add-shoot.html link - the old key stops working the moment this runs.
+// Always returns {ok:true} regardless of whether the email matched
+// anything, same reasoning as the generic "not found" errors elsewhere
+// in this file: this endpoint can't be used to check who's a registered
+// photographer.
+function resendLink(email) {
+  email = String(email || '').trim();
+  if (!SIGNUP_EMAIL_RE.test(email)) return { ok: true };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var found = findPhotographerRowByEmail(email);
+    if (!found) return { ok: true };
+
+    var key = generateSecretKey();
+    found.sheet.getRange(found.rowIndex, found.keyCol + 1).setValue(key);
+
+    var headers = found.sheet.getRange(1, 1, 1, found.sheet.getLastColumn()).getValues()[0];
+    var name = found.row[headers.indexOf('Photographer Name')];
+    var shootTabName = found.row[headers.indexOf('Shoot Tab Name')];
+    var link = addShootLink(shootTabName, key);
+
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject: 'Your Who Shot Me? dashboard link',
+        body: 'Hi ' + name + ',\n\nHere\'s a fresh dashboard link, as requested. Your old link has stopped working:\n\n' + link
+      });
+    } catch (err) {
+      // Ignore — the key's already regenerated either way; worst case
+      // they need to request it again.
+    }
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function escapeHtmlServer(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function confirmPageHtml(title, bodyHtml) {
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>' + escapeHtmlServer(title) + ' - Who Shot Me?</title>' +
+    '<style>' +
+    'body{margin:0;font-family:Segoe UI,Roboto,system-ui,sans-serif;background:#1c1e22;color:#f3f1ea;' +
+    'display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;box-sizing:border-box;}' +
+    '.card{max-width:420px;text-align:center;}' +
+    'h1{font-size:1.3rem;margin:0 0 14px;}' +
+    'p{line-height:1.5;font-size:0.95rem;}' +
+    '.btn{display:inline-block;margin-top:10px;background:#d4ff3f;color:#1c1e22;text-decoration:none;' +
+    'font-weight:800;padding:13px 22px;border-radius:24px;}' +
+    '</style></head><body><div class="card"><h1>' + escapeHtmlServer(title) + '</h1>' + bodyHtml + '</div></body></html>';
 }
 
 // ---- shoots ---------------------------------------------------------------

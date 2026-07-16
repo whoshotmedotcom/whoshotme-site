@@ -230,16 +230,33 @@ framework, no bundler. Edit the files directly and refresh the browser.
     needs new tabs or formula edits, just one row in the Photographers
     workbook.
 12. **Self-service "become a photographer" signup form** — **done**
-    16/07/2026. New page `become-photographer.html`, linked from
-    `index.html`'s "Get listed" button. Posts to a new `requestPhotographer`
-    action in `app-script.gs` (public, no key needed — same pattern as the
-    click-tracking actions), which appends a PENDING row to the
-    Photographers workbook (name, contact email, website, an
-    auto-generated unique Shoot Tab Name; Secret Key deliberately left
-    blank) and emails `SIGNUP_NOTIFY_EMAIL`. A blank Secret Key can never
-    authenticate, so this can only ever create a pending request, never
-    grant dashboard access directly — same trust model as before, you
-    still generate the Secret Key and send the personal link yourself
-    once you've reviewed the row. Has a honeypot field for basic spam
-    filtering. Redeploying `app-script.gs` after this change will prompt
-    for an extra permission grant (sending email via `MailApp`).
+    16/07/2026, upgraded to fully automatic (no manual approval) same day
+    after initial testing surfaced the manual-review step as unwanted
+    friction. `become-photographer.html`, linked from `index.html`'s "Get
+    listed" button, now does two things:
+    - **Sign up**: posts to `requestPhotographer` in `app-script.gs`
+      (public, no key needed), which writes a row to a new `Signups` tab
+      (private workbook, alongside Photographers) with a random
+      confirmation token, and emails that token as a link to the address
+      *they* gave. Clicking it (`confirmSignup`, rendered as an actual
+      HTML page via `HtmlService`, not JSON — see `doGet`'s
+      `confirmSignup` action) verifies the token, generates a real Secret
+      Key, moves them into a proper Photographers row, and shows/emails
+      them their working `add-shoot.html` link. You get an informational
+      email too, but don't need to act on it — the trust boundary is
+      "proved you own that inbox," not manual review. A `Signups` row is
+      single-use and gets deleted the moment its token is redeemed.
+    - **Lost link / self-service reset**: a toggle on the same page posts
+      to `resendLink` (also public), which looks a photographer up by
+      Contact Email, generates a *new* Secret Key (invalidating the old
+      one), and emails them a fresh `add-shoot.html` link. Always
+      responds `{ok:true}` regardless of whether the email matched
+      anything, so it can't be used to enumerate who's a registered
+      photographer — same reasoning as the generic "not found" errors
+      used elsewhere in `app-script.gs`.
+    Has a honeypot field on the signup form for basic spam filtering.
+    Manual setup step: add a `Signups` tab to the private Photographers
+    workbook with header row `Token | Name | Email | Website | Shoot Tab
+    Name | Requested At` (see `app-script.gs`'s SETUP notes). Redeploying
+    `app-script.gs` prompts for an extra permission grant (sending email
+    via `MailApp`) if not already granted.
