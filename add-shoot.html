@@ -376,7 +376,11 @@
      a Chrome/Edge-specific belt-and-suspenders fix for the icon itself.
      Firefox/Safari already theme it correctly via the root color-scheme. */
   .field input[type="datetime-local"]::-webkit-calendar-picker-indicator{
-    filter: invert(1) brightness(1.4);
+    /* brightness(0) first crushes the icon to pure black regardless of
+       Chrome's actual source colour (a mid-grey, not black - so a plain
+       invert(1) alone only lightened it to another grey, not white),
+       then invert(1) flips that pure black to pure white. */
+    filter: brightness(0) invert(1);
     cursor: pointer;
   }
   .field input:focus, .field textarea:focus{
@@ -1463,8 +1467,22 @@ const locationNameEl = document.getElementById('locationName');
 const descriptionEl = document.getElementById('description');
 const startEl = document.getElementById('startTime');
 const endEl = document.getElementById('endTime');
-startEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
-endEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
+// step="300" on these inputs (see the HTML) only constrains the native
+// picker's up/down arrows - typing a value directly (or most mobile
+// pickers) bypasses it entirely, since there's no <form> here to ever
+// trigger the native step-mismatch validation it'd otherwise produce.
+// Snapping on change is what actually makes 5-minute increments a real
+// constraint regardless of how the value got entered.
+function snapToFiveMinutes(inputEl){
+  if (!inputEl.value) return;
+  const d = new Date(inputEl.value);
+  if (isNaN(d)) return;
+  d.setMinutes(Math.round(d.getMinutes() / 5) * 5, 0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  inputEl.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+startEl.addEventListener('change', () => { snapToFiveMinutes(startEl); updateTimeGate(); updateProximityWarning(); });
+endEl.addEventListener('change', () => { snapToFiveMinutes(endEl); updateTimeGate(); updateProximityWarning(); });
 const formSection = document.getElementById('formSection');
 const formHeading = document.getElementById('formHeading');
 const formError = document.getElementById('formError');
