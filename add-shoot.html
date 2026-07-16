@@ -796,13 +796,14 @@
 <div id="galleryModal" class="modal hidden">
   <div class="modal-box">
     <h3 id="galleryModalHeading">Add a gallery link</h3>
+    <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
     <div class="field">
-      <label for="galleryLabel">Label</label>
-      <input type="text" id="galleryLabel" placeholder="e.g. Full gallery">
+      <label for="galleryLabel">Label<span class="required-mark" aria-hidden="true"> *</span></label>
+      <input type="text" id="galleryLabel" placeholder="e.g. Full gallery" required>
     </div>
     <div class="field">
-      <label for="galleryUrl">URL</label>
-      <input type="text" id="galleryUrl" placeholder="https://...">
+      <label for="galleryUrl">URL<span class="required-mark" aria-hidden="true"> *</span></label>
+      <input type="text" id="galleryUrl" placeholder="https://..." required>
     </div>
     <div class="form-actions">
       <button id="saveGalleryBtn" class="pill-btn">Add gallery</button>
@@ -1599,7 +1600,9 @@ document.getElementById('cancelGalleryBtn').addEventListener('click', () => gall
 
 saveGalleryBtn.addEventListener('click', async () => {
   galleryError.classList.add('hidden');
+  const label = galleryLabelEl.value.trim();
   const url = galleryUrlEl.value.trim();
+  if (!label){ galleryError.textContent = 'A label is required.'; galleryError.classList.remove('hidden'); return; }
   if (!url){ galleryError.textContent = 'A URL is required.'; galleryError.classList.remove('hidden'); return; }
 
   const isEdit = galleryEditRow !== null;
@@ -1611,13 +1614,13 @@ saveGalleryBtn.addEventListener('click', async () => {
           action: 'updateGallery',
           shootId: galleryShootId,
           row: galleryEditRow,
-          label: galleryLabelEl.value.trim(),
+          label,
           url
         })
       : await apiPost({
           action: 'addGallery',
           shootId: galleryShootId,
-          label: galleryLabelEl.value.trim(),
+          label,
           url
         });
     if (result.error){

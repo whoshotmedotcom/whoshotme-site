@@ -413,6 +413,7 @@ function normalizeGalleryUrl(url) {
 }
 
 function addGallery(p, shootId, label, url) {
+  if (!String(label || '').trim()) return { error: 'Gallery label is required' };
   var cleanUrl = normalizeGalleryUrl(url);
   if (!cleanUrl) return { error: 'Gallery URL is required' };
 
@@ -442,6 +443,7 @@ function addGallery(p, shootId, label, url) {
 // shifting rows) and so a photographer can never touch a row outside
 // their own galleries tab even if a row number were tampered with.
 function updateGallery(p, shootId, row, label, url) {
+  if (!String(label || '').trim()) return { error: 'Gallery label is required' };
   var cleanUrl = normalizeGalleryUrl(url);
   if (!cleanUrl) return { error: 'Gallery URL is required' };
 
