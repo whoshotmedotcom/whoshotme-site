@@ -1771,8 +1771,12 @@ saveShootBtn.addEventListener('click', async () => {
       const wasEditing = !!editingShootId;
       resetShootForm();
       showToast((wasEditing ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
-      await loadShoots();
-      switchTab('shoots'); // so they land right on the shoot they just saved
+      // Switch tabs immediately - the save itself already succeeded, so
+      // don't make the photographer sit on this page waiting for the
+      // list to re-fetch before they're allowed to see it. The list
+      // itself fills in moments later, fire-and-forget.
+      switchTab('shoots');
+      loadShoots().catch(err => console.error(err));
     }
   } catch (err) {
     formError.textContent = "Couldn't save - check your connection and try again.";
