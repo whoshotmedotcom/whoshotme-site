@@ -365,6 +365,12 @@
     font-size:0.92rem;
     font-family:inherit;
   }
+  /* Same rust as the label's required-mark asterisk, carried onto the
+     input itself so the mandatory fields stand out before you've even
+     read the label - not just at the moment validation fails. Placed
+     before the :focus rule below so clicking into the field still shows
+     the normal hi-vis focus border, not this. */
+  .field input:required{ border-color:var(--rust); }
   /* Browsers render the datetime-local field's calendar/clock icon using their
      own light-theme default even with color-scheme:dark set at root — this is
      a Chrome/Edge-specific belt-and-suspenders fix for the icon itself.

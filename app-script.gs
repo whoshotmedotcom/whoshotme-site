@@ -61,6 +61,11 @@ const SITE_EVENT_TYPE_RE = /^[a-z0-9_]{1,40}$/;
 // guide — paste that spreadsheet's ID here (the long string in its URL:
 // docs.google.com/spreadsheets/d/THIS_PART/edit). Leave blank to keep
 // reading Photographers from this same spreadsheet, as before.
+//
+// Deliberately left blank in this public repo — the real ID is set
+// directly in the live Apps Script deployment instead, not committed
+// here, since this repo is public and that spreadsheet holds every
+// photographer's Secret Key.
 const PHOTOGRAPHERS_SPREADSHEET_ID = '';
 
 function getPhotographersSheet() {
