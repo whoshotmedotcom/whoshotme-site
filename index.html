@@ -982,7 +982,12 @@
     inset:-6px;
     border-radius:50%;
     border:3px solid var(--hi-vis);
-    animation:clusterPulse 1.6s infinite;
+    animation:clusterPulse 1.6s cubic-bezier(0.6, 0, 0.85, 0.15) infinite;
+    /* Randomized per-cluster in makeClusterGroup() (a negative delay seeds
+       the animation into a random point of its cycle immediately, rather
+       than waiting) so clusters bubble independently instead of all
+       pulsing in lockstep. */
+    animation-delay:var(--pulse-offset, 0s);
     pointer-events:none;
   }
   .whoshotme-cluster.cluster-soon{
@@ -997,13 +1002,13 @@
     border:2px dashed var(--asphalt);
     opacity:0.85;
   }
-  /* Same three-stop timing as the single-marker @keyframes pulse below -
-     stays bright through most of the cycle, only fades quickly at the
-     very end, so it reads against OS Road's pale basemap instead of
-     spending most of its cycle too faint to see. */
+  /* Same easing as the single-marker @keyframes pulse below - a single
+     continuous cubic-bezier curve (not a middle keyframe stop) shapes
+     "stays bright through most of the cycle, fades quickly at the very
+     end" as one smooth acceleration, so it reads against OS Road's pale
+     basemap without ever looking like it stalls partway through. */
   @keyframes clusterPulse{
     0%{ transform:scale(1); opacity:0.9; }
-    55%{ transform:scale(1.3); opacity:0.75; }
     100%{ transform:scale(1.8); opacity:0; }
   }
 
@@ -1909,6 +1914,17 @@ function makeIcon(spot, status){
     // enough at this app's scale (a handful of live pins, not hundreds).
     setTimeout(() => startFlashCycle(flashUid, startPattern), 0);
   }
+  // Same "randomize per marker so they don't all move in lockstep" idea
+  // as the camera-flash timing above, applied to the pulsing ring too - a
+  // NEGATIVE animation-delay seeds the (infinite) animation into a random
+  // point of its cycle immediately, rather than a positive delay which
+  // would leave the ring visibly static/undersized for a moment first.
+  // Set as a CSS custom property (not a direct animation-delay override)
+  // because this targets a ::after pseudo-element, which has no DOM node
+  // of its own to attach an inline style to - custom properties inherit
+  // through to it, so .live-marker-ring::after's animation-delay reads it
+  // via var(--pulse-offset).
+  const pulseOffsetStyle = isLive ? `--pulse-offset:-${(Math.random() * 1.6).toFixed(2)}s;` : '';
   return L.divIcon({
     className: '',
     html: `<div style="position:relative; width:${size}px; height:${size}px;">
@@ -1922,6 +1938,7 @@ function makeIcon(spot, status){
         box-shadow:0 0 0 2px ${statusColor}55;
         opacity:${isPast ? 0.55 : 1};
         filter:${isPast ? 'grayscale(80%)' : 'none'};
+        ${pulseOffsetStyle}
       "></div>
       ${flashHtml}
     </div>`,
@@ -1944,18 +1961,23 @@ styleTag.textContent = `
     inset:-3px;
     border-radius:50%;
     border:3px solid #d4ff3f;
-    animation:pulse 1.6s infinite;
+    animation:pulse 1.6s cubic-bezier(0.6, 0, 0.85, 0.15) infinite;
+    /* Randomized per-marker in makeIcon() (a negative delay seeds the
+       animation into a random point of its cycle immediately) so
+       several live pins bubble independently instead of all pulsing in
+       sync. */
+    animation-delay:var(--pulse-offset, 0s);
     pointer-events:none;
   }
-  /* Three stops, not two - stays bright through most of the cycle and
-     only fades quickly right at the end, instead of a smooth linear fade
-     that spent much of its cycle too faint to read against OS Road's
-     pale, detailed basemap (roads/labels/contours all competing for
-     attention at that scale). Confirmed visually via a standalone test
-     page before landing this - see the conversation this came from. */
+  /* Two stops, not three - a single continuous cubic-bezier curve (set
+     on the animation itself, above) shapes "stays bright through most
+     of the cycle, fades quickly right at the end" as one smooth
+     acceleration, rather than a middle keyframe stop that reads as the
+     animation stalling partway through before resuming. Confirmed
+     visually via a standalone test page before landing this - see the
+     conversation this came from. */
   @keyframes pulse{
     0%{ transform:scale(1); opacity:0.9; }
-    55%{ transform:scale(1.35); opacity:0.75; }
     100%{ transform:scale(1.85); opacity:0; }
   }
   @keyframes cameraFlash{
@@ -1995,8 +2017,14 @@ function makeClusterGroup(statusClass, pane){
     iconCreateFunction: function(cluster){
       const count = cluster.getChildCount();
       const size = count < 10 ? 36 : 42;
+      // Same randomized-negative-delay trick as makeIcon()'s live markers,
+      // via a CSS custom property since it targets a ::after pseudo-
+      // element - only meaningful for the live group (statusClass here is
+      // fixed per clusterGroup, not per-cluster), but harmless to set
+      // unconditionally since only .cluster-live actually reads it.
+      const pulseOffsetStyle = `--pulse-offset:-${(Math.random() * 1.6).toFixed(2)}s;`;
       return L.divIcon({
-        html: `<div class="whoshotme-cluster ${statusClass}" style="width:${size}px;height:${size}px;">${count}</div>`,
+        html: `<div class="whoshotme-cluster ${statusClass}" style="width:${size}px;height:${size}px;${pulseOffsetStyle}">${count}</div>`,
         className: '',
         iconSize: [size, size]
       });
