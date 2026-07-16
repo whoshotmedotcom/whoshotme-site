@@ -1199,13 +1199,18 @@ const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/res
 });
 const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
 osRoadLayer.addTo(map);
-L.control.layers({
+const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
   'OS Road': osRoadLayer,
   // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels
 }, null, { position: 'topright' }).addTo(map);
+
+// Leaflet auto-collapses this on mouseout, which never fires on touch —
+// without this, picking a basemap on mobile leaves the expanded list
+// sitting open over the map until tapped shut manually.
+map.on('baselayerchange', () => layersControl.collapse());
 
 let marker = null;
 let currentLat = null;

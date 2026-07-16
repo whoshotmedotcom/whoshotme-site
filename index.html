@@ -1618,7 +1618,7 @@ const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/res
 // three tile layers together as one basemap.
 const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
 osRoadLayer.addTo(map);
-L.control.layers({
+const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
   'OS Road': osRoadLayer,
   // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
@@ -1631,6 +1631,10 @@ L.control.layers({
 // re-enabling OS Light/OS Outdoor above doesn't also need an update here.
 map.on('baselayerchange', (e) => {
   sendSiteEvent('basemap_' + e.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+  // Leaflet auto-collapses this on mouseout, which never fires on touch —
+  // without this, picking a basemap on mobile leaves the expanded list
+  // sitting open over the map until tapped shut manually.
+  layersControl.collapse();
 });
 
 // =========================================================================
