@@ -1730,7 +1730,7 @@ function findMyLocation(btn){
           fillOpacity: 0.35
         }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
       }
-      map.setView([latitude, longitude], 13, { animate: true });
+      map.setView([latitude, longitude], 15, { animate: true }); // 2 zoom levels closer than it used to be
     },
     (err) => {
       btn.disabled = false;
