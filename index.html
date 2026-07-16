@@ -10,7 +10,14 @@
      for the brand name itself. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
+<!-- Loaded non-render-blocking: media="print" makes the browser fetch it
+     without waiting on it to paint anything, then the onload swap applies
+     it once it's ready. Safe here specifically because it's decorative
+     headline-only text (see comment above) with a system-font fallback -
+     nothing critical is gated on this font being ready. The noscript
+     fallback covers the (rare) case of JS being disabled. -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet"></noscript>
 <link rel="icon" type="image/png" href="favicon.png">
 <!-- Bare apex domain, matching the actual live host (www.whoshotme.com just
      301-redirects here) — tells Google unambiguously which URL is
