@@ -23,6 +23,7 @@
     --rust:#d97a53;
     --line:#3a3d44;
     --past-grey:#868a90;
+    --muted-grey:#9aa0a6;
     color-scheme: dark;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -60,6 +61,105 @@
     text-decoration:none;
   }
   #backLink:hover{ color:var(--hi-vis); }
+  #backLink:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
+  #aboutLink{
+    display:inline-block;
+    margin-top:6px;
+    margin-left:10px;
+    background:none;
+    border:none;
+    color:var(--hi-vis-dim);
+    text-decoration:underline;
+    font-size:0.82rem;
+    cursor:pointer;
+    padding:0;
+    font-family:inherit;
+  }
+  #aboutLink:hover{ color:var(--hi-vis); }
+
+  /* ---- About modal - same component as index.html/add-shoot.html ---- */
+  #aboutOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:4000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  #aboutOverlay.show{ display:flex; }
+  #aboutModal{
+    background:var(--asphalt-light);
+    border:1px solid var(--line);
+    border-radius:12px;
+    max-width:420px;
+    width:100%;
+    max-height:80vh;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  #aboutModalHeader{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:22px 24px 0;
+    flex-shrink:0;
+  }
+  #aboutModalBody{
+    overflow-y:auto;
+    padding:12px 24px 22px;
+  }
+  #aboutCloseBtnTop{
+    background:var(--asphalt);
+    color:var(--hi-vis);
+    border:1px solid var(--line);
+    border-radius:50%;
+    width:32px;
+    height:32px;
+    min-width:32px;
+    flex-shrink:0;
+    font-size:1rem;
+    line-height:1;
+    cursor:pointer;
+  }
+  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
+  #aboutModal h2{
+    margin:0;
+    color:var(--hi-vis);
+    font-size:1.1rem;
+    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-weight:900;
+  }
+  #aboutModal h3{
+    margin:16px 0 8px;
+    color:var(--hi-vis-dim);
+    font-size:0.88rem;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  #aboutModal p{
+    font-size:0.85rem;
+    color:#c7c9cd;
+    line-height:1.5;
+    margin:0 0 10px;
+  }
+  #aboutCloseBtn{
+    margin-top:6px;
+    border:1px solid var(--hi-vis-dim);
+    background:transparent;
+    color:var(--hi-vis);
+    padding:8px 18px;
+    border-radius:18px;
+    font-size:0.8rem;
+    cursor:pointer;
+  }
+  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+  #aboutCloseBtn:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
 
   main{
     width:100%;
@@ -138,6 +238,10 @@
     cursor:pointer;
   }
   .pill-btn:disabled{ opacity:0.6; cursor:default; }
+  /* Dark outline, not hi-vis - the button's own background IS hi-vis, so
+     a hi-vis outline on top would barely show. Dark reads clearly
+     against both the bright button and the page's dark background. */
+  .pill-btn:focus-visible{ outline:2px solid var(--asphalt); outline-offset:2px; }
 
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
   .hidden{ display:none !important; }
@@ -165,6 +269,7 @@
     font-family:inherit;
   }
   .toggleLink:hover{ color:var(--hi-vis); }
+  .toggleLink:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
 </style>
 </head>
 <body>
@@ -172,7 +277,31 @@
 <header>
   <h1>Become a <span>listed photographer</span></h1>
   <a id="backLink" href="index.html">&larr; Back to the map</a>
+  <button id="aboutLink">About</button>
 </header>
+
+<div id="aboutOverlay">
+  <div id="aboutModal">
+    <div id="aboutModalHeader">
+      <h2>About this page</h2>
+      <button id="aboutCloseBtnTop" aria-label="Close">✕</button>
+    </div>
+    <div id="aboutModalBody">
+      <p>This page is how you sign up to list your shoots on Who Shot Me - the live map riders use to find out who was photographing them. Confirm your email and your personal dashboard is ready straight away, no approval needed from anyone.</p>
+
+      <h3>Your privacy</h3>
+      <p>We store your name, contact email, and website/social link (if you gave one) so we can email you your dashboard link and let riders see who's listed. You manage all of this yourself afterwards via your own personal link.</p>
+      <p>We keep this data for as long as you're listed, and delete it entirely once you ask us to.</p>
+
+      <h3>Please keep in mind</h3>
+      <p>Only sign up if you genuinely shoot roadside motorcycle photos and intend to list real shoots - please don't sign up on someone else's behalf or with content you don't have the rights to post.</p>
+
+      <p>Questions, or want your data removed entirely? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
+
+      <button id="aboutCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <div id="signupSection">
@@ -246,6 +375,32 @@
 <script>
   // Same deployed Apps Script Web App both other pages already use.
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
+  const CONTACT_EMAIL = 'whoshotmedotcom@gmail.com'; // shown in the About modal's "email us" link
+
+  // =========================================================================
+  // ABOUT — purely informational modal, opened from the header link. Same
+  // component/behaviour as index.html and add-shoot.html's About modals.
+  // =========================================================================
+  const aboutOverlay = document.getElementById('aboutOverlay');
+  const aboutContactLink = document.getElementById('aboutContactLink');
+  if (aboutContactLink) aboutContactLink.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
+  document.getElementById('aboutLink').addEventListener('click', () => {
+    aboutOverlay.classList.add('show');
+  });
+  document.getElementById('aboutCloseBtn').addEventListener('click', () => {
+    aboutOverlay.classList.remove('show');
+  });
+  document.getElementById('aboutCloseBtnTop').addEventListener('click', () => {
+    aboutOverlay.classList.remove('show');
+  });
+  aboutOverlay.addEventListener('click', (e) => {
+    if (e.target === aboutOverlay) aboutOverlay.classList.remove('show');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && aboutOverlay.classList.contains('show')) {
+      aboutOverlay.classList.remove('show');
+    }
+  });
 
   const form = document.getElementById('signupForm');
   const signupIntro = document.getElementById('signupIntro');
