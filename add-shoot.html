@@ -1612,8 +1612,14 @@ saveShootBtn.addEventListener('click', async () => {
 
   // Not blocked — a past start date is a legitimate use (e.g. adding
   // galleries to a shoot that already happened), just worth a nudge in
-  // case it was meant to be a typo-free future date.
-  if (parseUKDateTime(shoot.start) < new Date()){
+  // case it was meant to be a typo-free future date. 10-minute grace
+  // period against "now" rather than an exact-instant comparison -
+  // picking a start time of "now" and then spending a few minutes
+  // filling in the rest of the form would otherwise make "now" quietly
+  // slip into the past by the time Save is actually clicked, triggering
+  // this for something that was never actually wrong.
+  const PAST_START_GRACE_MS = 10 * 60 * 1000;
+  if (parseUKDateTime(shoot.start) < new Date(Date.now() - PAST_START_GRACE_MS)){
     const proceed = confirm("This shoot's start time is in the past. That's fine if you're logging a shoot that already happened - otherwise, double-check the date.\n\nSave anyway?");
     if (!proceed) return;
   }
