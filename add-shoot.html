@@ -1099,17 +1099,20 @@ function timeRangesOverlap(aStart, aEnd, bStart, bEnd){
   return aStart < bEnd && bStart < aEnd;
 }
 
-function findNearbyConflict(lat, lng, startDate, endDate){
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !startDate || !endDate || isNaN(startDate) || isNaN(endDate)) return null;
-  let closest = null;
+// Returns EVERY overlapping-time shoot within range, closest first - not
+// just the single nearest one. A photographer could otherwise read a
+// warning naming only the closest match, message them, and still
+// unknowingly clash with a second photographer just as close by.
+function findNearbyConflicts(lat, lng, startDate, endDate){
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !startDate || !endDate || isNaN(startDate) || isNaN(endDate)) return [];
+  const conflicts = [];
   for (const shoot of otherPhotographersShoots){
     if (!timeRangesOverlap(startDate, endDate, shoot.start, shoot.end)) continue;
     const distance = haversineMeters(lat, lng, shoot.lat, shoot.lng);
-    if (distance <= PROXIMITY_METRES && (!closest || distance < closest.distance)){
-      closest = { ...shoot, distance };
-    }
+    if (distance <= PROXIMITY_METRES) conflicts.push({ ...shoot, distance });
   }
-  return closest;
+  conflicts.sort((a, b) => a.distance - b.distance);
+  return conflicts;
 }
 function escapeHtml(str){
   return String(str == null ? '' : str)
@@ -1340,14 +1343,28 @@ function updateProximityWarning(){
     return;
   }
 
-  const conflict = findNearbyConflict(currentLat, currentLng, start, end);
-  if (!conflict){
+  const conflicts = findNearbyConflicts(currentLat, currentLng, start, end);
+  if (conflicts.length === 0){
     proximityWarningEl.classList.add('hidden');
     return;
   }
-  const metres = Math.round(conflict.distance);
-  const linkPart = conflict.link ? ` You could reach out via <a href="${escapeHtml(conflict.link)}" target="_blank" rel="noopener">their listed link</a>.` : '';
-  proximityWarningEl.innerHTML = `📍 You're about ${metres}m from a shoot by <strong>${escapeHtml(conflict.name)}</strong> at an overlapping time - might be worth a quick message to check before you commit to this spot.${linkPart}`;
+
+  // Each name links to that photographer's own page when they have one,
+  // rather than a single "their listed link" sentence tacked on the end
+  // - that phrasing only ever made sense for exactly one match.
+  const items = conflicts.map(c => {
+    const metres = Math.round(c.distance);
+    const nameHtml = c.link
+      ? `<a href="${escapeHtml(c.link)}" target="_blank" rel="noopener">${escapeHtml(c.name)}</a>`
+      : escapeHtml(c.name);
+    return `<strong>${nameHtml}</strong> (${metres}m)`;
+  });
+  const listText = items.length === 1 ? items[0]
+    : items.length === 2 ? `${items[0]} and ${items[1]}`
+    : `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+
+  const plural = conflicts.length > 1;
+  proximityWarningEl.innerHTML = `📍 You're near ${plural ? 'overlapping shoots by' : 'a shoot by'} ${listText} at an overlapping time - might be worth a quick message to check before you commit to this spot.`;
   proximityWarningEl.classList.remove('hidden');
 }
 
