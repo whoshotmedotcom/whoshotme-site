@@ -176,7 +176,7 @@
 
 <main>
   <div id="signupSection">
-    <p>Shoot roadside motorcycle photos around the Peak District/Derbyshire? Tell us a bit about you below - we'll email you a link to confirm it's really you, then your personal dashboard is ready straight away.</p>
+    <p id="signupIntro">Shoot roadside motorcycle photos around the Peak District/Derbyshire? Tell us a bit about you below - we'll email you a link to confirm it's really you, then your personal dashboard is ready straight away.</p>
 
     <form id="signupForm">
       <div class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</div>
@@ -245,6 +245,7 @@
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
 
   const form = document.getElementById('signupForm');
+  const signupIntro = document.getElementById('signupIntro');
   const submitBtn = document.getElementById('submitBtn');
   const formError = document.getElementById('formError');
   const confirmPanel = document.getElementById('confirmPanel');
@@ -295,6 +296,7 @@
         submitBtn.textContent = 'Send my details';
         return;
       }
+      signupIntro.classList.add('hidden');
       form.classList.add('hidden');
       confirmPanel.classList.remove('hidden');
     } catch (err) {
