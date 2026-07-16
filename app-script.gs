@@ -569,7 +569,13 @@ function confirmSignupPage(token) {
       'fetch(' + JSON.stringify(postUrl) + ', {method:"POST", body: JSON.stringify({action:"confirmSignupCommit", token:' + JSON.stringify(safeToken) + '})})' +
       '.then(function(r){ return r.json(); }).then(function(result){' +
       'if (result.error) { document.getElementById("confirmMsg").textContent = result.error; document.getElementById("confirmBtn").textContent = "Confirm my signup"; document.getElementById("confirmBtn").disabled = false; return; }' +
-      'document.body.innerHTML = "<div class=\\"card\\"><h1>You\'re all set!<\\/h1><p>Your dashboard is ready. We\'ve also emailed this link so you don\'t lose it:<\\/p><p><a class=\\"btn\\" href=\\"" + result.link + "\\">Open my dashboard<\\/a><\\/p><\\/div>";' +
+      // target="_top" is load-bearing here, not decorative - this page
+      // renders inside Apps Script's own sandboxed iframe wrapper, and a
+      // plain link click stays trapped inside that iframe instead of
+      // navigating the actual browser tab (the address bar and "created
+      // by a Google Apps Script user" banner otherwise never go away).
+      // _top forces the click to navigate the real top-level tab.
+      'document.body.innerHTML = "<div class=\\"card\\"><h1>You\'re all set!<\\/h1><p>Your dashboard is ready. We\'ve also emailed this link so you don\'t lose it:<\\/p><p><a class=\\"btn\\" target=\\"_top\\" href=\\"" + result.link + "\\">Open my dashboard<\\/a><\\/p><\\/div>";' +
       '}).catch(function(){' +
       'document.getElementById("confirmMsg").textContent = "Something went wrong - please try again.";' +
       'document.getElementById("confirmBtn").textContent = "Confirm my signup"; document.getElementById("confirmBtn").disabled = false;' +
