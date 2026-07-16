@@ -1080,7 +1080,11 @@ const map = L.map('map', { zoomControl: true, attributionControl: false, tap: fa
 // so a photographer can't drift off the map entirely by accident, but
 // isn't hemmed in right at the coastline while placing a pin either.
 const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
-const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -14.15], [64.125, 5.35]);
+// Longitude span doubled again on top of the y-axis's +50% - see
+// index.html for the full reasoning (Mercator stretches latitude more
+// than longitude at the UK's latitude, so equal degree-padding on both
+// axes didn't read as visually equal).
+const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.4], [64.125, 8.6]);
 map.setMaxBounds(MAP_PAN_BOUNDS);
 L.control.attribution({ prefix: false }).addTo(map);
 
