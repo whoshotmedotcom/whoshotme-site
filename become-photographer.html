@@ -102,6 +102,9 @@
     font-size:0.92rem;
     font-family:inherit;
   }
+  /* Same rust-outline-until-filled treatment as add-shoot.html's required
+     fields - toggled via updateRequiredFieldStyles() below. */
+  .field input.needs-input{ border-color:var(--rust); }
   .field input:focus{
     outline:none;
     border-color:var(--hi-vis);
@@ -176,7 +179,12 @@
 
     <div class="field">
       <label for="websiteInput">Website, Facebook, or Instagram link</label>
-      <input type="url" id="websiteInput" maxlength="200" autocomplete="url" placeholder="https://facebook.com/yourpage">
+      <!-- type="text" not "url" - same reasoning as add-shoot.html's
+           gallery URL field: native type="url" validation rejects a
+           scheme-less value like "facebook.com/you", which is what most
+           people paste. normalizeGalleryUrl() on the server adds http://
+           automatically if it's missing, same as gallery links. -->
+      <input type="text" id="websiteInput" maxlength="200" autocomplete="url" placeholder="facebook.com/yourpage">
     </div>
 
     <!-- Not a real field - see the .honeypot comment above. -->
@@ -203,6 +211,18 @@
   const submitBtn = document.getElementById('submitBtn');
   const formError = document.getElementById('formError');
   const confirmPanel = document.getElementById('confirmPanel');
+  const nameInput = document.getElementById('nameInput');
+  const emailInput = document.getElementById('emailInput');
+
+  // Same rust-outline-until-filled pattern as add-shoot.html's required
+  // fields (see updateRequiredFieldStyles/updateGalleryFieldStyles there).
+  function updateRequiredFieldStyles(){
+    nameInput.classList.toggle('needs-input', !nameInput.value.trim());
+    emailInput.classList.toggle('needs-input', !emailInput.value.trim());
+  }
+  nameInput.addEventListener('input', updateRequiredFieldStyles);
+  emailInput.addEventListener('input', updateRequiredFieldStyles);
+  updateRequiredFieldStyles();
 
   form.addEventListener('submit', async (evt) => {
     evt.preventDefault();
