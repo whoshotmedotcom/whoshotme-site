@@ -424,6 +424,7 @@
   }
   .requiredLegend .required-mark{ font-weight:700; }
   .field input[type="text"],
+  .field input[type="email"],
   .field input[type="datetime-local"],
   .field textarea{
     width:100%;
@@ -915,8 +916,8 @@
         <h2>Contact email</h2>
         <p id="emailHint">Used for "lost your link?" recovery - changing this emails a confirmation link to the new address first, so your current one keeps working until you click it.</p>
         <div class="field">
-          <label for="profileEmailInput">Email</label>
-          <input type="email" id="profileEmailInput" maxlength="200" placeholder="you@example.com">
+          <label for="profileEmailInput">Email<span class="required-mark" aria-hidden="true"> *</span></label>
+          <input type="email" id="profileEmailInput" required maxlength="200" placeholder="you@example.com">
         </div>
         <button id="saveEmailBtn" class="pill-btn">Update email</button>
         <p id="emailError" class="error-text hidden"></p>
@@ -2101,6 +2102,17 @@ const saveEmailBtn = document.getElementById('saveEmailBtn');
 const emailError = document.getElementById('emailError');
 const emailPendingHint = document.getElementById('emailPendingHint');
 
+// Same shape check as app-script.gs's SIGNUP_EMAIL_RE - something@something.something,
+// no whitespace. The server re-validates regardless (never trust the
+// client alone), this is just so a typo gets caught immediately instead
+// of round-tripping to find out.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function updateEmailFieldStyles(){
+  profileEmailInput.classList.toggle('needs-input', !profileEmailInput.value.trim());
+}
+profileEmailInput.addEventListener('input', updateEmailFieldStyles);
+
 function showPendingEmailHint(pendingEmail){
   if (!pendingEmail){
     emailPendingHint.classList.add('hidden');
@@ -2113,7 +2125,7 @@ function showPendingEmailHint(pendingEmail){
 saveEmailBtn.addEventListener('click', async () => {
   emailError.classList.add('hidden');
   const newEmail = profileEmailInput.value.trim();
-  if (!newEmail || !newEmail.includes('@')) {
+  if (!EMAIL_RE.test(newEmail)) {
     emailError.textContent = 'Enter a valid email address.';
     emailError.classList.remove('hidden');
     return;
@@ -2152,6 +2164,7 @@ async function loadShoots(){
     profileWebsiteInput.value = result.profile.website || '';
     updateProfileFieldStyles();
     profileEmailInput.value = result.profile.email || '';
+    updateEmailFieldStyles();
     showPendingEmailHint(result.profile.pendingEmail || '');
   }
 }
