@@ -479,6 +479,12 @@
     border:1px solid var(--line);
     margin-bottom:8px;
   }
+  /* Same "rust until actually satisfied" treatment as the required text
+     fields (see .field input.needs-input) - toggled in setCoords()/
+     clearPin() rather than a static selector, since there's no single
+     input element for "has a pin been dropped" to hang a CSS pseudo-
+     class off of. */
+  #mapWrap.needs-input{ border-color:var(--rust); }
   /* Blocks pin placement (and map panning/zooming, deliberately — this
      map's only purpose here is picking a spot, there's little reason to
      browse it before you know when you're going) until both times are
@@ -734,16 +740,10 @@
       </div>
     </section>
 
-    <section id="listSection">
-      <div class="section-head">
-        <h2>My Shoots</h2>
-        <button id="newShootBtn" class="pill-btn">+ Add shoot</button>
-      </div>
-      <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
-      <div id="shootsList"></div>
-      <p id="emptyState" class="hidden">No shoots yet - tap "+ Add shoot" to create your first one.</p>
-    </section>
-
+    <!-- Comes before "My Shoots" in the DOM (not just scrolled to) so
+         opening the form to add/edit a shoot appears above the shoots
+         list rather than requiring a scroll past it - see newShootBtn's
+         and each shoot's Edit button's click handlers. -->
     <section id="formSection" class="hidden">
       <h2 id="formHeading">Add a shoot</h2>
       <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
@@ -797,6 +797,16 @@
         <button id="cancelFormBtn" class="ghost-btn">Cancel</button>
       </div>
       <p id="formError" class="error-text hidden" role="alert"></p>
+    </section>
+
+    <section id="listSection">
+      <div class="section-head">
+        <h2>My Shoots</h2>
+        <button id="newShootBtn" class="pill-btn">+ Add shoot</button>
+      </div>
+      <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
+      <div id="shootsList"></div>
+      <p id="emptyState" class="hidden">No shoots yet - tap "+ Add shoot" to create your first one.</p>
     </section>
   </div>
 </main>
@@ -1201,6 +1211,7 @@ function setCoords(lat, lng){
   const readout = document.getElementById('coordReadout');
   readout.classList.remove('empty');
   readout.innerHTML = `Location set: <strong>${formatCoord(currentLat)}, ${formatCoord(currentLng)}</strong>`;
+  document.getElementById('mapWrap').classList.remove('needs-input');
   updateProximityWarning();
 }
 
@@ -1232,6 +1243,7 @@ function clearPin(){
   const readout = document.getElementById('coordReadout');
   readout.classList.add('empty');
   readout.textContent = 'No location set yet.';
+  document.getElementById('mapWrap').classList.add('needs-input');
   updateProximityWarning();
 }
 
