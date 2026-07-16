@@ -2727,6 +2727,25 @@ function renderSearchResults(spotMatches, places){
 }
 
 function flyToSpot(spot){
+  // render() only draws markers for whatever matches the *currently
+  // active* filter/date — a spot reached via search could belong to a
+  // status bucket (or a specific day) that isn't the one currently shown,
+  // in which case its real marker was never created and the popup below
+  // would float over an empty map with no pin under it. The ?shoot= deep
+  // link avoids this because applySharedShootFromUrl() sets the mode
+  // *before* the very first render() ever runs — this is the same fix
+  // for the case where the app's already showing some other view: switch
+  // to the spot's natural status bucket (same mapping/chip-activation as
+  // clicking that filter chip by hand) and re-render before flying to it.
+  const status = getStatus(spot); // 'live' | 'soon' | 'past'
+  const modeForStatus = status === 'soon' ? 'upcoming' : status; // chips use 'upcoming', not 'soon'
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === modeForStatus));
+  exitMonthLock();
+  currentMode = modeForStatus;
+  selectedIndex = todaySnapIndex;
+  sliderEl.value = selectedIndex;
+  render();
+
   // A search/share-link-driven jump, not a manual drag/zoom — routed
   // through programmaticMapMove so it doesn't light up "Reset view" or
   // suppress auto-recentre. Popup autoPan is separately covered by the
