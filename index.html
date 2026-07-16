@@ -1536,6 +1536,13 @@ L.control.layers({
   'Aerial': aerialWithLabels
 }, null, { position: 'bottomright' }).addTo(map);
 
+// Which basemap people actually use (see sendSiteEvent above) — slugified
+// from the layer's own display name rather than a hardcoded map, so
+// re-enabling OS Light/OS Outdoor above doesn't also need an update here.
+map.on('baselayerchange', (e) => {
+  sendSiteEvent('basemap_' + e.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+});
+
 // =========================================================================
 // MAP INTERACTION TRACKING — once someone manually pans or zooms, we stop
 // auto-recentering the map whenever the date/filter changes. Otherwise a
@@ -1630,6 +1637,7 @@ function findMyLocation(btn){
     (pos) => {
       btn.textContent = originalLabel;
       btn.disabled = false;
+      sendSiteEvent('my_location_used'); // just that the feature was used — never the coordinates themselves
       const { latitude, longitude } = pos.coords;
       if (myLocationMarker){
         myLocationMarker.setLatLng([latitude, longitude]);
@@ -2185,6 +2193,19 @@ function trackPageView(){
   }).catch(() => { /* silent on purpose — a missed count isn't worth interrupting anyone over */ });
 }
 
+// Same daily-aggregate-only counter as trackPageView above, extended with
+// an event type so basemap choice, search usage, and "My location" usage
+// are visible (SiteEvents tab, one row per day+type) without adding a
+// third-party analytics tool or storing anything per-visitor. See the
+// call sites below for exactly what's tracked and why.
+function sendSiteEvent(type){
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0) return;
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'trackSiteEvent', type: type })
+  }).catch(() => { /* silent on purpose, see trackPageView above */ });
+}
+
 // Builds a direct link to one specific shoot (?shoot=SHOOT_ID) and copies
 // it to the clipboard, with brief button feedback either way.
 function copyShootLink(shootId, btnEl){
@@ -2605,6 +2626,7 @@ function renderSearchResults(spotMatches, places){
   searchResultsEl.querySelectorAll('.resultItem[data-spot-idx]').forEach(el => {
     const action = () => {
       const spot = spotMatches[parseInt(el.dataset.spotIdx, 10)];
+      sendSiteEvent('search_photographer_selected');
       flyToSpot(spot);
     };
     el.addEventListener('click', action);
@@ -2614,6 +2636,7 @@ function renderSearchResults(spotMatches, places){
     searchResultsEl.querySelectorAll('.resultItem[data-place-idx]').forEach(el => {
       const action = () => {
         const place = places[parseInt(el.dataset.placeIdx, 10)];
+        sendSiteEvent('search_place_selected');
         flyToLocation(place.lat, place.lng, place.label);
       };
       el.addEventListener('click', action);

@@ -7,9 +7,13 @@
  *   2. Runs as a Web App so add-shoot.html can create/edit/delete shoots,
  *      add galleries, and read/update click stats — all without anyone
  *      needing to open the spreadsheet.
- *   3. Keeps a simple daily page-view count (SiteVisits tab) so you can
- *      see roughly how much the public map gets used, without any
- *      third-party analytics tool. Check numbers by opening that tab.
+ *   3. Keeps a simple daily page-view count (SiteVisits tab) and daily
+ *      counts of specific interactions - basemap switches, search usage,
+ *      "My location" usage (SiteEvents tab, one row per day+event type) -
+ *      so you can see roughly how the public map actually gets used,
+ *      without any third-party analytics tool. Check numbers by opening
+ *      those tabs directly. SiteEvents needs three columns: Date,
+ *      EventType, Count.
  *
  * SETUP (one-time):
  * 1. Open the Google Sheet, then Extensions > Apps Script.
@@ -43,7 +47,14 @@
 const PHOTOGRAPHERS_SHEET = 'Photographers';
 const STATS_SHEET = 'Stats';
 const SITE_VISITS_SHEET = 'SiteVisits';
+const SITE_EVENTS_SHEET = 'SiteEvents';
 const STATS_COLUMNS = { popup_open: 2, gallery_click: 3, page_link_click: 4 };
+// Any lowercase_with_underscores identifier up to 40 chars — deliberately
+// not a fixed allow-list of exact event names (unlike STATS_COLUMNS above)
+// so a new basemap added to the layer switcher in index.html doesn't also
+// need a matching update here. Still narrow enough to keep this a plain
+// counter, not a place to smuggle arbitrary text into the sheet.
+const SITE_EVENT_TYPE_RE = /^[a-z0-9_]{1,40}$/;
 
 // If the Photographers tab (with everyone's Secret Key) has been moved out
 // to its own separate, tightly-restricted spreadsheet — see the migration
@@ -157,6 +168,9 @@ function doPost(e) {
     }
     if (action === 'trackPageView') {
       return jsonOut(trackPageView());
+    }
+    if (action === 'trackSiteEvent') {
+      return jsonOut(trackSiteEvent(body.type));
     }
 
     if (!authenticate(body.p, body.key)) {
@@ -515,6 +529,46 @@ function trackPageView() {
       sheet.getRange(rowIndex, 2).setValue(0);
     }
     var cell = sheet.getRange(rowIndex, 2);
+    cell.setValue((Number(cell.getValue()) || 0) + 1);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---- site-wide interaction events --------------------------------------
+
+// One row per (day, event type) in the "SiteEvents" tab — same shape and
+// same privacy stance as trackPageView above (no visitor identifier, just
+// an aggregate daily count), extended with a type column so index.html
+// can report on basemap choice, search usage, and "My location" usage
+// (the gaps noted in the project's suggested-improvements list) without
+// adding a third-party analytics tool. Check numbers by opening that tab
+// directly, same as SiteVisits.
+function trackSiteEvent(type) {
+  if (!SITE_EVENT_TYPE_RE.test(String(type || ''))) return { ok: false };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    var sheet = SpreadsheetApp.getActive().getSheetByName(SITE_EVENTS_SHEET);
+    if (!sheet) return { ok: false };
+
+    var today = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd');
+    var rowIndex = null;
+    if (sheet.getLastRow() >= 2) {
+      var data = sheet.getRange('A2:B' + sheet.getLastRow()).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] === today && data[i][1] === type) { rowIndex = i + 2; break; }
+      }
+    }
+    if (!rowIndex) {
+      rowIndex = sheet.getLastRow() + 1;
+      sheet.getRange(rowIndex, 1).setValue(today);
+      sheet.getRange(rowIndex, 2).setValue(sanitizeForCell(type));
+      sheet.getRange(rowIndex, 3).setValue(0);
+    }
+    var cell = sheet.getRange(rowIndex, 3);
     cell.setValue((Number(cell.getValue()) || 0) + 1);
     return { ok: true };
   } finally {

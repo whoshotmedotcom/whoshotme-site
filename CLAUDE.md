@@ -160,9 +160,31 @@ framework, no bundler. Edit the files directly and refresh the browser.
    (~60%) for visitors who never open About. Not independently verified
    with a real mobile device/throttled network profile — worth a spot
    check if this becomes a priority again.
-8. **Add usage analytics beyond visit/click counts** — not done. Currently no
-   visibility into which basemap people actually use, search vs. scroll
-   behaviour, "My location" usage, etc.
+8. **Add usage analytics beyond visit/click counts** — **done**. Extended
+   the existing privacy-first counter pattern (no third-party tool, no
+   visitor identifier, just aggregate daily counts you check by opening a
+   sheet tab) rather than bolting on something new: a `SiteEvents` tab
+   (Date | EventType | Count), written via a new `trackSiteEvent` action
+   in `app-script.gs`, called from `index.html`'s `sendSiteEvent()`.
+   Tracks exactly the three gaps named above:
+   - `basemap_<name>` — fires on Leaflet's `baselayerchange`, slugified
+     from the layer's own display name so re-enabling OS Light/OS Outdoor
+     (currently commented out) doesn't need a matching code change here.
+   - `search_photographer_selected` / `search_place_selected` — fires
+     when a search result is actually clicked/activated, not on every
+     keystroke. Compare against total page views for a rough
+     searched-vs-just-scrolled split.
+   - `my_location_used` — fires only on a successful geolocation lookup,
+     and only that the feature was used - never the coordinates
+     themselves, consistent with the existing privacy notes on that
+     feature.
+   **Requires one manual setup step before it'll record anything**: add a
+   `SiteEvents` tab to the live Google Sheet with columns `Date`,
+   `EventType`, `Count` (same as the `SiteVisits` tab already there,
+   plus the type column) - see the updated setup notes at the top of
+   `app-script.gs`. Verified the event payloads fire correctly end-to-end
+   locally (basemap switch, search select, simulated geolocation) without
+   writing test data into the real sheet.
 9. **Keep Esri's non-commercial ToU restriction in mind if monetisation is
    ever considered** — not applicable yet (site isn't monetised).
 10. **Confirm Google Sheets version history is accessible** — not verified as
