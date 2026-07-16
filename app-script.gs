@@ -154,15 +154,27 @@ function maybeStamp(sheet, row) {
   if (locationCell.getValue() === '') return;
   if (tabNameCell.getValue() === '') return; // don't stamp until we know whose shoot this is
 
-  idCell.setValue(makeShootId(tabNameCell.getValue()));
+  idCell.setValue(makeShootId(sheet, tabNameCell.getValue()));
 }
 
 // Prefix is derived from the Shoot Tab Name itself now (e.g. "DavesShots"
 // -> "DS"), splitting on capital letters — there's no longer a per-tab B1
 // header cell with a separate display name to read, since Shoot Tab Name
 // is just a column value shared across everyone's rows in one sheet.
-function makeShootId(shootTabName) {
-  return shootTabNamePrefix(shootTabName) + '-' + Utilities.getUuid().substring(0, 6);
+//
+// The random suffix makes a collision unlikely but not impossible
+// (two photographers with similar names share a prefix, e.g. "PeakPursuit"
+// and "PhilPhotography" both -> "PP"), so this checks the generated ID
+// against existing rows and retries rather than trusting the odds.
+function makeShootId(sheet, shootTabName) {
+  var prefix = shootTabNamePrefix(shootTabName);
+  for (var attempt = 0; attempt < 10; attempt++) {
+    var candidate = prefix + '-' + Utilities.getUuid().substring(0, 6);
+    if (findRowByShootId(sheet, candidate) === null) return candidate;
+  }
+  // 10 straight collisions on a 16.7M-value space would mean something is
+  // very wrong, but fail safe with a longer suffix rather than looping forever.
+  return prefix + '-' + Utilities.getUuid().replace(/-/g, '').substring(0, 12);
 }
 
 function shootTabNamePrefix(shootTabName) {
@@ -341,7 +353,7 @@ function createShoot(p, shoot) {
   lock.waitLock(10000);
   try {
     var newRow = findLastDataRow(sheet) + 1;
-    var shootId = makeShootId(p);
+    var shootId = makeShootId(sheet, p);
     // Force Start/End (columns F, G) to plain text BEFORE writing. Without
     // this, Sheets auto-detects the "YYYY-MM-DD HH:MM" string as a
     // date/time and silently converts the cell into a real Date value —
