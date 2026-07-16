@@ -211,13 +211,34 @@
 
   /* ---- generic section styling ---- */
   section{ margin-bottom:28px; }
-  .section-head{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    margin-bottom:10px;
-  }
   h2{ margin:0; font-size:1rem; font-weight:800; letter-spacing:0.3px; }
+
+  /* ---- dashboard tabs ---- */
+  #dashTabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:24px;
+  }
+  .dash-tab{
+    flex:1;
+    background:none;
+    border:1px solid var(--line);
+    color:var(--past-grey);
+    border-radius:20px;
+    padding:10px 8px;
+    font-size:0.8rem;
+    font-weight:800;
+    text-align:center;
+    cursor:pointer;
+  }
+  .dash-tab:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); }
+  .dash-tab.active{
+    background:var(--hi-vis);
+    border-color:var(--hi-vis);
+    color:var(--asphalt);
+  }
+  #newShootSection{ margin-bottom:20px; }
+  #newShootSection .pill-btn{ width:100%; }
 
   /* ---- stats ---- */
   #statsRow{
@@ -277,6 +298,27 @@
   .shoot-status-group.status-group-soon .shoot-status-group-label{ color:var(--rust); }
   .shoot-status-group.status-group-past{ border-color:var(--past-grey); }
   .shoot-status-group.status-group-past .shoot-status-group-label{ color:var(--past-grey); }
+
+  /* Past shoots collapse behind a native <details> disclosure by default -
+     keeps the list from just growing forever as old shoots pile up,
+     without needing pagination for what's usually a handful of upcoming
+     shoots at a time. */
+  details.shoot-status-group{ padding-bottom:14px; }
+  details.shoot-status-group:not([open]){ padding-bottom:4px; }
+  summary.shoot-status-group-label{
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  summary.shoot-status-group-label::-webkit-details-marker{ display:none; }
+  summary.shoot-status-group-label::after{
+    content:'▸';
+    font-size:0.9rem;
+    transition:transform 0.15s ease;
+  }
+  details[open] > summary.shoot-status-group-label::after{ transform:rotate(90deg); }
 
   /* ---- shoot cards ---- */
   .shoot-card{
@@ -642,8 +684,6 @@
   }
   .ghost-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); }
 
-  #newShootBtn{ width:auto; flex:none; padding:9px 16px; font-size:0.82rem; }
-
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
 
   /* Informational, not blocking — a boxed callout rather than plain error
@@ -754,113 +794,122 @@
   </div>
 
   <div id="dashboard" class="hidden">
-    <section id="profileSection">
-      <h2>My profile</h2>
-      <div class="field">
-        <label for="profileNameInput">Name / page name <span class="required-mark" aria-hidden="true">*</span></label>
-        <input type="text" id="profileNameInput" required maxlength="80">
-      </div>
-      <div class="field">
-        <label for="profileWebsiteInput">Website, Facebook, or Instagram link</label>
-        <!-- type="text" not "url" - same reasoning as the gallery URL
-             field: native type="url" rejects a scheme-less value like
-             "facebook.com/you", which is what most people paste.
-             normalizeGalleryUrl() on the server adds http:// if it's
-             missing, same as gallery links. -->
-        <input type="text" id="profileWebsiteInput" maxlength="200" placeholder="facebook.com/yourpage">
-      </div>
-      <button id="saveProfileBtn" class="pill-btn">Save profile</button>
-      <p id="profileError" class="error-text hidden"></p>
-      <p id="profileHint">Want a logo/photo on your listing? That's coming soon.</p>
-    </section>
+    <div id="dashTabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="dash-tab active" data-tab="shoots" role="tab" aria-selected="true" id="tabBtn-shoots">My Shoots</button>
+      <button type="button" class="dash-tab" data-tab="add" role="tab" aria-selected="false" id="tabBtn-add">Add shoot</button>
+      <button type="button" class="dash-tab" data-tab="profile" role="tab" aria-selected="false" id="tabBtn-profile">Profile</button>
+    </div>
 
-    <section id="statsSection">
-      <h2>Your numbers so far</h2>
-      <div id="statsRow">
-        <div class="stat"><span class="stat-num" id="statPopups">–</span><span class="stat-label">Popup views</span></div>
-        <div class="stat"><span class="stat-num" id="statGallery">–</span><span class="stat-label">Gallery clicks</span></div>
-        <div class="stat"><span class="stat-num" id="statPage">–</span><span class="stat-label">Page link clicks</span></div>
-      </div>
-      <p id="statsHint">Counted from everyone who's viewed the public map - running totals, not per month.</p>
-    </section>
-
-    <section id="shareSection">
-      <h2>Share your listing</h2>
-      <p id="shareHint">This link shows just your shoots on the public map - safe to post anywhere, unlike this dashboard's link.</p>
-      <div id="shareLinkRow">
-        <input type="text" id="shareLinkInput" readonly aria-label="Your public share link">
-        <button id="copyShareLinkBtn" class="chip-btn">Copy</button>
-      </div>
-    </section>
-
-    <!-- Comes before "My Shoots" in the DOM (not just scrolled to) so
-         opening the form to add/edit a shoot appears above the shoots
-         list rather than requiring a scroll past it - see newShootBtn's
-         and each shoot's Edit button's click handlers. -->
-    <section id="formSection" class="hidden">
-      <h2 id="formHeading">Add a shoot</h2>
-      <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
-
-      <div class="two-col">
-        <div class="field">
-          <label for="startTime">Start<span class="required-mark" aria-hidden="true"> *</span></label>
-          <input type="datetime-local" id="startTime" step="300" required>
-        </div>
-        <div class="field">
-          <label for="endTime">End<span class="required-mark" aria-hidden="true"> *</span></label>
-          <input type="datetime-local" id="endTime" step="300" required>
-        </div>
-      </div>
-      <p id="timeHint" style="color:var(--past-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
-
-      <div class="field">
-        <label for="locationName">Location name<span class="required-mark" aria-hidden="true"> *</span></label>
-        <input type="text" id="locationName" placeholder="e.g. Winnats Pass, top of the climb" required>
-      </div>
-
-      <div class="field">
-        <label for="description">Description <span style="color:var(--past-grey); text-transform:none; font-weight:400;">(optional)</span></label>
-        <textarea id="description" placeholder="e.g. Good spot for hairpin shots"></textarea>
-      </div>
-
-      <div class="field">
-        <label>Location - tap the map to drop a pin<span class="required-mark" aria-hidden="true"> *</span></label>
-        <div id="locationSearchRow">
-          <input type="text" id="locationSearchInput" placeholder="Search a postcode or place to jump there…" autocomplete="off" aria-label="Search a postcode or place to jump the map there">
-          <button id="locationSearchClear" type="button" aria-label="Clear">✕</button>
-        </div>
-        <div id="locationSearchResults" role="listbox" aria-label="Location search results"></div>
-        <div id="mapWrap">
-          <div id="map"></div>
-          <div id="timeGateOverlay">📅 Set your start and end time above before placing a pin</div>
-        </div>
-        <p id="mapHint">Drag the pin afterwards to fine-tune it.</p>
-        <button id="useCurrentLocationBtn" type="button" class="chip-btn">📍 Use current location</button>
-        <p id="coordReadout" class="empty">No location set yet.</p>
-        <!-- Private to this form, never shown publicly and never written
-             back to anyone else's listing — see PROXIMITY CHECK in the
-             script for the full reasoning. Purely a heads-up so you can
-             message the other photographer yourself, same as you would
-             after spotting their event on Facebook. -->
-        <p id="proximityWarning" class="hidden" role="status" aria-live="polite"></p>
-      </div>
-
-      <div class="form-actions">
-        <button id="saveShootBtn" class="pill-btn">Save shoot</button>
-        <button id="cancelFormBtn" class="ghost-btn">Cancel</button>
-      </div>
-      <p id="formError" class="error-text hidden" role="alert"></p>
-    </section>
-
-    <section id="listSection">
-      <div class="section-head">
+    <div id="tabPanel-shoots" class="dash-panel" role="tabpanel" aria-labelledby="tabBtn-shoots">
+      <section id="listSection">
         <h2>My Shoots</h2>
+        <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
+        <div id="shootsList"></div>
+        <p id="emptyState" class="hidden">No shoots yet - head to the "Add shoot" tab to create your first one.</p>
+      </section>
+    </div>
+
+    <div id="tabPanel-add" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-add">
+      <section id="statsSection">
+        <h2>Your numbers so far</h2>
+        <div id="statsRow">
+          <div class="stat"><span class="stat-num" id="statPopups">–</span><span class="stat-label">Popup views</span></div>
+          <div class="stat"><span class="stat-num" id="statGallery">–</span><span class="stat-label">Gallery clicks</span></div>
+          <div class="stat"><span class="stat-num" id="statPage">–</span><span class="stat-label">Page link clicks</span></div>
+        </div>
+        <p id="statsHint">Counted from everyone who's viewed the public map - running totals, not per month.</p>
+      </section>
+
+      <section id="shareSection">
+        <h2>Share your listing</h2>
+        <p id="shareHint">This link shows just your shoots on the public map - safe to post anywhere, unlike this dashboard's link.</p>
+        <div id="shareLinkRow">
+          <input type="text" id="shareLinkInput" readonly aria-label="Your public share link">
+          <button id="copyShareLinkBtn" class="chip-btn">Copy</button>
+        </div>
+      </section>
+
+      <section id="newShootSection">
         <button id="newShootBtn" class="pill-btn">+ Add shoot</button>
-      </div>
-      <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
-      <div id="shootsList"></div>
-      <p id="emptyState" class="hidden">No shoots yet - tap "+ Add shoot" to create your first one.</p>
-    </section>
+      </section>
+
+      <section id="formSection" class="hidden">
+        <h2 id="formHeading">Add a shoot</h2>
+        <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
+
+        <div class="two-col">
+          <div class="field">
+            <label for="startTime">Start<span class="required-mark" aria-hidden="true"> *</span></label>
+            <input type="datetime-local" id="startTime" step="300" required>
+          </div>
+          <div class="field">
+            <label for="endTime">End<span class="required-mark" aria-hidden="true"> *</span></label>
+            <input type="datetime-local" id="endTime" step="300" required>
+          </div>
+        </div>
+        <p id="timeHint" style="color:var(--past-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
+
+        <div class="field">
+          <label for="locationName">Location name<span class="required-mark" aria-hidden="true"> *</span></label>
+          <input type="text" id="locationName" placeholder="e.g. Winnats Pass, top of the climb" required>
+        </div>
+
+        <div class="field">
+          <label for="description">Description <span style="color:var(--past-grey); text-transform:none; font-weight:400;">(optional)</span></label>
+          <textarea id="description" placeholder="e.g. Good spot for hairpin shots"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Location - tap the map to drop a pin<span class="required-mark" aria-hidden="true"> *</span></label>
+          <div id="locationSearchRow">
+            <input type="text" id="locationSearchInput" placeholder="Search a postcode or place to jump there…" autocomplete="off" aria-label="Search a postcode or place to jump the map there">
+            <button id="locationSearchClear" type="button" aria-label="Clear">✕</button>
+          </div>
+          <div id="locationSearchResults" role="listbox" aria-label="Location search results"></div>
+          <div id="mapWrap">
+            <div id="map"></div>
+            <div id="timeGateOverlay">📅 Set your start and end time above before placing a pin</div>
+          </div>
+          <p id="mapHint">Drag the pin afterwards to fine-tune it.</p>
+          <button id="useCurrentLocationBtn" type="button" class="chip-btn">📍 Use current location</button>
+          <p id="coordReadout" class="empty">No location set yet.</p>
+          <!-- Private to this form, never shown publicly and never written
+               back to anyone else's listing — see PROXIMITY CHECK in the
+               script for the full reasoning. Purely a heads-up so you can
+               message the other photographer yourself, same as you would
+               after spotting their event on Facebook. -->
+          <p id="proximityWarning" class="hidden" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="form-actions">
+          <button id="saveShootBtn" class="pill-btn">Save shoot</button>
+          <button id="cancelFormBtn" class="ghost-btn">Cancel</button>
+        </div>
+        <p id="formError" class="error-text hidden" role="alert"></p>
+      </section>
+    </div>
+
+    <div id="tabPanel-profile" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-profile">
+      <section id="profileSection">
+        <h2>My profile</h2>
+        <div class="field">
+          <label for="profileNameInput">Name / page name <span class="required-mark" aria-hidden="true">*</span></label>
+          <input type="text" id="profileNameInput" required maxlength="80">
+        </div>
+        <div class="field">
+          <label for="profileWebsiteInput">Website, Facebook, or Instagram link</label>
+          <!-- type="text" not "url" - same reasoning as the gallery URL
+               field: native type="url" rejects a scheme-less value like
+               "facebook.com/you", which is what most people paste.
+               normalizeGalleryUrl() on the server adds http:// if it's
+               missing, same as gallery links. -->
+          <input type="text" id="profileWebsiteInput" maxlength="200" placeholder="facebook.com/yourpage">
+        </div>
+        <button id="saveProfileBtn" class="pill-btn">Save profile</button>
+        <p id="profileError" class="error-text hidden"></p>
+        <p id="profileHint">Want a logo/photo on your listing? That's coming soon.</p>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -915,6 +964,43 @@ const KEY = params.get('key');
 
 const authGate = document.getElementById('authGate');
 const dashboard = document.getElementById('dashboard');
+
+// =========================================================================
+// Dashboard tabs — Add shoot / My Shoots / Profile. "Add shoot" is the
+// default/landing tab since that's the thing photographers come here to
+// do most often; switching tabs never resets form state, it just hides
+// panels, so leaving "Add shoot" mid-form and coming back keeps your
+// in-progress entry.
+// =========================================================================
+const dashTabsEl = document.getElementById('dashTabs');
+const tabPanels = {
+  add: document.getElementById('tabPanel-add'),
+  shoots: document.getElementById('tabPanel-shoots'),
+  profile: document.getElementById('tabPanel-profile'),
+};
+
+function switchTab(name){
+  Object.entries(tabPanels).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
+  dashTabsEl.querySelectorAll('.dash-tab').forEach(btn => {
+    const active = btn.dataset.tab === name;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  // The pin-drop map lives inside the "Add shoot" tab and Leaflet caches
+  // container size at init - if the tab (or the form within it) was
+  // hidden when the map last sized itself, it needs a nudge now that
+  // it's on-screen again. See the map.invalidateSize() note elsewhere
+  // in this file for the fuller explanation.
+  if (name === 'add' && typeof map !== 'undefined' && !formSection.classList.contains('hidden')){
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+}
+
+dashTabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.dash-tab');
+  if (!btn) return;
+  switchTab(btn.dataset.tab);
+});
 
 function showAuthGateMessage(title, body){
   authGate.innerHTML = `<h2>${title}</h2><p>${body}</p>`;
@@ -1602,6 +1688,7 @@ function toDatetimeLocalValue(sheetValue){
 }
 
 function openFormForCreate(){
+  switchTab('add');
   editingShootId = null;
   formHeading.textContent = 'Add a shoot';
   saveShootBtn.textContent = 'Save shoot';
@@ -1619,6 +1706,7 @@ function openFormForCreate(){
 }
 
 function openFormForEdit(shoot){
+  switchTab('add');
   editingShootId = shoot.shootId;
   formHeading.textContent = 'Edit shoot';
   saveShootBtn.textContent = 'Save changes';
@@ -1866,6 +1954,17 @@ function renderShoots(shoots){
   shootsListEl.innerHTML = groups.map(g => {
     const inGroup = withDates.filter(s => getStatus(s.startDate, s.endDate) === g.status);
     if (!inGroup.length) return '';
+    // Past shoots collapse by default (native <details>) so old listings
+    // don't just make the page longer forever; live/upcoming stay open
+    // since those are what you're actually acting on.
+    if (g.status === 'past'){
+      return `
+        <details class="shoot-status-group ${g.cls}">
+          <summary class="shoot-status-group-label">${g.label} (${inGroup.length})</summary>
+          ${inGroup.map(shootCardHtml).join('')}
+        </details>
+      `;
+    }
     return `
       <div class="shoot-status-group ${g.cls}">
         <p class="shoot-status-group-label">${g.label} (${inGroup.length})</p>
