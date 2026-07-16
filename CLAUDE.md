@@ -22,12 +22,18 @@ framework, no bundler. Edit the files directly and refresh the browser.
   - **Main workbook** (public, link-shared for the CSV feeds to work): a
     shared `Shoots` tab (all photographers' shoots, one row per shoot,
     distinguished by a `Shoot Tab Name` column) and a shared `Galleries`
-    tab (same idea). `Combined`/`Combined Galleries` are formula-driven
-    views over those two tabs for the public site to read; `PhotographersImport`
-    is a one-way `IMPORTRANGE` mirror of the other workbook's non-secret
-    columns. Redesigned 16/07/2026 from an earlier one-tab-per-photographer
-    layout specifically so **adding a photographer is just one row** in the
-    Photographers workbook below — no tabs to create, no formulas to edit.
+    tab (same idea). `GALLERIES_CSV_URL` publishes the `Galleries` tab
+    directly (no formula tab in between — `index.html`'s own
+    `groupGalleriesByShootId()` already filters blank/unsafe URLs and reads
+    columns by name, so a "Combined Galleries" intermediate was pure
+    redundancy and was removed 16/07/2026). `Combined` is still a
+    formula-driven view over `Shoots` for the public site to read, since it
+    genuinely joins in photographer details (name/logo/website) that
+    `Shoots` doesn't have. `PhotographersImport` is a one-way `IMPORTRANGE`
+    mirror of the other workbook's non-secret columns. Redesigned
+    16/07/2026 from an earlier one-tab-per-photographer layout specifically
+    so **adding a photographer is just one row** in the Photographers
+    workbook below — no tabs to create, no formulas to edit.
     `app-script.gs`'s own header comment has the full column layout and an
     "ADDING A NEW PHOTOGRAPHER" walkthrough.
   - **Photographers workbook** (private, kept Restricted): one row per

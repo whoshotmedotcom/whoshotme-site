@@ -68,8 +68,12 @@
   2. Under "Link", choose the "Combined" tab (not "Entire document") and
      format "Comma-separated values (.csv)", then click Publish and copy
      the URL it gives you into COMBINED_CSV_URL below.
-  3. Repeat for the "Combined Galleries" tab into GALLERIES_CSV_URL below.
-     If you don't use galleries, leave this one as-is — it fails quietly.
+  3. Repeat for the "Galleries" tab into GALLERIES_CSV_URL below — read
+     directly, no "Combined Galleries" formula tab needed (this page's
+     own groupGalleriesByShootId() already filters out blank/unsafe URLs
+     itself, and reads columns by name, so the extra Shoot Tab Name
+     column Galleries has is simply ignored). If you don't use galleries,
+     leave this one as-is — it fails quietly.
   Any edit to the sheet (once protections/permissions are set up per the
   Instructions tab) appears on the site the next time someone loads the
   page — no redeploy needed.
