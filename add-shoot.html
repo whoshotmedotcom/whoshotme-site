@@ -629,7 +629,18 @@
     height:34px !important;
     border-radius:50% !important;
   }
-  .leaflet-control-layers label{ font-size:0.8rem; color:var(--paper); }
+  /* Overrides text-transform/font-weight, not just size/color - #mapWrap
+     sits inside a .field div, and .field label's uppercase/bold styling
+     (meant for this form's own field labels) otherwise leaks into
+     Leaflet's own dynamically-injected <label> elements here, since CSS
+     descendant selectors don't care how a label element got there. */
+  .leaflet-control-layers label{
+    font-size:0.82rem;
+    color:var(--paper);
+    text-transform:none;
+    font-weight:400;
+    letter-spacing:normal;
+  }
   .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
   .leaflet-control-layers-separator{ border-color:var(--line) !important; }
 
