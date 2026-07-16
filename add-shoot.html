@@ -367,10 +367,14 @@
   }
   /* Same rust as the label's required-mark asterisk, carried onto the
      input itself so the mandatory fields stand out before you've even
-     read the label - not just at the moment validation fails. Placed
-     before the :focus rule below so clicking into the field still shows
-     the normal hi-vis focus border, not this. */
-  .field input:required{ border-color:var(--rust); }
+     read the label - not just at the moment validation fails. Class-
+     driven (not a bare :required selector) so it can also come OFF once
+     a field is actually filled in correctly - see the JS that toggles
+     .needs-input for what "correctly" means per field (e.g. End also
+     has to be after Start, not just non-empty). Placed before the
+     :focus rule below so clicking into the field still shows the normal
+     hi-vis focus border, not this. */
+  .field input.needs-input{ border-color:var(--rust); }
   /* Browsers render the datetime-local field's calendar/clock icon using their
      own light-theme default even with color-scheme:dark set at root — this is
      a Chrome/Edge-specific belt-and-suspenders fix for the icon itself.
@@ -1476,6 +1480,24 @@ const endEl = document.getElementById('endTime');
 // is used as-is.
 startEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
 endEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
+
+// Rust border (.needs-input, see CSS) comes off once a required field is
+// actually filled in correctly, not just at the moment validation fails
+// on submit - the asterisk stays either way. "Correctly" isn't just
+// "non-empty" for End: it also has to be after Start, matching the real
+// check at save time, so editing Start re-checks End's styling too, not
+// just its own. Live (on 'input'), not just on blur/change, and also
+// called once whenever the form opens (create or edit) so a pre-filled
+// edit starts in the right state instead of flashing rust first.
+function updateRequiredFieldStyles(){
+  locationNameEl.classList.toggle('needs-input', !locationNameEl.value.trim());
+  startEl.classList.toggle('needs-input', !startEl.value);
+  endEl.classList.toggle('needs-input', !endEl.value || endEl.value <= startEl.value);
+}
+locationNameEl.addEventListener('input', updateRequiredFieldStyles);
+startEl.addEventListener('input', updateRequiredFieldStyles);
+endEl.addEventListener('input', updateRequiredFieldStyles);
+
 const formSection = document.getElementById('formSection');
 const formHeading = document.getElementById('formHeading');
 const formError = document.getElementById('formError');
@@ -1501,6 +1523,7 @@ function openFormForCreate(){
   startEl.value = '';
   endEl.value = '';
   updateTimeGate(); // both times just got cleared — re-lock the map
+  updateRequiredFieldStyles();
   clearPin();
   formError.classList.add('hidden');
   formSection.classList.remove('hidden');
@@ -1517,6 +1540,7 @@ function openFormForEdit(shoot){
   startEl.value = toDatetimeLocalValue(shoot.start);
   endEl.value = toDatetimeLocalValue(shoot.end);
   updateTimeGate(); // an existing shoot always has both times already — map should be unlocked
+  updateRequiredFieldStyles();
   clearPin();
   dropPin(L.latLng(shoot.lat, shoot.lng), true);
   formError.classList.add('hidden');
@@ -1594,6 +1618,16 @@ const saveGalleryBtn = document.getElementById('saveGalleryBtn');
 let galleryShootId = null;
 let galleryEditRow = null; // null = adding a new gallery, otherwise the row of the one being edited
 
+// Same "rust comes off once actually filled in" treatment as the main
+// form's updateRequiredFieldStyles - both fields here are just
+// non-empty checks, no cross-field dependency like Start/End has.
+function updateGalleryFieldStyles(){
+  galleryLabelEl.classList.toggle('needs-input', !galleryLabelEl.value.trim());
+  galleryUrlEl.classList.toggle('needs-input', !galleryUrlEl.value.trim());
+}
+galleryLabelEl.addEventListener('input', updateGalleryFieldStyles);
+galleryUrlEl.addEventListener('input', updateGalleryFieldStyles);
+
 function openGalleryModal(shootId){
   galleryShootId = shootId;
   galleryEditRow = null;
@@ -1601,6 +1635,7 @@ function openGalleryModal(shootId){
   saveGalleryBtn.textContent = 'Add gallery';
   galleryLabelEl.value = '';
   galleryUrlEl.value = '';
+  updateGalleryFieldStyles();
   galleryError.classList.add('hidden');
   galleryModal.classList.remove('hidden');
 }
@@ -1611,6 +1646,7 @@ function openGalleryModalForEdit(shootId, gallery){
   saveGalleryBtn.textContent = 'Save changes';
   galleryLabelEl.value = gallery.label || '';
   galleryUrlEl.value = gallery.url || '';
+  updateGalleryFieldStyles();
   galleryError.classList.add('hidden');
   galleryModal.classList.remove('hidden');
 }
