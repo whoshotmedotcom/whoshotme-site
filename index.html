@@ -973,15 +973,6 @@
     inset:-3px;
     border-radius:50%;
     border:3px solid var(--hi-vis);
-    /* Dark outline on top of the bright border - same contrast trick as
-       the camera-flash star (dark shape behind a bright one), just done
-       via box-shadow here instead of a second element, since box-shadow
-       isn't one of the animated properties (only transform/opacity are)
-       so it scales along with the ring for free rather than costing an
-       extra repaint. Without this the plain hi-vis ring washed out
-       against OS Road's pale colors - fine on the (much busier, higher-
-       contrast) Aerial basemap, not fine here. */
-    box-shadow:0 0 0 1px var(--asphalt);
     animation:clusterPulse 1.6s infinite;
     pointer-events:none;
   }
@@ -1941,11 +1932,6 @@ styleTag.textContent = `
     inset:-3px;
     border-radius:50%;
     border:3px solid #d4ff3f;
-    /* Dark contrast outline, same reasoning as .whoshotme-cluster.cluster-live::after
-       above - the plain hi-vis ring washed out against OS Road's pale
-       colors (fine on Aerial, not here). box-shadow isn't animated so
-       this costs nothing extra. */
-    box-shadow:0 0 0 1px #1c1e22;
     animation:pulse 1.6s infinite;
     pointer-events:none;
   }
