@@ -1467,37 +1467,15 @@ const locationNameEl = document.getElementById('locationName');
 const descriptionEl = document.getElementById('description');
 const startEl = document.getElementById('startTime');
 const endEl = document.getElementById('endTime');
-// step="300" on these inputs (see the HTML) is unreliable in practice -
-// browsers are notoriously inconsistent about honouring `step` for a
-// datetime-local control's own arrow-key/spinner segment editing (this
-// is a native browser/OS widget, not something CSS/JS can restyle or
-// constrain from the outside), and typing a value directly bypasses it
-// completely regardless of browser, since there's no <form> here to ever
-// trigger the native step-mismatch validation it'd otherwise produce.
-// Snapping on 'change' is what actually makes 5-minute increments a real
-// constraint on the value that ends up saved. Deliberately NOT also on
-// 'input': that fires after every single keystroke, and each digit typed
-// into the minute segment is immediately treated as a complete padded
-// value by the browser (typing just the "1" of "12" already reads as
-// minute=01, not "incomplete") - snapping that would round the "1" alone
-// to 0 before the "2" could ever be typed, corrupting entry before it's
-// finished. 'change' only fires once the segment is actually committed
-// (both digits typed, or the field is left), so it corrects the real
-// final value without fighting the typing process itself. The tradeoff:
-// the native picker's own popup may still visually allow scrolling
-// through any minute while it's open - that's the browser's own widget
-// chrome, outside what CSS/JS can restyle - but whatever value actually
-// ends up in the field always gets corrected to a multiple of 5.
-function snapToFiveMinutes(inputEl){
-  if (!inputEl.value) return;
-  const d = new Date(inputEl.value);
-  if (isNaN(d)) return;
-  d.setMinutes(Math.round(d.getMinutes() / 5) * 5, 0, 0);
-  const pad = n => String(n).padStart(2, '0');
-  inputEl.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-startEl.addEventListener('change', () => { snapToFiveMinutes(startEl); updateTimeGate(); updateProximityWarning(); });
-endEl.addEventListener('change', () => { snapToFiveMinutes(endEl); updateTimeGate(); updateProximityWarning(); });
+// step="300" (see the HTML) is left as a soft hint to browsers that do
+// honour it for their own spinner/picker UI. Tried enforcing 5-minute
+// increments harder with JS (snapping the value on input/change), but
+// rewriting a focused native datetime-local control's value from under
+// the user fought the browser's own typing/segment-focus behaviour more
+// than it helped - reverted. Whatever value the picker actually supplies
+// is used as-is.
+startEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
+endEl.addEventListener('change', () => { updateTimeGate(); updateProximityWarning(); });
 const formSection = document.getElementById('formSection');
 const formHeading = document.getElementById('formHeading');
 const formError = document.getElementById('formError');
