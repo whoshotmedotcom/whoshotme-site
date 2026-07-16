@@ -237,8 +237,6 @@
     border-color:var(--hi-vis);
     color:var(--asphalt);
   }
-  #newShootSection{ margin-bottom:20px; }
-  #newShootSection .pill-btn{ width:100%; }
 
   /* ---- stats ---- */
   #statsRow{
@@ -298,10 +296,9 @@
   .shoot-status-group.status-group-past{ border-color:var(--past-grey); }
   .shoot-status-group.status-group-past .shoot-status-group-label{ color:var(--past-grey); }
 
-  /* Past shoots collapse behind a native <details> disclosure by default -
-     keeps the list from just growing forever as old shoots pile up,
-     without needing pagination for what's usually a handful of upcoming
-     shoots at a time. */
+  /* Each status group is a native <details> disclosure (expanded by
+     default) so a long shoot history can be collapsed away without
+     needing pagination. */
   details.shoot-status-group{ padding-bottom:14px; }
   details.shoot-status-group:not([open]){ padding-bottom:4px; }
   summary.shoot-status-group-label{
@@ -314,7 +311,9 @@
   summary.shoot-status-group-label::-webkit-details-marker{ display:none; }
   summary.shoot-status-group-label::after{
     content:'▸';
-    font-size:0.9rem;
+    font-size:1.3rem;
+    font-weight:800;
+    line-height:1;
     transition:transform 0.15s ease;
   }
   details[open] > summary.shoot-status-group-label::after{ transform:rotate(90deg); }
@@ -819,11 +818,7 @@
         </div>
       </section>
 
-      <section id="newShootSection">
-        <button id="newShootBtn" class="pill-btn">+ Add shoot</button>
-      </section>
-
-      <section id="formSection" class="hidden">
+      <section id="formSection">
         <h2 id="formHeading">Add a shoot</h2>
         <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
 
@@ -985,11 +980,11 @@ function switchTab(name){
     btn.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   // The pin-drop map lives inside the "Add shoot" tab and Leaflet caches
-  // container size at init - if the tab (or the form within it) was
-  // hidden when the map last sized itself, it needs a nudge now that
-  // it's on-screen again. See the map.invalidateSize() note elsewhere
-  // in this file for the fuller explanation.
-  if (name === 'add' && typeof map !== 'undefined' && !formSection.classList.contains('hidden')){
+  // container size at init - if the tab was hidden when the map last
+  // sized itself, it needs a nudge now that it's on-screen again. See
+  // the map.invalidateSize() note elsewhere in this file for the fuller
+  // explanation.
+  if (name === 'add' && typeof map !== 'undefined'){
     setTimeout(() => map.invalidateSize(), 50);
   }
 }
@@ -1685,8 +1680,11 @@ function toDatetimeLocalValue(sheetValue){
   return sheetValue.replace(' ', 'T');
 }
 
-function openFormForCreate(){
-  switchTab('add');
+// Resets the form back to a blank "Add a shoot" state - the form is
+// always visible on the Add shoot tab now (no separate +Add shoot
+// trigger), so this is what "start a new one" means: reset in place,
+// don't show/hide anything.
+function resetShootForm(){
   editingShootId = null;
   formHeading.textContent = 'Add a shoot';
   saveShootBtn.textContent = 'Save shoot';
@@ -1698,9 +1696,12 @@ function openFormForCreate(){
   updateRequiredFieldStyles();
   clearPin();
   formError.classList.add('hidden');
-  formSection.classList.remove('hidden');
+}
+
+function openFormForCreate(){
+  switchTab('add');
+  resetShootForm();
   formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => map.invalidateSize(), 200); // map was hidden, Leaflet needs a nudge
 }
 
 function openFormForEdit(shoot){
@@ -1717,15 +1718,11 @@ function openFormForEdit(shoot){
   clearPin();
   dropPin(L.latLng(shoot.lat, shoot.lng), true);
   formError.classList.add('hidden');
-  formSection.classList.remove('hidden');
   formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => map.invalidateSize(), 200);
+  setTimeout(() => map.invalidateSize(), 200); // tab may have been hidden, Leaflet needs a nudge
 }
 
-document.getElementById('newShootBtn').addEventListener('click', openFormForCreate);
-document.getElementById('cancelFormBtn').addEventListener('click', () => {
-  formSection.classList.add('hidden');
-});
+document.getElementById('cancelFormBtn').addEventListener('click', resetShootForm);
 
 saveShootBtn.addEventListener('click', async () => {
   formError.classList.add('hidden');
@@ -1771,8 +1768,9 @@ saveShootBtn.addEventListener('click', async () => {
       formError.textContent = result.error;
       formError.classList.remove('hidden');
     } else {
-      formSection.classList.add('hidden');
-      showToast((editingShootId ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
+      const wasEditing = !!editingShootId;
+      resetShootForm();
+      showToast((wasEditing ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
       await loadShoots();
     }
   } catch (err) {
@@ -1949,25 +1947,17 @@ function renderShoots(shoots){
     { status: 'soon', label: 'Upcoming', cls: 'status-group-soon' },
     { status: 'past', label: 'Past', cls: 'status-group-past' }
   ];
+  // All three groups are collapsible (native <details>), all expanded by
+  // default - the collapse is there so a long history doesn't force
+  // endless scrolling, not to hide anything by default.
   shootsListEl.innerHTML = groups.map(g => {
     const inGroup = withDates.filter(s => getStatus(s.startDate, s.endDate) === g.status);
     if (!inGroup.length) return '';
-    // Past shoots collapse by default (native <details>) so old listings
-    // don't just make the page longer forever; live/upcoming stay open
-    // since those are what you're actually acting on.
-    if (g.status === 'past'){
-      return `
-        <details class="shoot-status-group ${g.cls}">
-          <summary class="shoot-status-group-label">${g.label} (${inGroup.length})</summary>
-          ${inGroup.map(shootCardHtml).join('')}
-        </details>
-      `;
-    }
     return `
-      <div class="shoot-status-group ${g.cls}">
-        <p class="shoot-status-group-label">${g.label} (${inGroup.length})</p>
+      <details class="shoot-status-group ${g.cls}" open>
+        <summary class="shoot-status-group-label">${g.label} (${inGroup.length})</summary>
         ${inGroup.map(shootCardHtml).join('')}
-      </div>
+      </details>
     `;
   }).join('');
 }
@@ -2132,6 +2122,8 @@ async function init(){
     await loadShoots();
     authGate.classList.add('hidden');
     dashboard.classList.remove('hidden');
+    resetShootForm(); // the form is visible by default now, so set its initial gated/blank state
+    setTimeout(() => map.invalidateSize(), 200); // map container was hidden behind #authGate until just now
     populateShareLink();
     loadStats(); // fire-and-forget — dashboard works fine even if this fails
     loadOtherPhotographersShoots().then(updateProximityWarning); // fire-and-forget too — proximity check just has less to work with until this resolves
