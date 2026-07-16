@@ -1073,11 +1073,15 @@ const OS_ATTRIBUTION = 'Contains OS data &copy; Crown copyright and database rig
 // here, the placement pin) opening/reacting then immediately reverting on
 // some Android touch browsers, Samsung Internet included.
 const map = L.map('map', { zoomControl: true, attributionControl: false, tap: false, maxBoundsViscosity: 1.0 }).setView([53.18, -1.72], 10);
-// Keep the UK in view — see index.html for the full reasoning. Same box,
-// same hard-stop viscosity, so a photographer placing a pin can't drift
-// off the map entirely by accident.
+// UK_BOUNDS stays the tight coordinate-validation box (checked below at
+// save time, and mirrored in app-script.gs's validateShoot - keep all
+// three in sync if this ever changes). Panning uses a deliberately much
+// wider MAP_PAN_BOUNDS instead - see index.html for the full reasoning -
+// so a photographer can't drift off the map entirely by accident, but
+// isn't hemmed in right at the coastline while placing a pin either.
 const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
-map.setMaxBounds(UK_BOUNDS);
+const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -14.15], [64.125, 5.35]);
+map.setMaxBounds(MAP_PAN_BOUNDS);
 L.control.attribution({ prefix: false }).addTo(map);
 
 // The free OpenData plan only serves OS Maps API tiles up to z16 — z17+

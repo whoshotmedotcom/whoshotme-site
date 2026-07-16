@@ -1477,8 +1477,13 @@ const map = L.map('map', { zoomControl: false, attributionControl: false, tap: f
 // completely free; zoomed out, it's what stops the map drifting off to
 // another continent. maxBoundsViscosity:1.0 (set above) makes it a hard
 // stop rather than a rubber-band bounce-back.
-const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
-map.setMaxBounds(UK_BOUNDS);
+// Deliberately much wider than the UK's actual coastline (which is
+// roughly 49.9–60.9 lat, -8.6–1.8 lng) - this is just how far you can pan
+// before hitting a hard stop, not a claim about where the UK actually is,
+// so there's no reason to hug the coastline tightly. Original span +50%
+// on both axes, extended symmetrically so the centre doesn't shift.
+const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -14.15], [64.125, 5.35]);
+map.setMaxBounds(MAP_PAN_BOUNDS);
 // Same reflow issue as the banners (see applyPhotographerFilterFromUrl) but
 // triggered by rotation or the on-screen keyboard opening/closing (e.g.
 // tapping the search box) — setRealVH() already corrects the CSS height
