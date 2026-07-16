@@ -15,6 +15,30 @@
  *      those tabs directly. SiteEvents needs three columns: Date,
  *      EventType, Count.
  *
+ * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
+ * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
+ * "Galleries" tab, distinguished by a Shoot Tab Name column on each row -
+ * not one pair of tabs per photographer like earlier versions of this
+ * script. This means adding a new photographer is just one row in the
+ * Photographers workbook - no tabs to create, no formulas to edit. See
+ * "ADDING A NEW PHOTOGRAPHER" below.
+ *
+ * Because everyone's data now shares one sheet instead of being isolated
+ * by tab, every write (update/delete a shoot, add/edit/delete a gallery)
+ * explicitly re-checks that the row being touched actually belongs to the
+ * authenticated photographer (p) before allowing it - see the comments on
+ * updateShoot/deleteShoot/addGallery/updateGallery/deleteGallery. This
+ * used to be implicit (a photographer's Apps Script calls only ever
+ * looked at their own tab, so there was nothing else to touch); it isn't
+ * implicit anymore, so don't remove those checks when editing this file.
+ *
+ * SHEET LAYOUTS:
+ *   Shoots:    A=Shoot ID, B=Location Name, C=Description, D=Lat, E=Lng,
+ *              F=Start, G=End, H=Shoot Tab Name. Header row 1, data from
+ *              row 2 (no more 3-row per-tab header block).
+ *   Galleries: A=Shoot ID, B=Gallery Label, C=Gallery URL,
+ *              D=Shoot Tab Name. Header row 1, data from row 2.
+ *
  * SETUP (one-time):
  * 1. Open the Google Sheet, then Extensions > Apps Script.
  * 2. Delete any starter code and paste this whole file in. Save.
@@ -38,6 +62,18 @@
  *    that spreadsheet's ID. Leave it blank if Photographers still lives in
  *    this same spreadsheet.
  *
+ * ADDING A NEW PHOTOGRAPHER (this is now the entire process):
+ * 1. Add a row for them in the Photographers workbook: name, logo,
+ *    website, contact email, a new unique Shoot Tab Name (any short
+ *    identifier with no spaces, e.g. "NewPhotographer" - it's just a
+ *    value in a column now, not an actual sheet tab), and a freshly
+ *    generated Secret Key.
+ * 2. Send them their personal add-shoot.html link (see step 5 above).
+ * That's it - no tabs to create, no formulas to touch. Their shoots will
+ * appear in Combined/Combined Galleries automatically the moment they
+ * save their first one, because those formulas read the shared Shoots/
+ * Galleries tabs directly rather than naming tabs individually.
+ *
  * IMPORTANT: if you ever change the code below, you must Deploy > Manage
  * deployments > edit (pencil) > New version > Deploy again for the change
  * to actually take effect — saving the file alone only updates what you
@@ -45,6 +81,8 @@
  */
 
 const PHOTOGRAPHERS_SHEET = 'Photographers';
+const SHOOTS_SHEET = 'Shoots';
+const GALLERIES_SHEET = 'Galleries';
 const STATS_SHEET = 'Stats';
 const SITE_VISITS_SHEET = 'SiteVisits';
 const SITE_EVENTS_SHEET = 'SiteEvents';
@@ -89,12 +127,13 @@ function sanitizeForCell(value){
 }
 
 // =========================================================================
-// PART 1 — auto-stamping Shoot IDs on manual sheet edits (unchanged from
-// before; still useful as a safety net if you ever edit a tab by hand).
+// PART 1 — auto-stamping Shoot IDs on manual sheet edits (a fallback for
+// hand-editing the Shoots tab directly; most shoots are stamped by the Web
+// App itself instead, see createShoot below).
 // =========================================================================
 function stampShootId(e) {
   var sheet = e.range.getSheet();
-  if (!isShootTab(sheet)) return;
+  if (sheet.getName() !== SHOOTS_SHEET) return;
 
   var startRow = e.range.getRow();
   var numRows = e.range.getNumRows();
@@ -104,27 +143,41 @@ function stampShootId(e) {
   }
 }
 
-function isShootTab(sheet) {
-  return sheet.getRange('A1').getValue() === 'Photographer Name:';
-}
-
 function maybeStamp(sheet, row) {
-  if (row < 4) return;
+  if (row < 2) return; // header row
 
   var idCell = sheet.getRange(row, 1);
   var locationCell = sheet.getRange(row, 2);
+  var tabNameCell = sheet.getRange(row, 8);
 
   if (idCell.getValue() !== '') return;
   if (locationCell.getValue() === '') return;
+  if (tabNameCell.getValue() === '') return; // don't stamp until we know whose shoot this is
 
-  idCell.setValue(makeShootId(sheet));
+  idCell.setValue(makeShootId(tabNameCell.getValue()));
 }
 
-function makeShootId(sheet) {
-  var nameParts = String(sheet.getRange('B1').getValue()).trim().split(/\s+/);
-  var prefix = nameParts.map(function (w) { return w.charAt(0); }).join('').toUpperCase();
-  if (!prefix) prefix = sheet.getName().substring(0, 2).toUpperCase();
-  return prefix + '-' + Utilities.getUuid().substring(0, 6);
+// Prefix is derived from the Shoot Tab Name itself now (e.g. "DavesShots"
+// -> "DS"), splitting on capital letters — there's no longer a per-tab B1
+// header cell with a separate display name to read, since Shoot Tab Name
+// is just a column value shared across everyone's rows in one sheet.
+function makeShootId(shootTabName) {
+  return shootTabNamePrefix(shootTabName) + '-' + Utilities.getUuid().substring(0, 6);
+}
+
+function shootTabNamePrefix(shootTabName) {
+  var name = String(shootTabName || '');
+  // Two alternatives so a trailing acronym stays one "word" instead of
+  // splitting into separate letters - "TrailShotsUK" -> Trail/Shots/UK
+  // (initials TSU), not Trail/Shots/U/K (TSUK). A run of capitals only
+  // matches as its own word when NOT followed by a lowercase letter;
+  // otherwise the normal "one capital + following lowercase" word wins.
+  var words = name.match(/[A-Z]+(?![a-z])|[A-Z][a-z0-9]*/g);
+  if (words && words.length) {
+    var initials = words.map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+    if (initials) return initials;
+  }
+  return (name.substring(0, 2) || 'XX').toUpperCase();
 }
 
 // =========================================================================
@@ -240,16 +293,17 @@ function formatDateCell(value) {
 
 function getMyShoots(p, key) {
   if (!authenticate(p, key)) return { error: 'Not authorized' };
-  var sheet = SpreadsheetApp.getActive().getSheetByName(p);
-  if (!sheet) return { error: 'Unknown photographer tab' };
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  if (!sheet) return { error: 'Shoots tab not found' };
 
   var galleries = getGalleriesForTab(p);
-  var data = sheet.getRange('A4:G').getValues();
+  var data = sheet.getDataRange().getValues();
   var shoots = [];
-  for (var i = 0; i < data.length; i++) {
+  for (var i = 1; i < data.length; i++) { // start at 1 to skip the header row
     var row = data[i];
-    var shootId = row[0], location = row[1];
+    var shootId = row[0], location = row[1], tabName = row[7];
     if (!location) continue;
+    if (tabName !== p) continue; // only this photographer's own shoots
     shoots.push({
       shootId: shootId,
       location: location,
@@ -280,14 +334,14 @@ function createShoot(p, shoot) {
   var problem = validateShoot(shoot);
   if (problem) return { error: problem };
 
-  var sheet = SpreadsheetApp.getActive().getSheetByName(p);
-  if (!sheet) return { error: 'Unknown photographer tab' };
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  if (!sheet) return { error: 'Shoots tab not found' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     var newRow = findLastDataRow(sheet) + 1;
-    var shootId = makeShootId(sheet);
+    var shootId = makeShootId(p);
     // Force Start/End (columns F, G) to plain text BEFORE writing. Without
     // this, Sheets auto-detects the "YYYY-MM-DD HH:MM" string as a
     // date/time and silently converts the cell into a real Date value —
@@ -296,8 +350,8 @@ function createShoot(p, shoot) {
     // string, which breaks the front-end's date parser (see parseUKDateTime
     // in index.html / add-shoot.html for the read-side half of this fix).
     sheet.getRange(newRow, 6, 1, 2).setNumberFormat('@');
-    sheet.getRange(newRow, 1, 1, 7).setValues([[
-      shootId, sanitizeForCell(shoot.location), sanitizeForCell(shoot.description || ''), shoot.lat, shoot.lng, shoot.start, shoot.end
+    sheet.getRange(newRow, 1, 1, 8).setValues([[
+      shootId, sanitizeForCell(shoot.location), sanitizeForCell(shoot.description || ''), shoot.lat, shoot.lng, shoot.start, shoot.end, p
     ]]);
     return { shootId: shootId };
   } finally {
@@ -309,14 +363,21 @@ function updateShoot(p, shootId, shoot) {
   var problem = validateShoot(shoot);
   if (problem) return { error: problem };
 
-  var sheet = SpreadsheetApp.getActive().getSheetByName(p);
-  if (!sheet) return { error: 'Unknown photographer tab' };
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  if (!sheet) return { error: 'Shoots tab not found' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     var rowIndex = findRowByShootId(sheet, shootId);
-    if (!rowIndex) return { error: 'Shoot not found' };
+    // Same generic "Shoot not found" whether the ID doesn't exist at all
+    // or it exists but belongs to a different photographer — deliberately
+    // not a different error message for the second case, so a photographer
+    // poking at someone else's Shoot ID can't use the error text to
+    // confirm whether that ID is real. This ownership check is the whole
+    // reason writes are safe now that everyone's shoots share one sheet —
+    // don't remove it.
+    if (!rowIndex || sheet.getRange(rowIndex, 8).getValue() !== p) return { error: 'Shoot not found' };
 
     // Same fix as createShoot — force plain text before writing, so an
     // edit can't re-trigger the same auto-conversion on an existing row.
@@ -330,26 +391,27 @@ function updateShoot(p, shootId, shoot) {
   }
 }
 
-// A real delete, not just clearing the row — see the conversation this
-// script came out of for why that's safe here: Shoot IDs are random and
+// A real delete, not just clearing the row — Shoot IDs are random and
 // never reused, and Combined reads by row position, not by ID lookup, so
 // nothing downstream can end up pointing at the wrong shoot afterwards.
 function deleteShoot(p, shootId) {
-  var sheet = SpreadsheetApp.getActive().getSheetByName(p);
-  if (!sheet) return { error: 'Unknown photographer tab' };
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  if (!sheet) return { error: 'Shoots tab not found' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     var rowIndex = findRowByShootId(sheet, shootId);
-    if (rowIndex) sheet.deleteRow(rowIndex);
+    // Capture the ownership check BEFORE deleting — can't re-read the row
+    // to check it afterwards. A shoot that isn't found or isn't p's own is
+    // silently a no-op (same "not found = fine" tolerance as before),
+    // never an error, and — same reasoning as updateShoot above — never
+    // touches anything belonging to someone else.
+    var owned = rowIndex && sheet.getRange(rowIndex, 8).getValue() === p;
+    if (owned) sheet.deleteRow(rowIndex);
 
-    var gSheet = SpreadsheetApp.getActive().getSheetByName(p + 'Galleries');
-    // Guard: getLastRow() is 1 when a galleries tab has only its header
-    // row (true for every brand-new photographer). 'A2:A1' is an invalid
-    // range and throws, so skip the scan entirely when there's nothing
-    // to scan rather than trying to build that range.
-    if (gSheet && gSheet.getLastRow() >= 2) {
+    var gSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
+    if (owned && gSheet && gSheet.getLastRow() >= 2) {
       var data = gSheet.getRange('A2:A' + gSheet.getLastRow()).getValues();
       for (var i = data.length - 1; i >= 0; i--) {
         if (data[i][0] === shootId) gSheet.deleteRow(i + 2);
@@ -362,18 +424,19 @@ function deleteShoot(p, shootId) {
 }
 
 function findLastDataRow(sheet) {
-  var data = sheet.getRange('B4:B').getValues();
-  var last = 3;
+  var data = sheet.getRange('B2:B').getValues();
+  var last = 1; // header is row 1 — 1 means "no data rows yet"
   for (var i = 0; i < data.length; i++) {
-    if (data[i][0] !== '') last = i + 4;
+    if (data[i][0] !== '') last = i + 2;
   }
   return last;
 }
 
 function findRowByShootId(sheet, shootId) {
-  var data = sheet.getRange('A4:A').getValues();
+  if (sheet.getLastRow() < 2) return null;
+  var data = sheet.getRange('A2:A' + sheet.getLastRow()).getValues();
   for (var i = 0; i < data.length; i++) {
-    if (data[i][0] === shootId) return i + 4;
+    if (data[i][0] === shootId) return i + 2;
   }
   return null;
 }
@@ -381,13 +444,13 @@ function findRowByShootId(sheet, shootId) {
 // ---- galleries ------------------------------------------------------------
 
 function getGalleriesForTab(p) {
-  var gSheet = SpreadsheetApp.getActive().getSheetByName(p + 'Galleries');
+  var gSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
   if (!gSheet || gSheet.getLastRow() < 2) return {};
-  var data = gSheet.getRange('A2:C' + gSheet.getLastRow()).getValues();
+  var data = gSheet.getRange('A2:D' + gSheet.getLastRow()).getValues();
   var map = {};
   for (var i = 0; i < data.length; i++) {
-    var id = data[i][0];
-    if (!id) continue;
+    var id = data[i][0], tabName = data[i][3];
+    if (!id || tabName !== p) continue;
     if (!map[id]) map[id] = [];
     // row is the gallery's actual sheet row (1-based) — the dashboard
     // sends this back on edit/delete so we know exactly which row to
@@ -417,19 +480,22 @@ function addGallery(p, shootId, label, url) {
   var cleanUrl = normalizeGalleryUrl(url);
   if (!cleanUrl) return { error: 'Gallery URL is required' };
 
-  var sheet = SpreadsheetApp.getActive().getSheetByName(p);
-  if (!sheet || !findRowByShootId(sheet, shootId)) {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  var shootRow = sheet ? findRowByShootId(sheet, shootId) : null;
+  // Same ownership check as updateShoot — the shoot this gallery is being
+  // attached to has to actually belong to p, not just exist.
+  if (!shootRow || sheet.getRange(shootRow, 8).getValue() !== p) {
     return { error: "That shoot wasn't found for this photographer" };
   }
 
-  var gSheet = SpreadsheetApp.getActive().getSheetByName(p + 'Galleries');
+  var gSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
   if (!gSheet) return { error: 'Galleries tab not found' };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     var row = gSheet.getLastRow() + 1;
-    gSheet.getRange(row, 1, 1, 3).setValues([[shootId, sanitizeForCell(label || 'Gallery'), cleanUrl]]);
+    gSheet.getRange(row, 1, 1, 4).setValues([[shootId, sanitizeForCell(label || 'Gallery'), cleanUrl, p]]);
     return { ok: true };
   } finally {
     lock.releaseLock();
@@ -437,17 +503,18 @@ function addGallery(p, shootId, label, url) {
 }
 
 // row is the gallery's own sheet row, as returned by getMyShoots (via
-// getGalleriesForTab). We re-check that row's Shoot ID still matches the
-// shootId the client thinks it's editing, both as a sanity check against
-// a stale row number (e.g. another gallery was deleted in between,
-// shifting rows) and so a photographer can never touch a row outside
-// their own galleries tab even if a row number were tampered with.
+// getGalleriesForTab). Re-checks that row's Shoot ID still matches the
+// shootId the client thinks it's editing (sanity check against a stale
+// row number, e.g. another gallery was deleted in between, shifting rows)
+// AND that its Shoot Tab Name column matches p — that second check is
+// what actually stops a photographer touching a row outside their own
+// galleries now that everyone's galleries share one sheet.
 function updateGallery(p, shootId, row, label, url) {
   if (!String(label || '').trim()) return { error: 'Gallery label is required' };
   var cleanUrl = normalizeGalleryUrl(url);
   if (!cleanUrl) return { error: 'Gallery URL is required' };
 
-  var gSheet = SpreadsheetApp.getActive().getSheetByName(p + 'Galleries');
+  var gSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
   if (!gSheet) return { error: 'Galleries tab not found' };
 
   var lock = LockService.getScriptLock();
@@ -455,7 +522,8 @@ function updateGallery(p, shootId, row, label, url) {
   try {
     var rowNum = Number(row);
     if (!rowNum || rowNum < 2 || rowNum > gSheet.getLastRow()) return { error: 'Gallery not found' };
-    if (gSheet.getRange(rowNum, 1).getValue() !== shootId) return { error: 'Gallery not found' };
+    var rowValues = gSheet.getRange(rowNum, 1, 1, 4).getValues()[0];
+    if (rowValues[0] !== shootId || rowValues[3] !== p) return { error: 'Gallery not found' };
     gSheet.getRange(rowNum, 2, 1, 2).setValues([[sanitizeForCell(label || 'Gallery'), cleanUrl]]);
     return { ok: true };
   } finally {
@@ -464,7 +532,7 @@ function updateGallery(p, shootId, row, label, url) {
 }
 
 function deleteGallery(p, shootId, row) {
-  var gSheet = SpreadsheetApp.getActive().getSheetByName(p + 'Galleries');
+  var gSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
   if (!gSheet) return { error: 'Galleries tab not found' };
 
   var lock = LockService.getScriptLock();
@@ -472,7 +540,8 @@ function deleteGallery(p, shootId, row) {
   try {
     var rowNum = Number(row);
     if (!rowNum || rowNum < 2 || rowNum > gSheet.getLastRow()) return { error: 'Gallery not found' };
-    if (gSheet.getRange(rowNum, 1).getValue() !== shootId) return { error: 'Gallery not found' };
+    var rowValues = gSheet.getRange(rowNum, 1, 1, 4).getValues()[0];
+    if (rowValues[0] !== shootId || rowValues[3] !== p) return { error: 'Gallery not found' };
     gSheet.deleteRow(rowNum);
     return { ok: true };
   } finally {

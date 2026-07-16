@@ -17,7 +17,30 @@ framework, no bundler. Edit the files directly and refresh the browser.
 
 - **Data storage**: Google Sheets, read via published CSV export
   (`COMBINED_CSV_URL`, `GALLERIES_CSV_URL`), written via a Google Apps Script
-  web app (`APPS_SCRIPT_URL`) called from `add-shoot.html`.
+  web app (`APPS_SCRIPT_URL`) called from `add-shoot.html`. Two separate
+  Google Sheets workbooks:
+  - **Main workbook** (public, link-shared for the CSV feeds to work): a
+    shared `Shoots` tab (all photographers' shoots, one row per shoot,
+    distinguished by a `Shoot Tab Name` column) and a shared `Galleries`
+    tab (same idea). `Combined`/`Combined Galleries` are formula-driven
+    views over those two tabs for the public site to read; `PhotographersImport`
+    is a one-way `IMPORTRANGE` mirror of the other workbook's non-secret
+    columns. Redesigned 16/07/2026 from an earlier one-tab-per-photographer
+    layout specifically so **adding a photographer is just one row** in the
+    Photographers workbook below — no tabs to create, no formulas to edit.
+    `app-script.gs`'s own header comment has the full column layout and an
+    "ADDING A NEW PHOTOGRAPHER" walkthrough.
+  - **Photographers workbook** (private, kept Restricted): one row per
+    photographer — name, logo, website, contact email, `Shoot Tab Name`
+    (their stable ID, used in URLs and as the join key back to `Shoots`/
+    `Galleries`), and `Secret Key` (their dashboard login, effectively a
+    password — never imported into the main workbook).
+  - Since everyone's shoots/galleries now share one sheet each rather than
+    being isolated by tab, `app-script.gs` explicitly re-checks that any
+    shoot/gallery being updated or deleted actually belongs to the
+    authenticated photographer before touching it (search the file for
+    "ownership check") — this used to be implicit via tab isolation and
+    isn't anymore. Don't remove those checks.
 - **Hosting**: GitHub Pages (migrated from Netlify on 16/07/2026 after
   running out of free-tier build credits — see `whoshotmedotcom/whoshotme-site`
   on GitHub, public repo, no build step so a push is the whole deploy).
@@ -191,3 +214,16 @@ framework, no bundler. Edit the files directly and refresh the browser.
    ever considered** — not applicable yet (site isn't monetised).
 10. **Confirm Google Sheets version history is accessible** — not verified as
     part of this work; worth confirming directly with the account owner.
+11. **Sheets architecture: shared Shoots/Galleries tabs** — **done**
+    16/07/2026, see the Data storage section above and `app-script.gs`'s
+    header comment for the full picture. Adding a photographer no longer
+    needs new tabs or formula edits, just one row in the Photographers
+    workbook.
+12. **Self-service "become a photographer" signup form** — not done, a
+    stated future direction. A web form would append a row to the
+    Photographers workbook (via a new Apps Script action) and notify the
+    site owner, who reviews and sends the personal link — same trust
+    model as today, just removing the manual row-adding step. The #11
+    redesign was specifically done with this in mind: the Photographers
+    workbook is already the single source of truth for onboarding, so
+    this needs no further schema changes when it's picked up.
