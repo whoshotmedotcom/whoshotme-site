@@ -224,8 +224,10 @@
     <p>Enter the email address you signed up with and we'll send you a fresh dashboard link. Your old link will stop working once the new one's sent.</p>
 
     <form id="resendForm">
+      <div class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</div>
+
       <div class="field">
-        <label for="resendEmailInput">Contact email</label>
+        <label for="resendEmailInput">Contact email <span class="required-mark" aria-hidden="true">*</span></label>
         <input type="email" id="resendEmailInput" required maxlength="120" autocomplete="email">
       </div>
       <button type="submit" id="resendSubmitBtn" class="pill-btn">Resend my link</button>
@@ -335,6 +337,13 @@
   const resendForm = document.getElementById('resendForm');
   const resendSubmitBtn = document.getElementById('resendSubmitBtn');
   const resendConfirmPanel = document.getElementById('resendConfirmPanel');
+  const resendEmailInput = document.getElementById('resendEmailInput');
+
+  function updateResendFieldStyles(){
+    resendEmailInput.classList.toggle('needs-input', !resendEmailInput.value.trim());
+  }
+  resendEmailInput.addEventListener('input', updateResendFieldStyles);
+  updateResendFieldStyles();
 
   resendForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
