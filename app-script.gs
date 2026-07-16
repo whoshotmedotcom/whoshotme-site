@@ -267,13 +267,25 @@ function shootTabNamePrefix(shootTabName) {
 // keep that in mind or it'll silently fail with a CORS error.
 // =========================================================================
 
+// RULE FOR ANYONE ADDING A NEW ACTION HERE: a GET action must never
+// mutate anything. Email providers (Gmail's Safe Browsing among others)
+// routinely pre-fetch links in emails server-side to scan them for
+// malware, before a human ever clicks - any GET handler that writes to
+// the spreadsheet will have that write silently triggered by the
+// scanner instead of the real user. This bit confirmSignupPage in
+// production on 16/07/2026 (see its own comment for the full story) and
+// was fixed by splitting it into a read-only GET preview + a POST commit
+// action reachable only via a button click. Follow that same pattern for
+// any future GET action that needs to trigger a real change - render a
+// page with a button that POSTs, don't do the mutation in doGet itself.
 function doGet(e) {
   try {
     var action = e.parameter.action;
 
     // Renders an actual HTML page, not JSON — this is the link a
     // photographer clicks from their confirmation email, so it needs to
-    // be human-readable, not a JSON blob. See confirmSignup below.
+    // be human-readable, not a JSON blob. Read-only - see confirmSignup
+    // below and the rule above doGet's own declaration.
     if (action === 'confirmSignup') return confirmSignupPage(e.parameter.token);
 
     var p = e.parameter.p;
@@ -387,7 +399,7 @@ function findPhotographerRowByEmail(email) {
   var keyCol = headers.indexOf('Secret Key');
   var lower = String(email || '').toLowerCase();
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][emailCol]).toLowerCase() === lower) {
+    if (String(data[i][emailCol]).trim().toLowerCase() === lower) {
       return { sheet: sheet, rowIndex: i + 1, row: data[i], keyCol: keyCol };
     }
   }
@@ -404,6 +416,24 @@ function generateSecretKey() {
 
 function addShootLink(shootTabName, key) {
   return SITE_BASE_URL + 'add-shoot.html?p=' + encodeURIComponent(shootTabName) + '&key=' + encodeURIComponent(key);
+}
+
+// Returns {name: columnIndex} for each requested header name, or throws
+// with a clear message naming the first missing one. Used instead of a
+// bare headers.indexOf(...) wherever the result gets used as an array
+// index (e.g. newRow[headers.indexOf('X')] = value) - a plain indexOf
+// silently returns -1 on a header-text mismatch (a stray space, a
+// renamed column), which then either writes to newRow[-1] (silently
+// lost, not an error) or reads back undefined. This fails loudly at the
+// point of the mismatch instead.
+function requireColumnIndexes(headers, names) {
+  var indexes = {};
+  for (var i = 0; i < names.length; i++) {
+    var idx = headers.indexOf(names[i]);
+    if (idx === -1) throw new Error('Expected column "' + names[i] + '" not found in sheet headers');
+    indexes[names[i]] = idx;
+  }
+  return indexes;
 }
 
 // ---- photographer signup (become-photographer.html) ---------------------
@@ -445,15 +475,19 @@ function requestPhotographer(data) {
     var photographerEmailCol = photographerHeaders.indexOf('Contact Email');
     var photographerTabCol = photographerHeaders.indexOf('Shoot Tab Name');
 
+    // trim() on the stored value too, not just the submitted one - a
+    // hand-typed row (see the manual-add path in ADDING A NEW
+    // PHOTOGRAPHER above) can easily have incidental whitespace, which
+    // would otherwise let a real duplicate slip past this check.
     for (var i = 1; i < existingPhotographers.length; i++) {
-      if (String(existingPhotographers[i][photographerEmailCol]).toLowerCase() === email.toLowerCase()) {
+      if (String(existingPhotographers[i][photographerEmailCol]).trim().toLowerCase() === email.toLowerCase()) {
         return { error: "That email address is already registered - try 'lost your link?' instead." };
       }
     }
 
     var existingSignups = signups.getLastRow() >= 2 ? signups.getRange('A2:E' + signups.getLastRow()).getValues() : [];
     for (var j = 0; j < existingSignups.length; j++) {
-      if (String(existingSignups[j][2]).toLowerCase() === email.toLowerCase()) {
+      if (String(existingSignups[j][2]).trim().toLowerCase() === email.toLowerCase()) {
         return { error: "That email address already has a confirmation email waiting - check your inbox (and spam folder)." };
       }
     }
@@ -575,7 +609,14 @@ function confirmSignupPage(token) {
       // navigating the actual browser tab (the address bar and "created
       // by a Google Apps Script user" banner otherwise never go away).
       // _top forces the click to navigate the real top-level tab.
-      'document.body.innerHTML = "<div class=\\"card\\"><h1>You\'re all set!<\\/h1><p>Your dashboard is ready. We\'ve also emailed this link so you don\'t lose it:<\\/p><p><a class=\\"btn\\" target=\\"_top\\" href=\\"" + result.link + "\\">Open my dashboard<\\/a><\\/p><\\/div>";' +
+      //
+      // result.link is set via setAttribute, not string-concatenated
+      // into the innerHTML markup - setAttribute never parses its value
+      // as HTML, so this stays safe even if the link's charset
+      // constraints (currently alnum Shoot Tab Name + hex key, both
+      // encodeURIComponent-wrapped) ever loosen later.
+      'document.body.innerHTML = "<div class=\\"card\\"><h1>You\'re all set!<\\/h1><p>Your dashboard is ready. We\'ve also emailed this link so you don\'t lose it:<\\/p><p><a class=\\"btn\\" target=\\"_top\\" id=\\"dashLink\\">Open my dashboard<\\/a><\\/p><\\/div>";' +
+      'document.getElementById("dashLink").setAttribute("href", result.link);' +
       '}).catch(function(){' +
       'document.getElementById("confirmMsg").textContent = "Something went wrong - please try again.";' +
       'document.getElementById("confirmBtn").textContent = "Confirm my signup"; document.getElementById("confirmBtn").disabled = false;' +
@@ -622,19 +663,42 @@ function confirmSignup(token) {
     if (rowIndex === -1) return { error: 'This confirmation link is invalid or has already been used.' };
 
     var name = data[rowIndex][1], email = data[rowIndex][2], website = data[rowIndex][3], shootTabName = data[rowIndex][4];
+
+    // Re-check uniqueness against Photographers at confirm time too, not
+    // just at request time (requestPhotographer) - an admin could have
+    // manually added this same email in the meantime (see the manual-add
+    // path in ADDING A NEW PHOTOGRAPHER above), which would otherwise
+    // create a second, disconnected identity for the same person. The
+    // token's already served its purpose (proving inbox ownership), so
+    // it gets consumed here regardless rather than leaving it to
+    // resurface the same conflict on a retry.
+    var existingPhotographers = photographers.getDataRange().getValues();
+    var photographerEmailCol = existingPhotographers[0].indexOf('Contact Email');
+    for (var p = 1; p < existingPhotographers.length; p++) {
+      if (String(existingPhotographers[p][photographerEmailCol]).trim().toLowerCase() === String(email).trim().toLowerCase()) {
+        signups.deleteRow(rowIndex + 2);
+        return { error: "That email address is already registered - try the 'lost your link?' option instead." };
+      }
+    }
+
     var key = generateSecretKey();
 
-    var headers = photographers.getRange(1, 1, 1, photographers.getLastColumn()).getValues()[0];
-    var newRow = new Array(headers.length).fill('');
-    newRow[headers.indexOf('Photographer Name')] = name;
-    newRow[headers.indexOf('Website URL')] = website;
-    newRow[headers.indexOf('Contact Email')] = email;
-    newRow[headers.indexOf('Shoot Tab Name')] = shootTabName;
-    newRow[headers.indexOf('Secret Key')] = key;
-    photographers.appendRow(newRow);
-
-    // Single-use token — remove the Signups row now it's redeemed.
+    // Delete the Signups row BEFORE appending to Photographers, so a
+    // failure partway through (e.g. a transient Sheets API error) fails
+    // closed: the token becomes invalid and the photographer would need
+    // to sign up again, rather than staying valid for a retry to
+    // double-redeem it into two separate Photographers rows.
     signups.deleteRow(rowIndex + 2);
+
+    var headers = photographers.getRange(1, 1, 1, photographers.getLastColumn()).getValues()[0];
+    var cols = requireColumnIndexes(headers, ['Photographer Name', 'Website URL', 'Contact Email', 'Shoot Tab Name', 'Secret Key']);
+    var newRow = new Array(headers.length).fill('');
+    newRow[cols['Photographer Name']] = name;
+    newRow[cols['Website URL']] = website;
+    newRow[cols['Contact Email']] = email;
+    newRow[cols['Shoot Tab Name']] = shootTabName;
+    newRow[cols['Secret Key']] = key;
+    photographers.appendRow(newRow);
 
     var link = addShootLink(shootTabName, key);
     try {
@@ -656,11 +720,12 @@ function confirmSignup(token) {
 // ---- lost link (self-service "password reset") -------------------------
 
 // Regenerates a photographer's Secret Key and emails them a fresh
-// add-shoot.html link - the old key stops working the moment this runs.
-// Always returns {ok:true} regardless of whether the email matched
-// anything, same reasoning as the generic "not found" errors elsewhere
-// in this file: this endpoint can't be used to check who's a registered
-// photographer.
+// add-shoot.html link - the old key stops working, but only once the new
+// one has actually been sent (see the send-before-commit ordering
+// below). Always returns {ok:true} regardless of whether the email
+// matched anything, same reasoning as the generic "not found" errors
+// elsewhere in this file: this endpoint can't be used to check who's a
+// registered photographer.
 function resendLink(email) {
   email = String(email || '').trim();
   if (!SIGNUP_EMAIL_RE.test(email)) return { ok: true };
@@ -672,13 +737,19 @@ function resendLink(email) {
     if (!found) return { ok: true };
 
     var key = generateSecretKey();
-    found.sheet.getRange(found.rowIndex, found.keyCol + 1).setValue(key);
-
     var headers = found.sheet.getRange(1, 1, 1, found.sheet.getLastColumn()).getValues()[0];
-    var name = found.row[headers.indexOf('Photographer Name')];
-    var shootTabName = found.row[headers.indexOf('Shoot Tab Name')];
+    var cols = requireColumnIndexes(headers, ['Photographer Name', 'Shoot Tab Name']);
+    var name = found.row[cols['Photographer Name']];
+    var shootTabName = found.row[cols['Shoot Tab Name']];
     var link = addShootLink(shootTabName, key);
 
+    // Send BEFORE committing the new key to the sheet - if the email
+    // fails to send (the exact failure mode that silently broke
+    // notifications earlier in this project, via a missing MailApp
+    // permission), the photographer's existing link keeps working
+    // instead of being invalidated with no replacement ever reaching
+    // them. Still returns {ok:true} either way, so this can't be used to
+    // tell whether the email matched a real account.
     try {
       MailApp.sendEmail({
         to: email,
@@ -686,9 +757,10 @@ function resendLink(email) {
         body: 'Hi ' + name + ',\n\nHere\'s a fresh dashboard link, as requested. Your old link has stopped working:\n\n' + link
       });
     } catch (err) {
-      // Ignore — the key's already regenerated either way; worst case
-      // they need to request it again.
+      return { ok: true };
     }
+
+    found.sheet.getRange(found.rowIndex, found.keyCol + 1).setValue(key);
     return { ok: true };
   } finally {
     lock.releaseLock();

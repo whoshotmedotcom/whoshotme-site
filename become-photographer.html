@@ -231,6 +231,7 @@
         <input type="email" id="resendEmailInput" required maxlength="120" autocomplete="email">
       </div>
       <button type="submit" id="resendSubmitBtn" class="pill-btn">Resend my link</button>
+      <p id="resendError" class="error-text hidden"></p>
     </form>
 
     <div id="resendConfirmPanel" class="hidden">
@@ -338,6 +339,7 @@
   const resendSubmitBtn = document.getElementById('resendSubmitBtn');
   const resendConfirmPanel = document.getElementById('resendConfirmPanel');
   const resendEmailInput = document.getElementById('resendEmailInput');
+  const resendError = document.getElementById('resendError');
 
   function updateResendFieldStyles(){
     resendEmailInput.classList.toggle('needs-input', !resendEmailInput.value.trim());
@@ -347,16 +349,22 @@
 
   resendForm.addEventListener('submit', async (evt) => {
     evt.preventDefault();
+    resendError.classList.add('hidden');
     const email = document.getElementById('resendEmailInput').value.trim();
     if (!email) return;
 
     resendSubmitBtn.disabled = true;
     resendSubmitBtn.textContent = 'Sending…';
     try {
-      await fetch(APPS_SCRIPT_URL, {
+      const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ action: 'resendLink', email })
       });
+      // fetch() only rejects on a network-level failure, not an HTTP
+      // error status or an unexpected response body - check both
+      // explicitly so a real failure doesn't silently show as success.
+      if (!res.ok) throw new Error('Request failed with status ' + res.status);
+      await res.json();
       // Always shows the same success message regardless of whether that
       // email actually matched anything - see resendLink in app-script.gs
       // for why (avoids confirming/denying who's a registered photographer).
@@ -364,6 +372,8 @@
       resendConfirmPanel.classList.remove('hidden');
     } catch (err) {
       console.error('Resend-link request failed:', err);
+      resendError.textContent = "Something went wrong sending that - please try again, or email us directly.";
+      resendError.classList.remove('hidden');
       resendSubmitBtn.disabled = false;
       resendSubmitBtn.textContent = 'Resend my link';
     }
