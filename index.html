@@ -903,7 +903,22 @@
     color:var(--asphalt);
     border:2px solid var(--asphalt);
     box-shadow:0 0 0 3px rgba(212,255,63,0.35);
+    position:relative;
+  }
+  /* The pulsing ring itself lives on ::after and animates only transform/
+     opacity (GPU-compositable, no repaint per frame) instead of animating
+     box-shadow directly on the marker - box-shadow can't be composited, so
+     an infinite box-shadow animation forces a real repaint every frame for
+     as long as any live marker is on screen. See the matching per-marker
+     ring in makeIcon() below for the same fix applied there. */
+  .whoshotme-cluster.cluster-live::after{
+    content:'';
+    position:absolute;
+    inset:-3px;
+    border-radius:50%;
+    border:3px solid var(--hi-vis);
     animation:clusterPulse 1.6s infinite;
+    pointer-events:none;
   }
   .whoshotme-cluster.cluster-soon{
     background:var(--rust);
@@ -918,9 +933,8 @@
     opacity:0.85;
   }
   @keyframes clusterPulse{
-    0%{ box-shadow:0 0 0 3px rgba(212,255,63,0.4); transform:scale(1); }
-    50%{ box-shadow:0 0 0 16px rgba(212,255,63,0); transform:scale(1.08); }
-    100%{ box-shadow:0 0 0 3px rgba(212,255,63,0.4); transform:scale(1); }
+    0%{ transform:scale(1); opacity:0.5; }
+    100%{ transform:scale(1.8); opacity:0; }
   }
 
   /* =====================================================================
@@ -1792,7 +1806,7 @@ function makeIcon(spot, status){
   return L.divIcon({
     className: '',
     html: `<div style="position:relative; width:${size}px; height:${size}px;">
-      <div style="
+      <div class="${isLive ? 'live-marker-ring' : ''}" style="
         width:${size}px;height:${size}px;border-radius:50%;
         background-image:url('${escapeHtml(spot.logo)}');
         background-size:cover;
@@ -1802,7 +1816,6 @@ function makeIcon(spot, status){
         box-shadow:0 0 0 2px ${statusColor}55;
         opacity:${isPast ? 0.55 : 1};
         filter:${isPast ? 'grayscale(80%)' : 'none'};
-        ${isLive ? 'animation:pulse 1.6s infinite;' : ''}
       "></div>
       ${flashHtml}
     </div>`,
@@ -1814,7 +1827,21 @@ function makeIcon(spot, status){
 // pulse + camera-flash keyframes for live markers
 const styleTag = document.createElement('style');
 styleTag.textContent = `
-  @keyframes pulse{ 0%{box-shadow:0 0 0 2px #d4ff3f66; transform:scale(1);} 50%{box-shadow:0 0 0 14px #d4ff3f00; transform:scale(1.08);} 100%{box-shadow:0 0 0 2px #d4ff3f66; transform:scale(1);} }
+  /* Same fix as .whoshotme-cluster.cluster-live above: the ring pulses on
+     a ::after using transform/opacity only, instead of animating
+     box-shadow directly (which forces a real repaint every frame, on
+     every live marker, for as long as any are on screen). */
+  .live-marker-ring{ position:relative; }
+  .live-marker-ring::after{
+    content:'';
+    position:absolute;
+    inset:-2px;
+    border-radius:50%;
+    border:2px solid #d4ff3f;
+    animation:pulse 1.6s infinite;
+    pointer-events:none;
+  }
+  @keyframes pulse{ 0%{ transform:scale(1); opacity:0.5; } 100%{ transform:scale(1.85); opacity:0; } }
   @keyframes cameraFlash{
     0%, 90%, 100% { opacity:0; transform:scale(0.4); filter:drop-shadow(0 0 0 rgba(255,255,255,0)); }
     93% { opacity:1; transform:scale(1.15); filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)); }
