@@ -613,6 +613,14 @@ function trackPageView() {
     }
     if (!rowIndex) {
       rowIndex = sheet.getLastRow() + 1;
+      // Force column A to plain text BEFORE writing — same fix as
+      // Shoots' Start/End columns (see createShoot): without this, Sheets
+      // auto-detects the "yyyy-MM-dd" string as a date and silently
+      // converts the cell into a real Date object. Reading it back next
+      // time then fails the `=== today` string comparison below, so a
+      // new row gets created on every call instead of the same day's row
+      // being found and incremented.
+      sheet.getRange(rowIndex, 1).setNumberFormat('@');
       sheet.getRange(rowIndex, 1).setValue(today);
       sheet.getRange(rowIndex, 2).setValue(0);
     }
@@ -652,6 +660,8 @@ function trackSiteEvent(type) {
     }
     if (!rowIndex) {
       rowIndex = sheet.getLastRow() + 1;
+      // Same date-auto-conversion fix as trackPageView above.
+      sheet.getRange(rowIndex, 1).setNumberFormat('@');
       sheet.getRange(rowIndex, 1).setValue(today);
       sheet.getRange(rowIndex, 2).setValue(sanitizeForCell(type));
       sheet.getRange(rowIndex, 3).setValue(0);
