@@ -258,7 +258,6 @@
   #statsHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
 
   #shareHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 10px; line-height:1.5; }
-  #profileHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
   #shootsHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 12px; line-height:1.5; }
   #shareLinkRow{ display:flex; gap:8px; }
   #shareLinkInput{
@@ -795,21 +794,12 @@
 
   <div id="dashboard" class="hidden">
     <div id="dashTabs" role="tablist" aria-label="Dashboard sections">
-      <button type="button" class="dash-tab active" data-tab="shoots" role="tab" aria-selected="true" id="tabBtn-shoots">My Shoots</button>
-      <button type="button" class="dash-tab" data-tab="add" role="tab" aria-selected="false" id="tabBtn-add">Add shoot</button>
+      <button type="button" class="dash-tab active" data-tab="add" role="tab" aria-selected="true" id="tabBtn-add">Add shoot</button>
+      <button type="button" class="dash-tab" data-tab="shoots" role="tab" aria-selected="false" id="tabBtn-shoots">My shoots</button>
       <button type="button" class="dash-tab" data-tab="profile" role="tab" aria-selected="false" id="tabBtn-profile">Profile</button>
     </div>
 
-    <div id="tabPanel-shoots" class="dash-panel" role="tabpanel" aria-labelledby="tabBtn-shoots">
-      <section id="listSection">
-        <h2>My Shoots</h2>
-        <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
-        <div id="shootsList"></div>
-        <p id="emptyState" class="hidden">No shoots yet - head to the "Add shoot" tab to create your first one.</p>
-      </section>
-    </div>
-
-    <div id="tabPanel-add" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-add">
+    <div id="tabPanel-add" class="dash-panel" role="tabpanel" aria-labelledby="tabBtn-add">
       <section id="statsSection">
         <h2>Your numbers so far</h2>
         <div id="statsRow">
@@ -889,6 +879,15 @@
       </section>
     </div>
 
+    <div id="tabPanel-shoots" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-shoots">
+      <section id="listSection">
+        <h2>My Shoots</h2>
+        <p id="shootsHint">Changes here can take a few minutes to show up on the public map - if you've just moved a pin or changed a time, give it 3–5 minutes before assuming something's wrong.</p>
+        <div id="shootsList"></div>
+        <p id="emptyState" class="hidden">No shoots yet - head to the "Add shoot" tab to create your first one.</p>
+      </section>
+    </div>
+
     <div id="tabPanel-profile" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-profile">
       <section id="profileSection">
         <h2>My profile</h2>
@@ -907,7 +906,6 @@
         </div>
         <button id="saveProfileBtn" class="pill-btn">Save profile</button>
         <p id="profileError" class="error-text hidden"></p>
-        <p id="profileHint">Want a logo/photo on your listing? That's coming soon.</p>
       </section>
     </div>
   </div>
