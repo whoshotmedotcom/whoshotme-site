@@ -119,6 +119,15 @@
      first paint. -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="preconnect" href="https://tile.openstreetmap.org">
+<!-- Preload (not preconnect) for the two scripts themselves - starts the
+     actual download in parallel with the rest of the page parsing,
+     without changing WHEN they execute (still only runs from the
+     script tag just before first use, near the bottom of body - see the
+     comment above). Lighthouse measured ~2s combined otherwise spent
+     purely on network round-trip discovery once the browser finally
+     reaches that script tag. -->
+<link rel="preload" as="script" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
+<link rel="preload" as="script" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js">
 <style>
   :root{
     --asphalt:#1c1e22;
@@ -1086,7 +1095,7 @@
   <button id="dismissDefaultModeBtn" aria-label="Dismiss this message">✕</button>
 </div>
 
-<div id="mapWrap">
+<main id="mapWrap">
   <div id="searchWrap">
     <div id="searchBox">
       <input type="text" id="searchInput" placeholder="Search photographer or location…" autocomplete="off" aria-label="Search photographer or location">
@@ -1103,7 +1112,7 @@
       <p id="dataStateBody">Just a moment.</p>
     </div>
   </div>
-</div>
+</main>
 
 <div id="bottomPanel">
   <div id="filters">
@@ -2486,6 +2495,16 @@ function render(){
     const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(spot, status), pane: `pane-${status}` });
     marker._spotRef = spot;
     marker.bindPopup(popupHtml(spot), { maxWidth: 240, ...POPUP_AUTOPAN_PADDING });
+    // Leaflet's marker element already gets role="button" tabindex="0"
+    // (interactive markers are keyboard-focusable by default), but ships
+    // with no accessible name, so screen readers just announce "button"
+    // with no context - set one once the marker's real DOM element
+    // exists (getElement() is null before it's actually mounted).
+    const statusWord = status === 'live' ? 'live now' : status === 'soon' ? 'upcoming' : 'past';
+    marker.on('add', () => {
+      const el = marker.getElement();
+      if (el) el.setAttribute('aria-label', `${spot.name} - ${spot.location}, ${statusWord}`);
+    });
     clusterGroups[status].addLayer(marker);
   });
 
