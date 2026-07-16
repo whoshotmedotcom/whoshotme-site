@@ -340,6 +340,19 @@
     text-transform:uppercase;
     letter-spacing:0.4px;
   }
+  /* Same rust used for real validation errors elsewhere (.error-text,
+     #toast.error) rather than a plain red - stays inside the site's
+     existing colour language instead of introducing a new one just for
+     this. aria-hidden since a bare "*" reads as noise to a screen
+     reader - the `required` attribute on each field's actual input
+     already announces it correctly on its own. */
+  .required-mark{ color:var(--rust); }
+  .requiredLegend{
+    color:var(--past-grey);
+    font-size:0.78rem;
+    margin:-6px 0 16px;
+  }
+  .requiredLegend .required-mark{ font-weight:700; }
   .field input[type="text"],
   .field input[type="datetime-local"],
   .field textarea{
@@ -719,22 +732,23 @@
 
     <section id="formSection" class="hidden">
       <h2 id="formHeading">Add a shoot</h2>
+      <p class="requiredLegend"><span class="required-mark" aria-hidden="true">*</span> required</p>
 
       <div class="two-col">
         <div class="field">
-          <label for="startTime">Start</label>
-          <input type="datetime-local" id="startTime" step="300">
+          <label for="startTime">Start<span class="required-mark" aria-hidden="true"> *</span></label>
+          <input type="datetime-local" id="startTime" step="300" required>
         </div>
         <div class="field">
-          <label for="endTime">End</label>
-          <input type="datetime-local" id="endTime" step="300">
+          <label for="endTime">End<span class="required-mark" aria-hidden="true"> *</span></label>
+          <input type="datetime-local" id="endTime" step="300" required>
         </div>
       </div>
       <p id="timeHint" style="color:var(--past-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
 
       <div class="field">
-        <label for="locationName">Location name</label>
-        <input type="text" id="locationName" placeholder="e.g. Winnats Pass, top of the climb">
+        <label for="locationName">Location name<span class="required-mark" aria-hidden="true"> *</span></label>
+        <input type="text" id="locationName" placeholder="e.g. Winnats Pass, top of the climb" required>
       </div>
 
       <div class="field">
@@ -743,7 +757,7 @@
       </div>
 
       <div class="field">
-        <label>Location - tap the map to drop a pin</label>
+        <label>Location - tap the map to drop a pin<span class="required-mark" aria-hidden="true"> *</span></label>
         <div id="locationSearchRow">
           <input type="text" id="locationSearchInput" placeholder="Search a postcode or place to jump there…" autocomplete="off" aria-label="Search a postcode or place to jump the map there">
           <button id="locationSearchClear" type="button" aria-label="Clear">✕</button>
