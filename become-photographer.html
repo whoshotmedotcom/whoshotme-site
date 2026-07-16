@@ -160,6 +160,14 @@
   }
   #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
   #aboutCloseBtn:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
+  .creatorPhoto{
+    display:block;
+    width:100%;
+    max-width:280px;
+    margin:0 auto 12px;
+    border-radius:12px;
+    border:1px solid var(--line);
+  }
 
   main{
     width:100%;
@@ -289,12 +297,24 @@
     <div id="aboutModalBody">
       <p>This page is how you sign up to list your shoots on Who Shot Me - the live map riders use to find out who was photographing them. Confirm your email and your personal dashboard is ready straight away, no approval needed from anyone.</p>
 
+      <h3>Meet the creator</h3>
+      <img class="creatorPhoto" data-src="creator-photo.jpg" alt="Peter riding his orange Honda CB500F on a country road">
+      <p><strong>Hi, I'm Peter.</strong></p>
+      <p>I'm a keen motorcyclist and GIS professional from the Peak District. I first got into riding on a red 2010 Honda CB125, and these days you'll usually find me out on an orange Honda CB500F with a pillion passenger… a Charmander soft toy. It's for the kids… honest!</p>
+      <p>After seeing the same question appear time and time again in motorcycle Facebook groups - "Who was the photographer at Cat & Fiddle?", "Does anyone know who was at Snake Pass today?" - I realised there had to be a better way.</p>
+      <p>That's what inspired me to create WhoShotMe.</p>
+      <p>The aim is simple: make it easy for riders to find photographers, and help photographers reach more riders. By bringing both together in one place, I hope to save riders from endless searching while giving photographers another way to showcase their work.</p>
+      <p>WhoShotMe is an independent project that I develop in my spare time, and it's continually evolving based on feedback from the motorcycle community. Every suggestion helps shape the platform and where it goes next.</p>
+      <p>Thanks for visiting, and I hope you find WhoShotMe useful.</p>
+      <p><strong>Built by a rider, for riders and photographers.</strong></p>
+
       <h3>Your privacy</h3>
       <p>We store your name, contact email, and website/social link (if you gave one) so we can email you your dashboard link and let riders see who's listed. You manage all of this yourself afterwards via your own personal link.</p>
-      <p>We keep this data for as long as you're listed, and delete it entirely once you ask us to.</p>
+      <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
+      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage) and GitHub Pages (hosting) - each processes the minimum needed to make their part work.</p>
 
       <h3>Please keep in mind</h3>
-      <p>Only sign up if you genuinely shoot roadside motorcycle photos and intend to list real shoots - please don't sign up on someone else's behalf or with content you don't have the rights to post.</p>
+      <p>Only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Please only sign up if you genuinely shoot roadside motorcycle photos yourself, not on someone else's behalf.</p>
 
       <p>Questions, or want your data removed entirely? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
 
@@ -385,6 +405,13 @@
   const aboutContactLink = document.getElementById('aboutContactLink');
   if (aboutContactLink) aboutContactLink.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Who Shot Me? - question')}`;
   document.getElementById('aboutLink').addEventListener('click', () => {
+    // Loaded on first open rather than eagerly on page load — see the
+    // matching fix in index.html/add-shoot.html.
+    const photo = document.querySelector('.creatorPhoto');
+    if (photo.dataset.src) {
+      photo.src = photo.dataset.src;
+      delete photo.dataset.src;
+    }
     aboutOverlay.classList.add('show');
   });
   document.getElementById('aboutCloseBtn').addEventListener('click', () => {
