@@ -18,7 +18,9 @@ framework, no bundler. Edit the files directly and refresh the browser.
 - **Data storage**: Google Sheets, read via published CSV export
   (`COMBINED_CSV_URL`, `GALLERIES_CSV_URL`), written via a Google Apps Script
   web app (`APPS_SCRIPT_URL`) called from `add-shoot.html`.
-- **Hosting**: Netlify.
+- **Hosting**: GitHub Pages (migrated from Netlify on 16/07/2026 after
+  running out of free-tier build credits — see `whoshotmedotcom/whoshotme-site`
+  on GitHub, public repo, no build step so a push is the whole deploy).
 - **Map**: Leaflet 1.9.4 + Leaflet.markercluster.
 - **Basemaps**: OS Maps API (OS Data Hub, free OpenData plan — default), Esri
   World Imagery (aerial, keyless legacy endpoint), OpenStreetMap. OS Light and

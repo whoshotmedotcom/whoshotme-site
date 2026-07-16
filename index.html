@@ -59,7 +59,7 @@
   the placeholder before publishing, or the button will mail nowhere.
 ===================================================================== -->
 <script>
-  const LISTING_EMAIL = 'peterrastall@gmail.com';
+  const LISTING_EMAIL = 'whoshotmedotcom@gmail.com';
 </script>
 
 <!-- ====================================================================
@@ -171,7 +171,17 @@
     border-bottom:3px solid var(--hi-vis);
     background:var(--asphalt);
     flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
   }
+  /* Lets the title/tagline column shrink and wrap instead of pushing
+     #getListedBtn off the right edge on narrow screens - a flex item's
+     default min-width is auto (its content's width), not 0, which
+     without this would stop it shrinking below the tagline's natural
+     length. */
+  .headerText{ min-width:0; }
   header h1{
     margin:0;
     font-size:1.5rem;
@@ -539,12 +549,11 @@
     font-weight:700;
   }
 
-  /* "Get listed" CTA, top-right of the map — for photographers */
+  /* "Get listed" CTA — lives in the header now, not floating over the map
+     (see CLAUDE.md for why: decluttering the map canvas, and avoiding a
+     three-way crowd with the layer switcher/location controls up here). */
   #getListedBtn{
-    position:absolute;
-    top:12px;
-    right:12px;
-    z-index:1000;
+    flex-shrink:0;
     display:inline-flex;
     align-items:center;
     gap:6px;
@@ -556,7 +565,7 @@
     font-size:0.82rem;
     font-weight:700;
     text-decoration:none;
-    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+    white-space:nowrap;
     cursor:pointer;
   }
   #getListedBtn:hover{ background:var(--hi-vis-dim); }
@@ -971,7 +980,7 @@
     #searchBox{ padding:3px 4px 3px 12px; border-radius:18px; }
     #searchInput{ font-size:0.84rem; padding:7px 4px; }
     .resultItem{ padding:8px 12px; font-size:0.8rem; }
-    #getListedBtn{ top:60px; right:8px; padding:7px 11px; font-size:0.74rem; }
+    #getListedBtn{ padding:7px 11px; font-size:0.74rem; }
 
     /* Bottom-left map control stack (zoom, Reset view, My location) -
        shrunk like everything else on mobile instead of staying at full
@@ -1010,8 +1019,11 @@
 <div id="toast" class="hidden" role="status" aria-live="polite"></div>
 
 <header>
-  <h1>Who <span>Shot</span> Me?</h1>
-  <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
+  <div class="headerText">
+    <h1>Who <span>Shot</span> Me?</h1>
+    <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
+  </div>
+  <a id="getListedBtn" href="#" rel="noopener">📷 Get listed</a>
 </header>
 
 <div id="aboutOverlay">
@@ -1038,7 +1050,7 @@
       <p>Visiting this site: we keep a simple count of page visits and which photographer links get clicked, entirely within our own systems - no third-party analytics company is involved. No cookies, nothing stored in your browser, nothing that identifies you personally - just anonymous counts.</p>
       <p>"My location" button: if you tap it, your browser will ask your permission directly - that's a conversation between you and your browser, not something WhoShotMe controls. If you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
       <p>Photographer listings: if you're listed, we store the details needed to run your listing - your name, contact email, logo and website links, and the shoot times/locations you submit. You manage this yourself via your own personal link; contact us (see below) to have your listing removed entirely. We keep this data for as long as you're listed, and delete it once you ask us to.</p>
-      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), Netlify (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
       <p>Photographers: please only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Listings that don't meet this may be removed.</p>
       <p>Questions, or want your listing removed? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
 
@@ -1065,8 +1077,6 @@
     </div>
     <div id="searchResults" role="listbox" aria-label="Search results"></div>
   </div>
-
-  <a id="getListedBtn" href="#" rel="noopener">📷 Get listed</a>
 
   <div id="map"></div>
 
@@ -1657,6 +1667,25 @@ map.addControl(new RecenterControl());
 // =========================================================================
 let myLocationMarker = null;
 
+// Static compass badge instead of a plain dot — matches Google/Apple's
+// "you are here" pin language, without the live-rotating heading arrow
+// those use. That needs continuous device-orientation tracking (plus its
+// own separate permission prompt on iOS), which would mean walking back
+// the deliberate one-shot-only lookup above. Same blue used previously.
+const MY_LOCATION_ICON = L.divIcon({
+  className: '',
+  html: `<div style="
+      width:30px; height:30px; border-radius:50%;
+      background:#1c1e22;
+      border:2px solid #4aa3ff;
+      box-shadow:0 0 0 2px rgba(74,163,255,0.35);
+      display:flex; align-items:center; justify-content:center;
+      font-size:15px; line-height:1;
+    ">🧭</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+});
+
 function findMyLocation(btn){
   if (!navigator.geolocation){
     showToast("This browser doesn't support location - try searching by area instead.", true);
@@ -1675,13 +1704,8 @@ function findMyLocation(btn){
       if (myLocationMarker){
         myLocationMarker.setLatLng([latitude, longitude]);
       } else {
-        myLocationMarker = L.circleMarker([latitude, longitude], {
-          radius: 8,
-          weight: 3,
-          color: '#4aa3ff',
-          fillColor: '#4aa3ff',
-          fillOpacity: 0.35
-        }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+        myLocationMarker = L.marker([latitude, longitude], { icon: MY_LOCATION_ICON, keyboard: false })
+          .addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
       }
       map.setView([latitude, longitude], 13, { animate: true });
     },

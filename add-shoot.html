@@ -796,7 +796,7 @@
 ===================================================================== -->
 <script>
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
-  const CONTACT_EMAIL = 'peterrastall@gmail.com'; // shown in the About modal's "email us" link
+  const CONTACT_EMAIL = 'whoshotmedotcom@gmail.com'; // shown in the About modal's "email us" link
   // Same public feed index.html reads from — used here only for the
   // nearby-photographer awareness on the map and the proximity warning
   // (see PROXIMITY CHECK below), never written to from this page.
@@ -1280,6 +1280,22 @@ function getBrowserLocation(onSuccess, onError){
 
 let myLocationMarker = null;
 
+// Same static compass badge as index.html - see the comment there for why
+// it's not a live-rotating heading arrow.
+const MY_LOCATION_ICON = L.divIcon({
+  className: '',
+  html: `<div style="
+      width:30px; height:30px; border-radius:50%;
+      background:#1c1e22;
+      border:2px solid #4aa3ff;
+      box-shadow:0 0 0 2px rgba(74,163,255,0.35);
+      display:flex; align-items:center; justify-content:center;
+      font-size:15px; line-height:1;
+    ">🧭</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+});
+
 const LocateControl = L.Control.extend({
   options: { position: 'bottomleft' },
   onAdd: function(){
@@ -1298,13 +1314,8 @@ const LocateControl = L.Control.extend({
           if (myLocationMarker){
             myLocationMarker.setLatLng([lat, lng]);
           } else {
-            myLocationMarker = L.circleMarker([lat, lng], {
-              radius: 8,
-              weight: 3,
-              color: '#4aa3ff',
-              fillColor: '#4aa3ff',
-              fillOpacity: 0.35
-            }).addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+            myLocationMarker = L.marker([lat, lng], { icon: MY_LOCATION_ICON, keyboard: false })
+              .addTo(map).bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
           }
           map.setView([lat, lng], 13, { animate: true });
         },
