@@ -1064,6 +1064,17 @@
 <script>
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
   const CONTACT_EMAIL = 'whoshotmedotcom@gmail.com'; // shown in the About modal's "email us" link
+
+  // The confirm-new-address email requestEmailChange triggers comes from
+  // this same address (MailApp.sendEmail defaults to the deploying
+  // account's own address - see app-script.gs). Built from parts at
+  // display time rather than one literal string, so a bot just
+  // regex-scanning the page source for an email pattern doesn't pick it
+  // up as easily - same proportionate spirit as become-photographer.html's
+  // honeypot field, not meant to stop a determined human reading the JS.
+  function senderEmailDisplay(){
+    return ['whoshotmedotcom', '@', 'gmail.com'].join('');
+  }
   // Same public feed index.html reads from — used here only for the
   // nearby-photographer awareness on the map and the proximity warning
   // (see PROXIMITY CHECK below), never written to from this page.
@@ -2329,7 +2340,7 @@ function showPendingEmailHint(pendingEmail){
     emailPendingHint.classList.add('hidden');
     return;
   }
-  emailPendingHint.textContent = `Confirmation email sent to ${pendingEmail} - click the link there to finish the change.`;
+  emailPendingHint.textContent = `Confirmation email sent to ${pendingEmail} from ${senderEmailDisplay()} - click the link there to finish the change.`;
   emailPendingHint.classList.remove('hidden');
 }
 

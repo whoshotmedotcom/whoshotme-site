@@ -399,7 +399,7 @@
 
     <div id="confirmPanel" class="hidden">
       <p><strong>Almost there!</strong></p>
-      <p>Check your inbox (and spam folder, just in case) for a confirmation link - click it and your dashboard is ready to use straight away.</p>
+      <p>Check your inbox (and spam folder, just in case) for a confirmation link - click it and your dashboard is ready to use straight away. It'll come from <span id="senderEmailSpan1"></span> - worth searching your inbox for that if you don't see it.</p>
     </div>
 
     <button type="button" id="showResendBtn" class="toggleLink">Already signed up? Lost your link &rarr;</button>
@@ -421,7 +421,7 @@
 
     <div id="resendConfirmPanel" class="hidden">
       <p><strong>Check your inbox.</strong></p>
-      <p>If that email's on our list, a fresh dashboard link is on its way (check spam too, just in case).</p>
+      <p>If that email's on our list, a fresh dashboard link is on its way from <span id="senderEmailSpan2"></span> (check spam too, just in case).</p>
     </div>
 
     <button type="button" id="showSignupBtn" class="toggleLink">New here? Sign up instead &rarr;</button>
@@ -432,6 +432,23 @@
   // Same deployed Apps Script Web App both other pages already use.
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
   const CONTACT_EMAIL = 'whoshotmedotcom@gmail.com'; // shown in the About modal's "email us" link
+
+  // The automated emails this page triggers (signup confirmation, resend)
+  // all come from this same address (MailApp.sendEmail defaults to the
+  // deploying account's own address - see app-script.gs's sendConfirmationEmail/
+  // resendLink). Telling people what to search their inbox for if it
+  // doesn't show up matters more now that real strangers are signing up,
+  // not just people who already know to check spam. Built from parts at
+  // display time rather than one literal string, so a bot just
+  // regex-scanning the page source for an email pattern doesn't pick it
+  // up as easily - not meant to stop a determined human reading the JS,
+  // same proportionate spirit as the signup form's honeypot field.
+  function senderEmailDisplay(){
+    return ['whoshotmedotcom', '@', 'gmail.com'].join('');
+  }
+  document.querySelectorAll('#senderEmailSpan1, #senderEmailSpan2').forEach(el => {
+    el.textContent = senderEmailDisplay();
+  });
 
   // =========================================================================
   // ABOUT — purely informational modal, opened from the header link. Same
