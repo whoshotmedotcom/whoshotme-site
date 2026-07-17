@@ -246,6 +246,27 @@
     color:var(--asphalt);
   }
 
+  /* ---- map tab ---- */
+  #mapTabHint{ font-size:0.82rem; color:var(--muted-grey); margin:6px 0 14px; line-height:1.5; }
+  /* Fixed viewport-relative height, not the embedded page's own 100%-height
+     flex layout - iframes don't auto-size to their content, and index.html
+     assumes it owns the whole browser viewport. min-height keeps it usable
+     on short landscape phone screens where 70vh would otherwise be tiny. */
+  #mapTabFrameWrap{
+    width:100%;
+    height:70vh;
+    min-height:420px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+  }
+  #mapTabIframe{
+    width:100%;
+    height:100%;
+    border:none;
+    display:block;
+  }
+
   /* ---- stats ---- */
   #statsRow{
     display:grid;
@@ -844,6 +865,7 @@
       <button type="button" class="dash-tab active" data-tab="add" role="tab" aria-selected="true" id="tabBtn-add">Add shoot</button>
       <button type="button" class="dash-tab" data-tab="shoots" role="tab" aria-selected="false" id="tabBtn-shoots">My shoots</button>
       <button type="button" class="dash-tab" data-tab="profile" role="tab" aria-selected="false" id="tabBtn-profile">Profile</button>
+      <button type="button" class="dash-tab" data-tab="map" role="tab" aria-selected="false" id="tabBtn-map">Map</button>
     </div>
 
     <div id="tabPanel-add" class="dash-panel" role="tabpanel" aria-labelledby="tabBtn-add">
@@ -968,6 +990,22 @@
         <p id="emailPendingHint" class="hidden"></p>
       </section>
     </div>
+
+    <div id="tabPanel-map" class="dash-panel hidden" role="tabpanel" aria-labelledby="tabBtn-map">
+      <section id="mapTabSection">
+        <h2>Live map</h2>
+        <p id="mapTabHint">Your shoots exactly as riders see them on the public map - no need to leave your dashboard to check.</p>
+        <div id="mapTabFrameWrap">
+          <!-- src is set lazily on first visit to this tab, not on page
+               load - this loads Leaflet/markercluster/tiles a second time
+               (the dashboard's own pin-drop map already loads them once),
+               a real page-weight cost not worth paying for photographers
+               who never open this tab. See tabBtn-map's click handling
+               below for the load-once + invalidateSize-on-revisit logic. -->
+          <iframe id="mapTabIframe" title="Who Shot Me live map - your shoots only" loading="lazy"></iframe>
+        </div>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -1040,6 +1078,7 @@ const tabPanels = {
   add: document.getElementById('tabPanel-add'),
   shoots: document.getElementById('tabPanel-shoots'),
   profile: document.getElementById('tabPanel-profile'),
+  map: document.getElementById('tabPanel-map'),
 };
 
 function switchTab(name){
@@ -1056,6 +1095,38 @@ function switchTab(name){
   // explanation.
   if (name === 'add' && typeof map !== 'undefined'){
     setTimeout(() => map.invalidateSize(), 50);
+  }
+  if (name === 'map') loadMapTab();
+}
+
+// =========================================================================
+// MAP TAB — embeds the public map (index.html), filtered to just this
+// photographer's own shoots via the same ?photographer= link "Share your
+// listing" already generates (buildShareLink()). Lets a photographer
+// check how their listings actually look without leaving the dashboard.
+// =========================================================================
+const mapTabIframe = document.getElementById('mapTabIframe');
+let mapTabLoaded = false;
+function loadMapTab(){
+  if (!mapTabLoaded){
+    // Lazy: only loads a second copy of Leaflet/markercluster/tiles the
+    // first time this tab is actually opened, not on every dashboard
+    // visit - a real page-weight cost not worth paying upfront.
+    mapTabLoaded = true;
+    mapTabIframe.src = buildShareLink();
+    return;
+  }
+  // Same-origin iframe (both pages on whoshotme.com), so its own `map`
+  // global is directly reachable - same invalidateSize() need as the
+  // pin-drop map above, since this tab's container was hidden (possibly
+  // resized, e.g. an orientation change) since the iframe last measured
+  // itself. Guarded in case the embedded page hasn't finished its own
+  // script yet (shouldn't happen once mapTabLoaded is true, but a same-
+  // origin iframe's internals are still a separate document/timing-wise).
+  try {
+    mapTabIframe.contentWindow.map.invalidateSize();
+  } catch (err) {
+    console.warn('Map tab: could not invalidate embedded map size', err);
   }
 }
 
