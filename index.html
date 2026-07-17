@@ -669,6 +669,17 @@
     border-radius:8px;
   }
   .leaflet-popup-tip{ background:var(--asphalt-light); }
+  /* A long description/gallery list makes a popup scroll internally past
+     POPUP_AUTOPAN_PADDING's maxHeight (see the JS) - Leaflet adds
+     .leaflet-popup-scrolled and switches .leaflet-popup-content to
+     overflow-y:auto at that point, but never reserves any room for the
+     scrollbar itself, so the themed scrollbar (see the global *::-
+     webkit-scrollbar rules near the top of this file) sits flush against
+     the text with no gap. Only added when actually scrolled - the
+     common short-content case doesn't need the extra space. */
+  .leaflet-popup-scrolled .leaflet-popup-content{
+    padding-right:10px;
+  }
   /* Leaflet's own default close-button styling (plain grey #757575,
      16px) never got themed along with the rest of the popup - left as-is
      it's both low-contrast against the dark popup background and visibly
@@ -689,6 +700,16 @@
   }
   .noShootsPopup .leaflet-popup-content{ margin:14px 16px; }
   .noShootsPopup .leaflet-popup-content-wrapper{ border:1px solid var(--hi-vis-dim); }
+  /* Colored edge matching the same live/upcoming/past system already
+     used everywhere else (marker rings, cluster icons, status badges) -
+     className set per-status in popupHtml's callers (see marker.bindPopup
+     and flyToSpot). Same "border only, tip stays plain" pattern as
+     .noShootsPopup above rather than trying to color the tip too - a
+     colored diamond tip is fiddly to align pixel-perfectly and the
+     existing precedent already gets away without it. */
+  .status-popup-live .leaflet-popup-content-wrapper{ border:2px solid var(--hi-vis); }
+  .status-popup-soon .leaflet-popup-content-wrapper{ border:2px solid var(--rust); }
+  .status-popup-past .leaflet-popup-content-wrapper{ border:2px solid var(--past-grey); }
   .noShootsTitle{ font-weight:800; color:var(--hi-vis); margin:0 0 4px; font-size:0.95rem; }
   .noShootsBody{ font-size:0.82rem; color:#c7c9cd; margin:0; }
   .popup-name{
@@ -730,39 +751,68 @@
     color:var(--past-grey);
     margin-bottom:4px;
   }
-  .popup-link{
-    display:inline-block;
-    color:var(--hi-vis);
-    font-size:0.8rem;
+  /* "More from X" and gallery links used to be plain blue-ish underlined
+     text - inconsistent with the Directions row just above them, which
+     was already a proper pill button (.popup-btn). Same treatment here:
+     these are just as much a primary action (the whole point of a
+     popup is getting to a photographer's photos), so they get the same
+     hi-vis-bordered pill rather than reading as a lesser, plainer link.
+     Selector is .leaflet-container a.X, not just .X - this turned up a
+     real pre-existing bug while checking it: Leaflet's own default
+     ".leaflet-container a{color:#0078a8}" (its stock link-blue) has
+     higher specificity than a bare single-class selector, so .popup-btn
+     had been silently losing that fight the whole time - every "button"
+     in a popup was actually rendering in Leaflet's default blue, not
+     hi-vis green, just close enough in a small screenshot not to notice.
+     Matching (or beating) that selector's specificity is what actually
+     fixes it, not just adding the color declaration. */
+  .leaflet-container a.popup-btn,
+  .leaflet-container a.popup-link,
+  .leaflet-container a.popup-gallery-link{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:5px 10px;
+    border-radius:14px;
+    font-size:0.74rem;
+    font-weight:700;
     text-decoration:none;
-    border-bottom:1px solid var(--hi-vis-dim);
+    border:1px solid var(--hi-vis-dim);
+    color:var(--hi-vis);
+    width:fit-content;
   }
+  .leaflet-container a.popup-link:hover,
+  .leaflet-container a.popup-gallery-link:hover,
+  .popup-btn:hover{
+    background:var(--hi-vis);
+    color:var(--asphalt);
+  }
+  /* Share is a secondary/utility action, not "go look at content" like
+     the buttons above - same muted-outline-then-hi-vis-on-hover pattern
+     already used for secondary actions elsewhere (see add-shoot.html's
+     .chip-btn), so it still reads as a button without competing with
+     the primary ones for attention. */
   .popup-share-btn{
-    display:block;
-    margin-top:6px;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:5px 10px;
+    border-radius:14px;
+    font-size:0.74rem;
+    font-weight:700;
     background:none;
-    border:none;
-    padding:0;
+    border:1px solid var(--line);
     color:var(--past-grey);
-    font-size:0.76rem;
-    text-decoration:underline;
     cursor:pointer;
     font-family:inherit;
+    width:fit-content;
   }
-  .popup-share-btn:hover{ color:var(--hi-vis); }
+  .popup-share-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
   .popup-galleries{
     display:flex;
     flex-direction:column;
-    gap:3px;
+    gap:5px;
   }
-  .popup-gallery-link{
-    color:var(--paper);
-    font-size:0.78rem;
-    text-decoration:none;
-    border-bottom:1px dotted var(--past-grey);
-    width:fit-content;
-  }
-  .popup-gallery-link:hover{ color:var(--hi-vis); }
   .popup-header{
     display:flex;
     align-items:center;
@@ -783,19 +833,6 @@
     gap:10px;
     flex-wrap:wrap;
   }
-  .popup-btn{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    padding:5px 10px;
-    border-radius:14px;
-    font-size:0.74rem;
-    font-weight:700;
-    text-decoration:none;
-    border:1px solid var(--hi-vis-dim);
-    color:var(--hi-vis);
-  }
-  .popup-btn:hover{ background:var(--hi-vis); color:var(--asphalt); }
   .count-pill{
     margin-left:auto;
     font-size:0.78rem;
@@ -2301,8 +2338,10 @@ function popupHtml(spot){
     : '';
   // Link + share sit together under one divider, sharing a "more ways to
   // engage" section — no need for two separate dividers back to back.
+  // Same popup-actions row treatment as the Directions buttons above,
+  // rather than stacking as separate lines.
   const linkAndShareBlock = (linkLine || shareLine)
-    ? `<div class="popup-divider">${linkLine}${shareLine}</div>`
+    ? `<div class="popup-actions popup-divider">${linkLine}${shareLine}</div>`
     : '';
   return `
     <div class="popup-header">
@@ -2600,7 +2639,7 @@ function render(){
     const status = getStatus(spot); // 'live', 'soon', or 'past' — matches a clusterGroups key
     const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(spot, status), pane: `pane-${status}` });
     marker._spotRef = spot;
-    marker.bindPopup(popupHtml(spot), { maxWidth: 240, ...POPUP_AUTOPAN_PADDING });
+    marker.bindPopup(popupHtml(spot), { maxWidth: 240, className: `status-popup-${status}`, ...POPUP_AUTOPAN_PADDING });
     // Leaflet's marker element already gets role="button" tabindex="0"
     // (interactive markers are keyboard-focusable by default), but ships
     // with no accessible name, so screen readers just announce "button"
@@ -2934,7 +2973,7 @@ function flyToSpot(spot){
   // correctly whether setView ends up animating or snapping instantly.
   programmaticMapMove(() => map.setView([spot.lat, spot.lng], 15, { animate: true }));
   map.once('moveend', () => {
-    const popup = L.popup({ maxWidth: 240, ...POPUP_AUTOPAN_PADDING })
+    const popup = L.popup({ maxWidth: 240, className: `status-popup-${getStatus(spot)}`, ...POPUP_AUTOPAN_PADDING })
       .setLatLng([spot.lat, spot.lng])
       .setContent(popupHtml(spot));
     popup._spotRef = spot; // standalone popup, no marker — see popupopen handler below
