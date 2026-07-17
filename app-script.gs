@@ -501,6 +501,19 @@ function requestPhotographer(data) {
   var honeypot = String((data && data.company) || '').trim();
   if (honeypot) return { ok: true };
 
+  // Second bot signal: reject submissions completed suspiciously fast.
+  // formLoadedAt is a client-side timestamp (ms since epoch) set the
+  // moment the page's script starts running - a real person can't read
+  // this form and fill in two required fields in under ~3 seconds, but a
+  // scripted bot fills and submits near-instantly. Same "pretend success"
+  // response as the honeypot, for the same reason: don't tell a bot what
+  // tripped the check, or it just adds a delay and gets back in. Missing/
+  // malformed formLoadedAt is treated as suspicious too (a real browser
+  // running this page's own JS always sends it) rather than failing open.
+  var MIN_SUBMIT_MS = 3000;
+  var loadedAt = Number(data && data.formLoadedAt);
+  if (!loadedAt || (Date.now() - loadedAt) < MIN_SUBMIT_MS) return { ok: true };
+
   if (!name) return { error: 'Your name / page name is required' };
   if (!SIGNUP_EMAIL_RE.test(email)) return { error: 'A valid contact email is required' };
 

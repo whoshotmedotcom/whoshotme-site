@@ -455,6 +455,15 @@
     }
   });
 
+  // Second bot signal alongside the honeypot below - a real person can't
+  // read this form and fill in two required fields in under a couple of
+  // seconds, but a scripted bot fills and submits instantly. Recorded at
+  // script start (as close to "page ready" as this gets) rather than on
+  // first keystroke, so it measures genuine time-on-page, not typing
+  // speed. See requestPhotographer in app-script.gs for the server-side
+  // check this feeds.
+  const formLoadedAt = Date.now();
+
   const form = document.getElementById('signupForm');
   const signupIntro = document.getElementById('signupIntro');
   const submitBtn = document.getElementById('submitBtn');
@@ -497,7 +506,7 @@
       // the matching note in add-shoot.html's save-shoot code.
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'requestPhotographer', name, email, website, company })
+        body: JSON.stringify({ action: 'requestPhotographer', name, email, website, company, formLoadedAt })
       });
       const result = await res.json();
       if (result.error) {
