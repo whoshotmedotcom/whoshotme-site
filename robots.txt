@@ -1,2 +1,4 @@
 User-agent: *
 Disallow: /add-shoot.html
+
+Sitemap: https://whoshotme.com/sitemap.xml

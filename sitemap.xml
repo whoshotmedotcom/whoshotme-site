@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- No <lastmod> on either entry - this is a plain static file with no
+     build step to keep a date honest, and a stale/wrong lastmod is worse
+     than none. <changefreq>/<priority> are omitted too since Google has
+     said for years it ignores both; kept for other engines that might
+     still read them isn't worth the maintenance surface. add-shoot.html
+     deliberately excluded - noindex,nofollow and disallowed in
+     robots.txt, so it has no business in a sitemap either. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://whoshotme.com/</loc>
+  </url>
+  <url>
+    <loc>https://whoshotme.com/become-photographer.html</loc>
+  </url>
+</urlset>
