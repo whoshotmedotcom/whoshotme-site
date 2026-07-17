@@ -2031,13 +2031,17 @@ function makeIcon(spot, status){
   const flashUid = `f${Math.random().toString(36).slice(2, 9)}`;
   const startPattern = Math.floor(Math.random() * FLASH_PATTERN_LIST.length);
   const flashHtml = isLive ? flashBadgeHtml(flashUid) : '';
-  if (isLive){
-    // Deferred so the element actually exists in the DOM by the time this
-    // runs (divIcon's html string isn't attached yet at the point
-    // makeIcon() returns) — a fresh setTimeout(0) per marker is cheap
-    // enough at this app's scale (a handful of live pins, not hundreds).
-    setTimeout(() => startFlashCycle(flashUid, startPattern), 0);
-  }
+  // Flash cycle is started from the marker's 'add' event (see render()),
+  // NOT a setTimeout here — a marker sitting inside a cluster doesn't get
+  // its own DOM element at all until the cluster splits apart (zoom in or
+  // spiderfy), which can happen long after makeIcon() runs, or not at all
+  // this session. A setTimeout(0) fired here found no element yet for any
+  // marker that started out clustered and silently gave up, so those pins
+  // never flashed even after later becoming individually visible. 'add'
+  // fires every time this marker's element is actually mounted, including
+  // each re-mount after unclustering, which is exactly when it needs a
+  // fresh animation chain (the previous DOM element, and its listener, is
+  // gone by then).
   // Same "randomize per marker so they don't all move in lockstep" idea
   // as the camera-flash timing above, applied to the pulsing ring too - a
   // NEGATIVE animation-delay seeds the (infinite) animation into a random
@@ -2049,7 +2053,7 @@ function makeIcon(spot, status){
   // through to it, so .live-marker-ring::after's animation-delay reads it
   // via var(--pulse-offset).
   const pulseOffsetStyle = isLive ? `--pulse-offset:-${(Math.random() * 1.6).toFixed(2)}s;` : '';
-  return L.divIcon({
+  const icon = L.divIcon({
     className: '',
     html: `<div style="position:relative; width:${size}px; height:${size}px;">
       <div class="${isLive ? 'live-marker-ring' : ''}" style="
@@ -2069,6 +2073,11 @@ function makeIcon(spot, status){
     iconSize: [size, size],
     iconAnchor: [size/2, size/2]
   });
+  // See the comment above on why this is a marker-mounted flag read by
+  // render()'s marker.on('add', ...) rather than started here directly.
+  icon._flashUid = isLive ? flashUid : null;
+  icon._flashStartPattern = startPattern;
+  return icon;
 }
 
 // pulse + camera-flash keyframes for live markers
@@ -2700,7 +2709,8 @@ function render(){
 
   visible.forEach(spot => {
     const status = getStatus(spot); // 'live', 'soon', or 'past' — matches a clusterGroups key
-    const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(spot, status), pane: `pane-${status}` });
+    const icon = makeIcon(spot, status);
+    const marker = L.marker([spot.lat, spot.lng], { icon, pane: `pane-${status}` });
     marker._spotRef = spot;
     marker.bindPopup(popupHtml(spot), { maxWidth: 240, className: `status-popup-${status}`, ...POPUP_AUTOPAN_PADDING });
     // Leaflet's marker element already gets role="button" tabindex="0"
@@ -2712,6 +2722,13 @@ function render(){
     marker.on('add', () => {
       const el = marker.getElement();
       if (el) el.setAttribute('aria-label', `${spot.name} - ${spot.location}, ${statusWord}`);
+      // Fires every time this marker's element is actually mounted -
+      // including re-mounts after a cluster it was sitting inside splits
+      // apart - which is exactly when a fresh flash animation chain is
+      // needed (see makeIcon() for why this can't just run at icon-build
+      // time). No-ops for non-live markers, and safely no-ops here too if
+      // the element isn't found for some other reason (see startFlashCycle).
+      if (icon._flashUid) startFlashCycle(icon._flashUid, icon._flashStartPattern);
     });
     clusterGroups[status].addLayer(marker);
   });
