@@ -75,18 +75,25 @@
     font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
   }
   header h1 span{ color:var(--hi-vis); }
+  /* Small outlined pill, not plain text - same lightweight-CTA pattern as
+     add-shoot.html's .chip-btn. This is the only way back to the live map
+     from this page, so it needs to read as a clickable action at a
+     glance, not blend in as fine print next to the About link. */
   #backLink{
     display:inline-block;
-    margin-top:6px;
-    color:var(--hi-vis-dim);
+    margin-top:10px;
+    padding:6px 14px;
+    border:1px solid var(--line);
+    border-radius:16px;
+    color:var(--paper);
     font-size:0.82rem;
     text-decoration:none;
   }
-  #backLink:hover{ color:var(--hi-vis); }
+  #backLink:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
   #backLink:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   #aboutLink{
     display:inline-block;
-    margin-top:6px;
+    margin-top:10px;
     margin-left:10px;
     background:none;
     border:none;
