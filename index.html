@@ -1120,8 +1120,16 @@
     #aboutLink{ font-size:0.78rem; }
 
     #searchWrap{ max-width:none; left:8px; right:8px; top:8px; }
-    #searchBox{ padding:3px 4px 3px 12px; border-radius:18px; }
-    #searchInput{ font-size:0.84rem; padding:7px 4px; }
+    /* Was 3px/7px (37px tall total) - visibly taller than every other
+       pill control on the map (chips/Reset view/zoom buttons all sit in
+       the 26-30px range). Trimmed to land in that same range. */
+    #searchBox{ padding:2px 4px 2px 12px; border-radius:18px; }
+    #searchInput{ font-size:0.84rem; padding:5px 4px; }
+    /* #searchClear has no mobile override otherwise, so once it becomes
+       visible (typing something to clear) it'd be taller than the now-
+       trimmed #searchInput and re-expand the whole flex row back out -
+       matched to the same scale as the fix above. */
+    #searchClear{ font-size:0.84rem; padding:4px 8px; }
     .resultItem{ padding:8px 12px; font-size:0.8rem; }
     #getListedBtn{ padding:7px 11px; font-size:0.74rem; }
 
