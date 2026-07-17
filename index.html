@@ -345,14 +345,21 @@
     box-shadow:0 1px 5px rgba(0,0,0,0.4);
     transition:background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   }
-  .recenter-btn:hover{ background:var(--asphalt); }
   .recenter-btn.is-active{
     background:var(--hi-vis);
     color:var(--asphalt);
     border-color:transparent;
     box-shadow:0 1px 5px rgba(0,0,0,0.4), 0 0 0 3px rgba(212,255,63,0.25);
   }
-  .recenter-btn.is-active:hover{ background:var(--hi-vis-dim); }
+  /* (hover: hover) scopes these to devices with a real pointer that can
+     actually leave the button - on a touchscreen, tapping the map to pan
+     it can leave a plain :hover rule "stuck" on since there's no mouse-
+     leave event to clear it, making the button look like it darkened and
+     stayed that way rather than a momentary hover effect. */
+  @media (hover: hover){
+    .recenter-btn:hover{ background:var(--asphalt); }
+    .recenter-btn.is-active:hover{ background:var(--hi-vis-dim); }
+  }
 
   /* "My location" trigger — circular icon-only button matching the layer
      switcher's sizing/style (.leaflet-control-layers-toggle below), not
