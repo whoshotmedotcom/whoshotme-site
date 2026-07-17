@@ -669,6 +669,24 @@
     border-radius:8px;
   }
   .leaflet-popup-tip{ background:var(--asphalt-light); }
+  /* Leaflet's own default close-button styling (plain grey #757575,
+     16px) never got themed along with the rest of the popup - left as-is
+     it's both low-contrast against the dark popup background and visibly
+     inconsistent with everything else on the page. Same hi-vis used for
+     the popup's own title, just a smaller/plainer treatment than the
+     About modal's circular close button - a popup close doesn't need
+     that much visual weight, just to be readable and on-brand. Matching
+     selector specificity to Leaflet's own rule (see the inlined Leaflet
+     stylesheet above) rather than !important. */
+  .leaflet-container a.leaflet-popup-close-button{
+    color:var(--hi-vis);
+    font-size:1.3rem;
+    line-height:24px;
+  }
+  .leaflet-container a.leaflet-popup-close-button:hover,
+  .leaflet-container a.leaflet-popup-close-button:focus{
+    color:var(--hi-vis-dim);
+  }
   .noShootsPopup .leaflet-popup-content{ margin:14px 16px; }
   .noShootsPopup .leaflet-popup-content-wrapper{ border:1px solid var(--hi-vis-dim); }
   .noShootsTitle{ font-weight:800; color:var(--hi-vis); margin:0 0 4px; font-size:0.95rem; }
