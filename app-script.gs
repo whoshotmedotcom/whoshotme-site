@@ -503,14 +503,18 @@ function requestPhotographer(data) {
 
   // Second bot signal: reject submissions completed suspiciously fast.
   // formLoadedAt is a client-side timestamp (ms since epoch) set the
-  // moment the page's script starts running - a real person can't read
-  // this form and fill in two required fields in under ~3 seconds, but a
-  // scripted bot fills and submits near-instantly. Same "pretend success"
-  // response as the honeypot, for the same reason: don't tell a bot what
-  // tripped the check, or it just adds a delay and gets back in. Missing/
-  // malformed formLoadedAt is treated as suspicious too (a real browser
-  // running this page's own JS always sends it) rather than failing open.
-  var MIN_SUBMIT_MS = 3000;
+  // moment the page's script starts running, measuring total time on
+  // page (not typing speed) - a slow reader who autofills and submits
+  // instantly after 20 seconds is still fine. 1200ms, not the initially-
+  // tried 3000ms - browser/password-manager autofill can fill both
+  // fields on a single click, so a fast returning user landing on the
+  // page ready to autofill-and-go could plausibly clear 1-1.5s. A bot
+  // skipping real page rendering typically submits in well under that.
+  // Same "pretend success" response as the honeypot, for the same
+  // reason: don't tell a bot what tripped the check. Missing/malformed
+  // formLoadedAt is treated as suspicious too (a real browser running
+  // this page's own JS always sends it) rather than failing open.
+  var MIN_SUBMIT_MS = 1200;
   var loadedAt = Number(data && data.formLoadedAt);
   if (!loadedAt || (Date.now() - loadedAt) < MIN_SUBMIT_MS) return { ok: true };
 
