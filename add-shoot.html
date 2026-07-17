@@ -756,6 +756,35 @@
     z-index:3000;
   }
   #toast.error{ background:var(--rust); color:var(--asphalt); }
+
+  /* ---- busy overlay ----
+     Shown only for the handful of writes that measured 7-15s round trip
+     against the Apps Script backend (create/edit/delete shoot, gallery
+     add/edit/delete) - see BUSY OVERLAY comment near showBusy() below.
+     Turned off by the actual response landing, never a timer, so it's
+     never on any longer than the real wait. */
+  #busyOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.72);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    z-index:4000;
+  }
+  #busyOverlay.hidden{ display:none; }
+  #busySpinner{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:3px solid rgba(255,255,255,0.25);
+    border-top-color:var(--hi-vis);
+    animation:busySpin 0.8s linear infinite;
+  }
+  @keyframes busySpin{ to{ transform:rotate(360deg); } }
+  #busyOverlay p{ color:var(--paper); font-weight:600; font-size:0.9rem; margin:0; }
 </style>
 </head>
 <body>
@@ -964,6 +993,11 @@
 
 <div id="toast" class="hidden" role="status" aria-live="polite"></div>
 
+<div id="busyOverlay" class="hidden" role="status" aria-live="polite">
+  <div id="busySpinner" aria-hidden="true"></div>
+  <p id="busyOverlayText">Saving, please wait…</p>
+</div>
+
 <!-- ====================================================================
   Set this to your Apps Script Web App URL (Deploy > New deployment >
   Web app in the script editor — ends in /exec). The same URL is used in
@@ -1074,6 +1108,26 @@ function showToast(text, isError){
   toastEl.classList.toggle('error', !!isError);
   toastEl.classList.remove('hidden');
   toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2600);
+}
+
+// =========================================================================
+// Busy overlay — the create/edit/delete shoot and gallery add/edit/delete
+// writes measured 7-15s round trip against the Apps Script backend (Google
+// Sheets cross-execution propagation, not something fixable client-side).
+// Rather than leave the photographer free to tap away mid-save with only a
+// disabled button as a hint, these calls are wrapped in showBusy()/
+// hideBusy(). hideBusy() is only ever called from the same try/finally
+// that awaited the request, so the overlay is up for exactly as long as
+// the real wait, never an arbitrary guessed duration.
+// =========================================================================
+const busyOverlayEl = document.getElementById('busyOverlay');
+const busyOverlayTextEl = document.getElementById('busyOverlayText');
+function showBusy(text){
+  busyOverlayTextEl.textContent = text || 'Saving, please wait…';
+  busyOverlayEl.classList.remove('hidden');
+}
+function hideBusy(){
+  busyOverlayEl.classList.add('hidden');
 }
 
 // =========================================================================
@@ -1751,6 +1805,7 @@ saveShootBtn.addEventListener('click', async () => {
 
   saveShootBtn.disabled = true;
   saveShootBtn.textContent = 'Saving…';
+  showBusy('Saving your shoot, please wait…');
   try {
     const result = editingShootId
       ? await apiPost({ action: 'updateShoot', shootId: editingShootId, shoot })
@@ -1767,15 +1822,17 @@ saveShootBtn.addEventListener('click', async () => {
       showToast((wasEditing ? 'Shoot updated' : 'Shoot added') + ' - may take a few minutes to show on the public map');
       // Switch tabs immediately - the save itself already succeeded, so
       // don't make the photographer sit on this page waiting for the
-      // list to re-fetch before they're allowed to see it. The list
-      // itself fills in moments later, fire-and-forget - once it lands,
-      // scroll straight to whichever Live/Upcoming/Past group the saved
-      // shoot actually falls into, rather than leaving them wherever the
-      // page happened to be scrolled to on the previous tab.
+      // list to re-fetch before they're allowed to see it. Awaited here
+      // (unlike before) so the busy overlay stays up until the refreshed
+      // list has actually landed, not just until the write itself did -
+      // Sheets can take several seconds to reflect a just-written row.
       switchTab('shoots');
-      loadShoots()
-        .then(() => scrollToSavedShoot(savedShootId, savedStatus))
-        .catch(err => console.error(err));
+      try {
+        await loadShoots();
+        scrollToSavedShoot(savedShootId, savedStatus);
+      } catch (err) {
+        console.error(err);
+      }
     }
   } catch (err) {
     formError.textContent = "Couldn't save - check your connection and try again.";
@@ -1784,6 +1841,7 @@ saveShootBtn.addEventListener('click', async () => {
   } finally {
     saveShootBtn.disabled = false;
     saveShootBtn.textContent = editingShootId ? 'Save changes' : 'Save shoot';
+    hideBusy();
   }
 });
 
@@ -1843,6 +1901,7 @@ saveGalleryBtn.addEventListener('click', async () => {
   const isEdit = galleryEditRow !== null;
   saveGalleryBtn.disabled = true;
   saveGalleryBtn.textContent = isEdit ? 'Saving…' : 'Adding…';
+  showBusy(isEdit ? 'Saving gallery link, please wait…' : 'Adding gallery link, please wait…');
   try {
     const result = isEdit
       ? await apiPost({
@@ -1873,6 +1932,7 @@ saveGalleryBtn.addEventListener('click', async () => {
   } finally {
     saveGalleryBtn.disabled = false;
     saveGalleryBtn.textContent = isEdit ? 'Save changes' : 'Add gallery';
+    hideBusy();
   }
 });
 
@@ -1996,6 +2056,7 @@ shootsListEl.addEventListener('click', async (e) => {
       if (!confirm('Delete this gallery link? This can\'t be undone.')) return;
       galleryBtn.disabled = true;
       galleryBtn.textContent = '…';
+      showBusy('Deleting gallery link, please wait…');
       try {
         const result = await apiPost({ action: 'deleteGallery', shootId, row });
         if (result.error){
@@ -2011,6 +2072,8 @@ shootsListEl.addEventListener('click', async (e) => {
         console.error(err);
         galleryBtn.disabled = false;
         galleryBtn.textContent = 'Delete';
+      } finally {
+        hideBusy();
       }
     }
     return;
@@ -2036,6 +2099,7 @@ shootsListEl.addEventListener('click', async (e) => {
 
     btn.disabled = true;
     btn.textContent = 'Deleting…';
+    showBusy('Deleting shoot, please wait…');
     try {
       const result = await apiPost({ action: 'deleteShoot', shootId });
       if (result.error){
@@ -2051,6 +2115,8 @@ shootsListEl.addEventListener('click', async (e) => {
       console.error(err);
       btn.disabled = false;
       btn.textContent = 'Delete';
+    } finally {
+      hideBusy();
     }
   }
 });
