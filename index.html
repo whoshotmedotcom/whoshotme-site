@@ -682,16 +682,22 @@
   .popup-header{ margin-right:8px; }
   /* A long description/gallery list makes a popup scroll internally past
      POPUP_AUTOPAN_PADDING's maxHeight (see the JS) - Leaflet adds
-     .leaflet-popup-scrolled and switches .leaflet-popup-content to
-     overflow-y:auto at that point, but never reserves any room for the
-     scrollbar itself, so the themed scrollbar (see the global *::-
-     webkit-scrollbar rules near the top of this file) sits flush against
-     the text with no gap. A small 6px padding is enough breathing room
-     for a 10px scrollbar without stacking a whole extra reserved column
-     on top of the close-button margin above - total right-side space
-     when scrolled (16+6=22px) ends up LESS than the old unscrolled
-     default (24px), not more. */
-  .leaflet-popup-scrolled .leaflet-popup-content{
+     .leaflet-popup-scrolled and switches to overflow-y:auto at that
+     point, but never reserves any room for the scrollbar itself, so the
+     themed scrollbar (see the global *::-webkit-scrollbar rules near the
+     top of this file) sits flush against the text with no gap. A small
+     6px padding is enough breathing room for a 10px scrollbar without
+     stacking a whole extra reserved column on top of the close-button
+     margin above - total right-side space when scrolled (16+6=22px)
+     ends up LESS than the old unscrolled default (24px), not more.
+     Selector is .leaflet-popup-content.leaflet-popup-scrolled (both
+     classes on the SAME element), not a descendant combinator - Leaflet
+     adds "leaflet-popup-scrolled" directly to .leaflet-popup-content
+     itself, not to an ancestor. A descendant-combinator version of this
+     rule silently never matches anything, which is exactly what
+     shipped here initially - confirmed via a real overflowing popup on
+     the live site, not just synthetic testing. */
+  .leaflet-popup-content.leaflet-popup-scrolled{
     padding-right:6px;
   }
   /* Leaflet's own default close-button styling (plain grey #757575,
