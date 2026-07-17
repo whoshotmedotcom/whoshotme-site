@@ -27,6 +27,13 @@
 <meta property="og:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
 <meta property="og:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
 <meta property="og:type" content="website">
+<!-- Bare apex domain, matching the canonical link above - the page this
+     preview data actually describes. Facebook's sharing debugger flags
+     og:url as required; without it a scraper has to guess the canonical
+     URL from wherever it found the link (which breaks for a shared
+     ?shoot=/?photographer= deep link, since those aren't the canonical
+     page). -->
+<meta property="og:url" content="https://whoshotme.com/">
 <meta property="og:image" content="https://whoshotme.com/og-image.png">
 <!-- Update this and the twitter:image URL below if the domain ever changes
      again — social platforms need an absolute URL here, a relative path
@@ -35,10 +42,12 @@
      apex, and most social scrapers (WhatsApp, etc.) won't follow a
      redirect when fetching this image, so a www URL here silently breaks
      link previews. -->
+<meta property="og:image:alt" content="Who Shot Me? logo - wordmark on a dark background, with a camera aperture forming the O and a road forming the T">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Who Shot Me? - Live, Upcoming & Past Roadside Photographers in Derbyshire">
 <meta name="twitter:description" content="Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across Derbyshire.">
 <meta name="twitter:image" content="https://whoshotme.com/og-image.png">
+<meta name="twitter:image:alt" content="Who Shot Me? logo - wordmark on a dark background, with a camera aperture forming the O and a road forming the T">
 
 <!-- ====================================================================
   VISITOR COUNT — no third-party analytics at all. Every page load pings
