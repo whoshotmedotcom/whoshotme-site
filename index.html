@@ -2374,12 +2374,23 @@ function popupHtml(spot){
   // this varies by photographer (some a Facebook/Instagram profile, some
   // a proper portfolio site), so wording tied to a specific platform
   // would be wrong for some of them. This phrasing works either way.
-  const linkLine = spot.link ? `<a class="popup-link" href="${escapeHtml(spot.link)}" target="_blank" rel="noopener">More from ${escapeHtml(spot.name)} →</a>` : '';
+  //
+  // rel="nofollow ugc" on both this and the gallery links below - any
+  // signed-up photographer can submit an arbitrary URL for either field
+  // (see requestPhotographer/updateProfile/addGallery in app-script.gs),
+  // so these are exactly the "user-posted links" Google's own SEO
+  // guidance says to annotate: without nofollow, the site would be
+  // passing link authority to whatever URL anyone chooses to submit,
+  // which is both a spam vector and not something we can vouch for.
+  // ugc (introduced alongside nofollow specifically for user-generated
+  // content) is the more precise annotation; kept nofollow alongside it
+  // for older crawlers that don't recognise ugc.
+  const linkLine = spot.link ? `<a class="popup-link" href="${escapeHtml(spot.link)}" target="_blank" rel="noopener nofollow ugc">More from ${escapeHtml(spot.name)} →</a>` : '';
   const descLine = spot.description ? `<p class="popup-meta">${escapeHtml(spot.description)}</p>` : '';
   const galleryLines = (spot.galleries && spot.galleries.length)
     ? `<div class="popup-galleries popup-divider">
         <span class="popup-eyebrow">Galleries</span>
-        ${spot.galleries.map(g => `<a class="popup-gallery-link" href="${escapeHtml(g.url)}" target="_blank" rel="noopener">📷 ${escapeHtml(g.label)}</a>`).join('')}
+        ${spot.galleries.map(g => `<a class="popup-gallery-link" href="${escapeHtml(g.url)}" target="_blank" rel="noopener nofollow ugc">📷 ${escapeHtml(g.label)}</a>`).join('')}
       </div>`
     : '';
   const shareLine = spot.shootId
