@@ -1854,6 +1854,38 @@ function nextRandomPatternIndex(currentIndex){
   return choices[Math.floor(Math.random() * choices.length)];
 }
 
+// Camera-flash sparkle badge (top-right corner star, mostly invisible
+// with a brief bright pop) — shared markup between individual live
+// markers (makeIcon) and live cluster icons (makeClusterGroup), so both
+// get the exact same effect instead of two copies drifting apart. Caller
+// positions the parent as position:relative and calls
+// startFlashCycle(uid, ...) once the element actually exists in the DOM.
+//
+// Contrast: tried a drop-shadow outline (too thin to read against pale
+// OS/OSM basemaps) and a solid dark backing disc (fixed the contrast but
+// looked like a black blob popping in and out, not a flash). This is a
+// dark star sitting directly behind a smaller white star, both using the
+// same clip-path silhouette — a thin dark contour that follows the
+// star's actual points rather than a circular backdrop.
+const STAR_CLIP = 'polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%)';
+function flashBadgeHtml(uid){
+  return `<div id="${uid}" style="
+      position:absolute; top:-3px; right:-3px;
+      width:16px; height:16px;
+      opacity:0;
+      pointer-events:none;
+    "><div style="
+      position:absolute; inset:0;
+      background:#1c1e22;
+      clip-path:${STAR_CLIP};
+    "></div><div style="
+      position:absolute; top:2.5px; left:2.5px;
+      width:11px; height:11px;
+      background:#fff;
+      clip-path:${STAR_CLIP};
+    "></div></div>`;
+}
+
 function makeIcon(spot, status){
   // Raw hex literals here, not CSS variables — this string gets an alpha
   // suffix appended directly below (statusColor + '55'), which only works
@@ -1889,24 +1921,9 @@ function makeIcon(spot, status){
   // duration/delay picked every time it advances), not just once at
   // marker creation, so a given pin doesn't settle into a metronomic
   // rhythm either.
-  const STAR_CLIP = 'polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%)';
   const flashUid = `f${Math.random().toString(36).slice(2, 9)}`;
   const startPattern = Math.floor(Math.random() * FLASH_PATTERN_LIST.length);
-  const flashHtml = isLive ? `<div id="${flashUid}" style="
-      position:absolute; top:-3px; right:-3px;
-      width:16px; height:16px;
-      opacity:0;
-      pointer-events:none;
-    "><div style="
-      position:absolute; inset:0;
-      background:#1c1e22;
-      clip-path:${STAR_CLIP};
-    "></div><div style="
-      position:absolute; top:2.5px; left:2.5px;
-      width:11px; height:11px;
-      background:#fff;
-      clip-path:${STAR_CLIP};
-    "></div></div>` : '';
+  const flashHtml = isLive ? flashBadgeHtml(flashUid) : '';
   if (isLive){
     // Deferred so the element actually exists in the DOM by the time this
     // runs (divIcon's html string isn't attached yet at the point
@@ -2023,8 +2040,20 @@ function makeClusterGroup(statusClass, pane){
       // fixed per clusterGroup, not per-cluster), but harmless to set
       // unconditionally since only .cluster-live actually reads it.
       const pulseOffsetStyle = `--pulse-offset:-${(Math.random() * 1.6).toFixed(2)}s;`;
+      // Live clusters get the same camera-flash sparkle as individual
+      // live markers (see flashBadgeHtml/makeIcon) - previously only
+      // single pins had it, so a cluster of live shoots looked inert by
+      // comparison. .whoshotme-cluster.cluster-live already has
+      // position:relative (needed for the pulse ring), so the badge can
+      // nest straight inside with no extra wrapper.
+      const isLive = statusClass === 'cluster-live';
+      const flashUid = isLive ? `cf${Math.random().toString(36).slice(2, 9)}` : '';
+      const startPattern = Math.floor(Math.random() * FLASH_PATTERN_LIST.length);
+      if (isLive){
+        setTimeout(() => startFlashCycle(flashUid, startPattern), 0);
+      }
       return L.divIcon({
-        html: `<div class="whoshotme-cluster ${statusClass}" style="width:${size}px;height:${size}px;${pulseOffsetStyle}">${count}</div>`,
+        html: `<div class="whoshotme-cluster ${statusClass}" style="width:${size}px;height:${size}px;${pulseOffsetStyle}">${count}${isLive ? flashBadgeHtml(flashUid) : ''}</div>`,
         className: '',
         iconSize: [size, size]
       });
