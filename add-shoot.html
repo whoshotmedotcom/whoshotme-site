@@ -43,8 +43,16 @@
     --line:#3a3d44;
     --past-grey:#868a90; /* lightened from #6c7077 — the original failed WCAG AA
       contrast (3.36:1 on the main background, 2.77:1 on panels) at the small
-      text sizes it's actually used at; this clears 4.5:1 on both. */
-    --muted-grey:#9aa0a6; /* a second, lighter grey used for secondary/meta text — distinct from --past-grey, which is reserved for the "past" status color */
+      text sizes it's actually used at. This lands at 4.81:1 on --asphalt but
+      only 3.98:1 on --asphalt-light (a correction to this comment's earlier,
+      incorrect "clears 4.5:1 on both" claim - found 17/07/2026 via a full
+      site contrast audit, after it had spread to dozens of generic
+      hint/label uses across all three pages that were never actually
+      checked against --asphalt-light). RESERVED FOR THE "PAST" STATUS
+      COLOR ONLY (badges, markers, chips) - use --muted-grey below for any
+      other secondary/meta text, which passes on every background this site
+      actually uses (5.23:1+). */
+    --muted-grey:#9aa0a6; /* secondary/meta text (hints, captions, timestamps) - passes WCAG AA on every background used here, unlike --past-grey above. */
     color-scheme: dark; /* tells the browser to draw ALL its own native UI (scrollbars,
       form controls, etc.) in dark mode by default, rather than only the pieces we
       happen to style ourselves — otherwise a light-OS visitor gets light-grey native
@@ -203,7 +211,7 @@
   #authGate{
     text-align:center;
     padding:60px 20px;
-    color:var(--past-grey);
+    color:var(--muted-grey);
   }
   #authGate h2{ color:var(--paper); margin:0 0 8px; font-size:1.05rem; }
   #authGate p{ margin:0; font-size:0.88rem; line-height:1.6; }
@@ -223,7 +231,7 @@
     flex:1;
     background:none;
     border:1px solid var(--line);
-    color:var(--past-grey);
+    color:var(--muted-grey);
     border-radius:20px;
     padding:10px 8px;
     font-size:0.8rem;
@@ -252,11 +260,11 @@
     text-align:center;
   }
   .stat-num{ display:block; font-size:1.4rem; font-weight:800; color:var(--hi-vis); }
-  .stat-label{ display:block; font-size:0.68rem; color:var(--past-grey); margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
-  #statsHint{ font-size:0.72rem; color:var(--past-grey); margin:8px 0 0; }
+  .stat-label{ display:block; font-size:0.68rem; color:var(--muted-grey); margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
+  #statsHint{ font-size:0.72rem; color:var(--muted-grey); margin:8px 0 0; }
 
-  #shareHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 10px; line-height:1.5; }
-  #shootsHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 12px; line-height:1.5; }
+  #shareHint{ font-size:0.78rem; color:var(--muted-grey); margin:0 0 10px; line-height:1.5; }
+  #shootsHint{ font-size:0.78rem; color:var(--muted-grey); margin:0 0 12px; line-height:1.5; }
   #shareLinkRow{ display:flex; gap:8px; }
   #shareLinkInput{
     flex:1;
@@ -335,7 +343,7 @@
   .shoot-location{ font-weight:700; font-size:0.95rem; margin:0 0 3px; }
   .shoot-time{ font-size:0.78rem; color:#c7c9cd; margin:0 0 6px; }
   .shoot-desc{ font-size:0.82rem; color:#c7c9cd; margin:0 0 6px; }
-  .shoot-galleries{ font-size:0.76rem; color:var(--past-grey); margin:0; }
+  .shoot-galleries{ font-size:0.76rem; color:var(--muted-grey); margin:0; }
   .gallery-list{ margin-top:6px; display:flex; flex-direction:column; gap:4px; }
   .gallery-item{
     display:flex;
@@ -357,7 +365,7 @@
     background:none;
     border:1px solid var(--line);
     border-radius:14px;
-    color:var(--past-grey);
+    color:var(--muted-grey);
     font-size:0.72rem;
     cursor:pointer;
     padding:3px 9px;
@@ -377,7 +385,14 @@
   }
   .status-live{ background:var(--hi-vis); color:var(--asphalt); }
   .status-soon{ background:var(--rust); color:var(--asphalt); }
-  .status-past{ background:var(--line); color:var(--past-grey); }
+  /* Was background:var(--line); color:var(--past-grey) - the only one of
+     the three status badges styled as "dark fill, muted text" instead of
+     "bright fill, dark text" like its live/soon siblings. Genuinely
+     failed WCAG AA (3.13:1) at this badge's small bold size, and was
+     inconsistent with index.html's own .status-past (which already used
+     this bright-fill pattern). Matches now - both the contrast and the
+     other status badges. */
+  .status-past{ background:var(--past-grey); color:var(--asphalt); }
 
   .shoot-actions{
     display:flex;
@@ -397,7 +412,7 @@
   .chip-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
   .chip-btn.danger:hover{ border-color:var(--rust); color:var(--rust); }
 
-  #emptyState{ color:var(--past-grey); font-size:0.85rem; text-align:center; padding:20px; }
+  #emptyState{ color:var(--muted-grey); font-size:0.85rem; text-align:center; padding:20px; }
 
   /* ---- form fields (shared with the pin-drop map) ---- */
   .field{ margin-bottom:14px; }
@@ -418,7 +433,7 @@
      already announces it correctly on its own. */
   .required-mark{ color:var(--rust); }
   .requiredLegend{
-    color:var(--past-grey);
+    color:var(--muted-grey);
     font-size:0.78rem;
     margin:-6px 0 16px;
   }
@@ -580,7 +595,7 @@
   #map{ height:100%; width:100%; }
   #mapHint{
     font-size:0.78rem;
-    color:var(--past-grey);
+    color:var(--muted-grey);
     margin:0 0 14px;
   }
   #coordReadout{
@@ -589,7 +604,7 @@
     margin:0 0 14px;
   }
   #coordReadout strong{ color:var(--hi-vis); }
-  #coordReadout.empty{ color:var(--past-grey); }
+  #coordReadout.empty{ color:var(--muted-grey); }
 
   /* Rounded into full circles (matching .stepBtn convention) rather than
      Leaflet's default near-square joined bar — see index.html for the
@@ -663,7 +678,7 @@
   .ghost-btn{
     background:none;
     border:1px solid var(--line);
-    color:var(--past-grey);
+    color:var(--muted-grey);
     border-radius:24px;
     padding:13px 18px;
     font-size:0.88rem;
@@ -688,7 +703,7 @@
     margin-top:10px;
   }
 
-  #emailHint{ font-size:0.78rem; color:var(--past-grey); margin:0 0 14px; line-height:1.5; }
+  #emailHint{ font-size:0.78rem; color:var(--muted-grey); margin:0 0 14px; line-height:1.5; }
   /* Same "worth a look, not broken" callout as #proximityWarning - shown
      while a requested email change is still awaiting its confirmation
      click, so it doesn't just silently vanish from view. */
@@ -777,7 +792,7 @@
       <p>We store your name, contact email, logo and website links, and every shoot (location, description, times) and gallery link you submit here. We also keep a simple count of your popup views, gallery clicks, and page link clicks from the public map - shown to you above, visible only via your own personal link.</p>
       <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
       <p>"Use current location": if you use it, your browser asks your permission directly - that's between you and your browser, not something we control. If you allow it, your coordinates are used only to set the pin right there on your device; they're never sent to us, stored, or logged anywhere.</p>
-      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
 
       <h3>Please keep in mind</h3>
       <p>Only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Your link is effectively a password: anyone who has it can edit your listings, so don't share it. Lost it? <a href="become-photographer.html?resend=1" style="color:var(--hi-vis);">Get a new one emailed to you</a>.</p>
@@ -836,7 +851,7 @@
             <input type="datetime-local" id="endTime" step="300" required>
           </div>
         </div>
-        <p id="timeHint" style="color:var(--past-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
+        <p id="timeHint" style="color:var(--muted-grey); font-size:0.82rem; margin-top:-8px; margin-bottom:20px;">Pick your times first - the map below will show anyone else already booked nearby that day, so you can see who's around before you drop your pin.</p>
 
         <div class="field">
           <label for="locationName">Location name<span class="required-mark" aria-hidden="true"> *</span></label>
@@ -844,7 +859,7 @@
         </div>
 
         <div class="field">
-          <label for="description">Description <span style="color:var(--past-grey); text-transform:none; font-weight:400;">(optional)</span></label>
+          <label for="description">Description <span style="color:var(--muted-grey); text-transform:none; font-weight:400;">(optional)</span></label>
           <textarea id="description" placeholder="e.g. Good spot for hairpin shots"></textarea>
         </div>
 

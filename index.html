@@ -148,8 +148,16 @@
     --line:#3a3d44;
     --past-grey:#868a90; /* lightened from #6c7077 — the original failed WCAG AA
       contrast (3.36:1 on the main background, 2.77:1 on panels) at the small
-      text sizes it's actually used at; this clears 4.5:1 on both. */
-    --muted-grey:#9aa0a6; /* a second, lighter grey used for secondary/meta text — distinct from --past-grey, which is reserved for the "past" status color */
+      text sizes it's actually used at. This lands at 4.81:1 on --asphalt but
+      only 3.98:1 on --asphalt-light (a correction to this comment's earlier,
+      incorrect "clears 4.5:1 on both" claim - found 17/07/2026 via a full
+      site contrast audit, after it had spread to dozens of generic
+      hint/label uses across all three pages that were never actually
+      checked against --asphalt-light). RESERVED FOR THE "PAST" STATUS
+      COLOR ONLY (badges, markers, chips) - use --muted-grey below for any
+      other secondary/meta text, which passes on every background this site
+      actually uses (5.23:1+). */
+    --muted-grey:#9aa0a6; /* secondary/meta text (hints, captions, timestamps) - passes WCAG AA on every background used here, unlike --past-grey above. */
     color-scheme: dark; /* tells the browser to draw ALL its own native UI (scrollbars,
       form controls, etc.) in dark mode by default, rather than only the pieces we
       happen to style ourselves — otherwise a light-OS visitor gets light-grey native
@@ -327,7 +335,7 @@
   .recenter-btn{
     padding:6px 12px;
     background:var(--asphalt-light);
-    color:var(--past-grey);
+    color:var(--muted-grey);
     border:2px solid rgba(0,0,0,0.2);
     border-radius:16px;
     font-size:0.76rem;
@@ -539,7 +547,7 @@
   #searchBox:focus-within{
     box-shadow:0 0 0 2px var(--hi-vis);
   }
-  #searchInput::placeholder{ color:#7c8088; }
+  #searchInput::placeholder{ color:var(--muted-grey); }
   #searchClear{
     background:transparent;
     border:none;
@@ -768,7 +776,7 @@
     font-weight:700;
     letter-spacing:0.5px;
     text-transform:uppercase;
-    color:var(--past-grey);
+    color:var(--muted-grey);
     margin-bottom:4px;
   }
   /* "More from X" and gallery links used to be plain blue-ish underlined
@@ -1182,7 +1190,7 @@
       <p>Visiting this site: we keep a simple count of page visits and which photographer links get clicked, entirely within our own systems - no third-party analytics company is involved. No cookies, nothing stored in your browser, nothing that identifies you personally - just anonymous counts.</p>
       <p>"My location" button: if you tap it, your browser will ask your permission directly - that's a conversation between you and your browser, not something WhoShotMe controls. If you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
       <p>Photographer listings: if you're listed, we store the details needed to run your listing - your name, contact email, logo and website links, and the shoot times/locations you submit. You manage this yourself via your own personal link; contact us (see below) to have your listing removed entirely. We keep this data for as long as you're listed, and delete it once you ask us to.</p>
-      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
       <p>Photographers: please only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Listings that don't meet this may be removed.</p>
       <p>Already listed but lost your personal dashboard link? <a href="become-photographer.html?resend=1" style="color:var(--hi-vis);">Get a new one emailed to you</a>. Not listed yet? <a href="become-photographer.html" style="color:var(--hi-vis);">Sign up here</a>.</p>
       <p>Questions, or want your data removed entirely? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>

@@ -36,8 +36,13 @@
     --paper:#f3f1ea;
     --rust:#d97a53;
     --line:#3a3d44;
-    --past-grey:#868a90;
-    --muted-grey:#9aa0a6;
+    --past-grey:#868a90; /* reserved for the "past" status color elsewhere on
+      the site - only 4.81:1 on --asphalt and 3.98:1 on --asphalt-light, so
+      not safe for general text; use --muted-grey below instead (see
+      index.html/add-shoot.html for the full reasoning - this page doesn't
+      have its own "past" status concept, so --past-grey isn't expected to
+      appear here at all). */
+    --muted-grey:#9aa0a6; /* secondary/meta text (hints, captions) - passes WCAG AA on every background used here. */
     color-scheme: dark;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -193,7 +198,7 @@
     padding:24px 20px 60px;
   }
   main > p{
-    color:var(--past-grey);
+    color:var(--muted-grey);
     font-size:0.92rem;
     line-height:1.5;
     margin-top:0;
@@ -211,7 +216,7 @@
   }
   .required-mark{ color:var(--rust); }
   .requiredLegend{
-    color:var(--past-grey);
+    color:var(--muted-grey);
     font-size:0.78rem;
     margin:-6px 0 16px;
   }
@@ -237,7 +242,7 @@
   }
   .field small{
     display:block;
-    color:var(--past-grey);
+    color:var(--muted-grey);
     font-size:0.76rem;
     margin-top:4px;
   }
@@ -332,7 +337,7 @@
       <h3>Your privacy</h3>
       <p>We store your name, contact email, and website/social link (if you gave one) so we can email you your dashboard link and let riders see who's listed. You manage all of this yourself afterwards via your own personal link.</p>
       <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
-      <p style="color:var(--past-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage) and GitHub Pages (hosting) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage) and GitHub Pages (hosting) - each processes the minimum needed to make their part work.</p>
 
       <h3>Please keep in mind</h3>
       <p>Only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Please only sign up if you genuinely shoot roadside motorcycle photos yourself, not on someone else's behalf.</p>
