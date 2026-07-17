@@ -3226,22 +3226,51 @@ function isSuspiciouslyEmpty(result){
   return result.rawCount > 0 && result.spots.length === 0;
 }
 
-// A genuinely brand-new/emptied sheet and a transient bad snapshot look
-// identical from inside a single fetch - the only way to tell them apart
-// is to check again a moment later: a transient hiccup clears on retry,
-// a truly empty sheet doesn't. Only used on initial load, where there's
-// no previously-good `spots` to fall back on - see
-// scheduleBackgroundRefresh() for the equivalent guard once a map is
-// already showing real pins.
+// Tracks the most raw rows confirmed to exist this session - lets the
+// background refresh (see scheduleBackgroundRefresh below) recognize
+// "fewer rows than we know for a fact exist" as suspicious too, not
+// just "zero survived validation". Real photographer-initiated deletions
+// do lower the true count over time; lagging by up to one refresh cycle
+// before reflecting that is a fully acceptable tradeoff against
+// randomly hiding someone who's actually still listed.
+let knownGoodRawCount = 0;
+
+// Confirmed 17/07/2026 (the "Tommyboy" incident): Google's publish-to-web
+// CSV can silently drop a handful of otherwise-valid rows without the
+// response looking wrong in any way from inside a single fetch - real,
+// live photographer rows present in roughly half of fresh page loads,
+// absent in the other half, while repeated direct curl fetches from one
+// connection were 100% consistent. Looks like inconsistent replicas
+// behind Google's CDN, not anything fixable at the source. A single
+// fetch can't tell "20 is the true count" apart from "20 out of the
+// real 22" - so every initial load does a second confirmatory fetch a
+// moment later and keeps whichever came back fuller, rather than
+// trusting the first response blindly. Total-wipeout results (see
+// isSuspiciouslyEmpty) get real retries with backoff instead, since
+// that's a worse/different failure than "missing a few rows".
+const CONFIRM_FETCH_DELAY_MS = 1800;
 const EMPTY_RESULT_RETRY_DELAYS_MS = [1500, 3000];
 async function loadSpotsWithRetry(){
   let result = await loadSpotsFromSheet();
-  for (const delay of EMPTY_RESULT_RETRY_DELAYS_MS){
-    if (!isSuspiciouslyEmpty(result)) break;
-    console.warn(`Got ${result.rawCount} raw row(s) but 0 passed validation - retrying in ${delay}ms in case this is a transient bad snapshot.`);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    result = await loadSpotsFromSheet();
+  if (isSuspiciouslyEmpty(result)){
+    for (const delay of EMPTY_RESULT_RETRY_DELAYS_MS){
+      console.warn(`Got ${result.rawCount} raw row(s) but 0 passed validation - retrying in ${delay}ms in case this is a transient bad snapshot.`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      const retry = await loadSpotsFromSheet();
+      // Compare spots.length, not rawCount - a wipeout's rawCount can be
+      // identical between attempts (the rows are there, they just failed
+      // validation), so rawCount alone can't tell "still broken" apart
+      // from "recovered" here the way it can in the confirm-fetch branch
+      // below (where the whole point is rawCount actually differing).
+      if (retry.spots.length > result.spots.length) result = retry;
+      if (!isSuspiciouslyEmpty(result)) break;
+    }
+  } else {
+    await new Promise(resolve => setTimeout(resolve, CONFIRM_FETCH_DELAY_MS));
+    const confirm = await loadSpotsFromSheet();
+    if (confirm.rawCount > result.rawCount) result = confirm;
   }
+  knownGoodRawCount = Math.max(knownGoodRawCount, result.rawCount);
   return result;
 }
 
@@ -3418,14 +3447,18 @@ function scheduleBackgroundRefresh(){
     if (popupCurrentlyOpen) return; // try again next interval instead
     try {
       const result = await loadSpotsFromSheet();
-      if (isSuspiciouslyEmpty(result)){
-        // Don't let a transient bad snapshot wipe pins that are already
-        // showing correctly - the person already has a working map on
-        // screen from the last successful load. Skip this tick and try
-        // again next interval, same as an outright fetch error below.
-        console.warn(`Background refresh got ${result.rawCount} raw row(s) but 0 passed validation - keeping the previously-loaded spots and retrying next interval.`);
+      // Same "distrust a suspiciously thin snapshot" guard as the initial
+      // load - either every row failed validation, or this fetch has
+      // fewer raw rows than we've already confirmed exist this session
+      // (see knownGoodRawCount's comment on loadSpotsWithRetry above).
+      // Don't let either wipe pins that are already showing correctly -
+      // skip this tick and try again next interval, same as an outright
+      // fetch error below.
+      if (isSuspiciouslyEmpty(result) || result.rawCount < knownGoodRawCount){
+        console.warn(`Background refresh got ${result.rawCount} raw row(s) (known good this session: ${knownGoodRawCount}) - keeping the previously-loaded spots and retrying next interval.`);
         return;
       }
+      knownGoodRawCount = Math.max(knownGoodRawCount, result.rawCount);
       spots = result.spots;
       updateLastUpdated();
       rebuildDateAxis();
