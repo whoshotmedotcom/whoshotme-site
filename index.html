@@ -3139,6 +3139,15 @@ function hideLoadingState(){
 
 // Fetches + rebuilds spots from the two CSVs. Throws on failure so callers
 // (init and the background refresh) can each decide how to handle that.
+// Returns {spots, rawCount} rather than just the built array — rawCount
+// (the raw row count before per-row validation) lets callers tell a
+// genuinely empty sheet (rawCount 0) apart from "got rows back but every
+// one failed validation" (rawCount > 0, spots empty). The latter is the
+// signature of Google's publish-to-web CSV occasionally serving a
+// transient half-updated snapshot (same propagation-lag family as the
+// IMPORTRANGE bug fixed 18/07/2026) rather than real data loss — see
+// loadSpotsWithRetry() and scheduleBackgroundRefresh() below for how
+// that distinction gets used.
 async function loadSpotsFromSheet(){
   const [combinedRows, galleryRows] = await Promise.all([
     fetchCsv(COMBINED_CSV_URL),
@@ -3148,7 +3157,30 @@ async function loadSpotsFromSheet(){
   ]);
   const galleriesByShootId = groupGalleriesByShootId(galleryRows);
   const rawSpotData = combinedRows.map(combinedRowToRawSpot);
-  return buildSpots(rawSpotData, galleriesByShootId);
+  return { spots: buildSpots(rawSpotData, galleriesByShootId), rawCount: combinedRows.length };
+}
+
+function isSuspiciouslyEmpty(result){
+  return result.rawCount > 0 && result.spots.length === 0;
+}
+
+// A genuinely brand-new/emptied sheet and a transient bad snapshot look
+// identical from inside a single fetch - the only way to tell them apart
+// is to check again a moment later: a transient hiccup clears on retry,
+// a truly empty sheet doesn't. Only used on initial load, where there's
+// no previously-good `spots` to fall back on - see
+// scheduleBackgroundRefresh() for the equivalent guard once a map is
+// already showing real pins.
+const EMPTY_RESULT_RETRY_DELAYS_MS = [1500, 3000];
+async function loadSpotsWithRetry(){
+  let result = await loadSpotsFromSheet();
+  for (const delay of EMPTY_RESULT_RETRY_DELAYS_MS){
+    if (!isSuspiciouslyEmpty(result)) break;
+    console.warn(`Got ${result.rawCount} raw row(s) but 0 passed validation - retrying in ${delay}ms in case this is a transient bad snapshot.`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    result = await loadSpotsFromSheet();
+  }
+  return result;
 }
 
 // Decides what the map shows on a completely fresh landing (no shared-shoot
@@ -3208,7 +3240,8 @@ async function init(){
   }
 
   try {
-    spots = await loadSpotsFromSheet();
+    const result = await loadSpotsWithRetry();
+    spots = result.spots;
     updateLastUpdated();
     const wentToSharedShoot = applySharedShootFromUrl();
     if (!wentToSharedShoot) {
@@ -3322,7 +3355,16 @@ function scheduleBackgroundRefresh(){
   setInterval(async () => {
     if (popupCurrentlyOpen) return; // try again next interval instead
     try {
-      spots = await loadSpotsFromSheet();
+      const result = await loadSpotsFromSheet();
+      if (isSuspiciouslyEmpty(result)){
+        // Don't let a transient bad snapshot wipe pins that are already
+        // showing correctly - the person already has a working map on
+        // screen from the last successful load. Skip this tick and try
+        // again next interval, same as an outright fetch error below.
+        console.warn(`Background refresh got ${result.rawCount} raw row(s) but 0 passed validation - keeping the previously-loaded spots and retrying next interval.`);
+        return;
+      }
+      spots = result.spots;
       updateLastUpdated();
       rebuildDateAxis();
       rebuildMonthOptions();
