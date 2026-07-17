@@ -709,6 +709,19 @@
 
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
 
+  #logoHint{ font-size:0.78rem; color:var(--muted-grey); margin:6px 0 0; line-height:1.5; }
+  #logoPreviewImg{
+    display:block;
+    width:64px;
+    height:64px;
+    border-radius:50%;
+    object-fit:cover;
+    border:2px solid var(--hi-vis);
+    background:var(--asphalt);
+    margin-top:10px;
+  }
+  #logoPreviewError{ color:var(--rust); font-size:0.78rem; margin:10px 0 0; line-height:1.5; }
+
   /* Informational, not blocking — a boxed callout rather than plain error
      text, so it doesn't read as "your submission is broken" the way
      #formError does. Rust/amber tint fits its "worth a look" tone
@@ -842,7 +855,7 @@
       <p>We store your name, contact email, logo and website links, and every shoot (location, description, times) and gallery link you submit here. We also keep a simple count of your popup views, gallery clicks, and page link clicks from the public map - shown to you above, visible only via your own personal link.</p>
       <p>We keep this data for as long as you're listed, and delete it once you ask us to.</p>
       <p>"Use current location": if you use it, your browser asks your permission directly - that's between you and your browser, not something we control. If you allow it, your coordinates are used only to set the pin right there on your device; they're never sent to us, stored, or logged anywhere.</p>
-      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location), and images.weserv.nl (resizing your linked logo down to icon size, so a visitor's browser isn't downloading a full-size photo for a tiny marker) - each processes the minimum needed to make their part work.</p>
 
       <h3>Please keep in mind</h3>
       <p>Only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Your link is effectively a password: anyone who has it can edit your listings, so don't share it. Lost it? <a href="become-photographer.html?resend=1" style="color:var(--hi-vis);">Get a new one emailed to you</a>.</p>
@@ -968,6 +981,13 @@
                normalizeGalleryUrl() on the server adds http:// if it's
                missing, same as gallery links. -->
           <input type="text" id="profileWebsiteInput" maxlength="200" placeholder="facebook.com/yourpage">
+        </div>
+        <div class="field">
+          <label for="profileLogoInput">Logo / profile picture link <span style="color:var(--muted-grey); text-transform:none; font-weight:400;">(optional)</span></label>
+          <input type="text" id="profileLogoInput" maxlength="300" placeholder="https://... a link to your own logo or photo">
+          <p id="logoHint">Shown on your map pin and popup - link any size image (ideally roughly square), it's resized automatically so nobody downloads a full photo just to see a small icon.</p>
+          <img id="logoPreviewImg" class="hidden" alt="Logo preview" />
+          <p id="logoPreviewError" class="hidden">Couldn't load an image from that link - double-check it's a direct link to an image, not a page containing one.</p>
         </div>
         <button id="saveProfileBtn" class="pill-btn">Save profile</button>
         <p id="profileError" class="error-text hidden"></p>
@@ -2193,16 +2213,18 @@ shootsListEl.addEventListener('click', async (e) => {
 });
 
 // =========================================================================
-// PROFILE — self-editing name/website, piggybacked on the same myShoots
-// call that already runs on load (see getMyShoots's profile field in
-// app-script.gs) rather than a separate request. Logo isn't editable
-// here yet (parked as a possible pro feature). Contact Email has its own
-// section below with its own save flow, since - unlike name/website -
-// it doesn't take effect immediately (see the EMAIL section further
-// down for why).
+// PROFILE — self-editing name/website/logo, piggybacked on the same
+// myShoots call that already runs on load (see getMyShoots's profile
+// field in app-script.gs) rather than a separate request. Contact Email
+// has its own section below with its own save flow, since - unlike
+// name/website/logo - it doesn't take effect immediately (see the EMAIL
+// section further down for why).
 // =========================================================================
 const profileNameInput = document.getElementById('profileNameInput');
 const profileWebsiteInput = document.getElementById('profileWebsiteInput');
+const profileLogoInput = document.getElementById('profileLogoInput');
+const logoPreviewImg = document.getElementById('logoPreviewImg');
+const logoPreviewError = document.getElementById('logoPreviewError');
 const saveProfileBtn = document.getElementById('saveProfileBtn');
 const profileError = document.getElementById('profileError');
 
@@ -2211,10 +2233,47 @@ function updateProfileFieldStyles(){
 }
 profileNameInput.addEventListener('input', updateProfileFieldStyles);
 
+// Same resize-proxy approach as index.html's marker/popup logos - see
+// that file's resizedLogoUrl() comment for the full reasoning (avoids
+// downloading a full-size photo just to preview a 64px circle). Not
+// pre-validating the typed URL's format here - an invalid/non-image
+// value just fails to load the same as a dead link would, and onerror
+// below handles both identically.
+function resizedLogoUrl(rawUrl, sizePx){
+  const px = Math.round(sizePx * 2);
+  return `https://images.weserv.nl/?url=${encodeURIComponent(rawUrl)}&w=${px}&h=${px}&fit=cover`;
+}
+
+let logoPreviewDebounce = null;
+function updateLogoPreview(){
+  clearTimeout(logoPreviewDebounce);
+  const raw = profileLogoInput.value.trim();
+  if (!raw){
+    logoPreviewImg.classList.add('hidden');
+    logoPreviewError.classList.add('hidden');
+    return;
+  }
+  // Debounced so pasting/typing doesn't fire a proxy request per
+  // keystroke - only checks the image once typing pauses.
+  logoPreviewDebounce = setTimeout(() => {
+    logoPreviewError.classList.add('hidden');
+    logoPreviewImg.onerror = () => {
+      logoPreviewImg.classList.add('hidden');
+      logoPreviewError.classList.remove('hidden');
+    };
+    logoPreviewImg.onload = () => {
+      logoPreviewImg.classList.remove('hidden');
+    };
+    logoPreviewImg.src = resizedLogoUrl(raw, 64);
+  }, 500);
+}
+profileLogoInput.addEventListener('input', updateLogoPreview);
+
 saveProfileBtn.addEventListener('click', async () => {
   profileError.classList.add('hidden');
   const name = profileNameInput.value.trim();
   const website = profileWebsiteInput.value.trim();
+  const logo = profileLogoInput.value.trim();
   if (!name) {
     profileError.textContent = 'Your name / page name is required.';
     profileError.classList.remove('hidden');
@@ -2224,7 +2283,7 @@ saveProfileBtn.addEventListener('click', async () => {
   saveProfileBtn.disabled = true;
   saveProfileBtn.textContent = 'Saving…';
   try {
-    const result = await apiPost({ action: 'updateProfile', name, website });
+    const result = await apiPost({ action: 'updateProfile', name, website, logo });
     if (result.error) {
       profileError.textContent = result.error;
       profileError.classList.remove('hidden');
@@ -2314,6 +2373,8 @@ async function loadShoots(){
   if (result.profile){
     profileNameInput.value = result.profile.name || '';
     profileWebsiteInput.value = result.profile.website || '';
+    profileLogoInput.value = result.profile.logo || '';
+    updateLogoPreview();
     updateProfileFieldStyles();
     profileEmailInput.value = result.profile.email || '';
     updateEmailFieldStyles();

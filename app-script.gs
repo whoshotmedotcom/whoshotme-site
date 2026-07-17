@@ -384,7 +384,7 @@ function doPost(e) {
       return jsonOut({ error: 'Not authorized' });
     }
 
-    if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website));
+    if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website, body.logo));
     if (action === 'requestEmailChange') return jsonOut(requestEmailChange(body.p, body.newEmail));
     if (action === 'createShoot') return jsonOut(createShoot(body.p, body.shoot));
     if (action === 'updateShoot') return jsonOut(updateShoot(body.p, body.shootId, body.shoot));
@@ -869,19 +869,19 @@ function getMyShoots(p, key) {
   var sheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
   if (!sheet) return { error: 'Shoots tab not found' };
 
-  // Piggybacks the profile fields (name/website/email) onto this same
-  // call rather than adding a separate GET action just for them - the
-  // dashboard always calls this on load anyway. Logo deliberately left
-  // out here - not self-editable yet, see updateProfile's comment.
-  // pendingEmail lets the dashboard show "confirmation sent to X" if a
-  // requestEmailChange is still awaiting its confirmation click, rather
-  // than the change silently vanishing from view until it lands.
+  // Piggybacks the profile fields (name/website/logo/email) onto this
+  // same call rather than adding a separate GET action just for them -
+  // the dashboard always calls this on load anyway. pendingEmail lets
+  // the dashboard show "confirmation sent to X" if a requestEmailChange
+  // is still awaiting its confirmation click, rather than the change
+  // silently vanishing from view until it lands.
   var photographer = findPhotographerRow(p);
-  var profile = { name: '', website: '', email: '', pendingEmail: '' };
+  var profile = { name: '', website: '', logo: '', email: '', pendingEmail: '' };
   if (photographer) {
-    var profileCols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Contact Email']);
+    var profileCols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Logo URL', 'Contact Email']);
     profile.name = photographer.row[profileCols['Photographer Name']] || '';
     profile.website = photographer.row[profileCols['Website URL']] || '';
+    profile.logo = photographer.row[profileCols['Logo URL']] || '';
     profile.email = photographer.row[profileCols['Contact Email']] || '';
     profile.pendingEmail = findPendingEmailChange(p);
   }
@@ -908,18 +908,22 @@ function getMyShoots(p, key) {
   return { shoots: shoots, profile: profile };
 }
 
-// Lets a photographer self-edit their own display name and website/
-// social link - two of the profile fields that were only ever settable
-// once, at signup, with no way back in afterwards. Logo URL
-// deliberately NOT included here yet - it's a candidate pro feature, so
-// not exposed as self-editable for now. Contact Email also deliberately
-// excluded from this function specifically - it's the lookup key
-// resendLink depends on, so it gets its own confirm-the-new-address flow
-// instead of a plain text field a typo could lock someone out with; see
+// Lets a photographer self-edit their own display name, website/social
+// link, and logo/profile picture link - settable once at signup (or not
+// at all, for logo) with no way back in afterwards until this existed.
+// Logo URL is just a link they host themselves (same free model as
+// Website URL) - the site resizes/crops it down for display via
+// images.weserv.nl rather than trusting whatever size the source image
+// actually is, see resizedLogoUrl() in index.html/add-shoot.html for the
+// display-side half of this. Contact Email deliberately excluded from
+// this function specifically - it's the lookup key resendLink depends
+// on, so it gets its own confirm-the-new-address flow instead of a plain
+// text field a typo could lock someone out with; see
 // requestEmailChange/confirmEmailChange below.
-function updateProfile(p, name, website) {
+function updateProfile(p, name, website, logo) {
   name = String(name || '').trim();
   website = String(website || '').trim();
+  logo = String(logo || '').trim();
   if (!name) return { error: 'Your name / page name is required' };
 
   var lock = LockService.getScriptLock();
@@ -928,10 +932,12 @@ function updateProfile(p, name, website) {
     var photographer = findPhotographerRow(p);
     if (!photographer) return { error: 'Not found' };
 
-    var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL']);
+    var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Logo URL']);
     var cleanWebsite = website ? normalizeGalleryUrl(website) : '';
+    var cleanLogo = logo ? normalizeGalleryUrl(logo) : '';
     photographer.sheet.getRange(photographer.rowIndex, cols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
     photographer.sheet.getRange(photographer.rowIndex, cols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
+    photographer.sheet.getRange(photographer.rowIndex, cols['Logo URL'] + 1).setValue(cleanLogo ? sanitizeForCell(cleanLogo) : '');
     return { ok: true };
   } finally {
     lock.releaseLock();

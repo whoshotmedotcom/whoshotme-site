@@ -1217,7 +1217,7 @@
       <p>Visiting this site: we keep a simple count of page visits and which photographer links get clicked, entirely within our own systems - no third-party analytics company is involved. No cookies, nothing stored in your browser, nothing that identifies you personally - just anonymous counts.</p>
       <p>"My location" button: if you tap it, your browser will ask your permission directly - that's a conversation between you and your browser, not something WhoShotMe controls. If you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
       <p>Photographer listings: if you're listed, we store the details needed to run your listing - your name, contact email, logo and website links, and the shoot times/locations you submit. You manage this yourself via your own personal link; contact us (see below) to have your listing removed entirely. We keep this data for as long as you're listed, and delete it once you ask us to.</p>
-      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), and postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location) - each processes the minimum needed to make their part work.</p>
+      <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location), and images.weserv.nl (resizing a photographer's linked logo down to icon size, so your browser isn't downloading a full-size photo for a tiny marker) - each processes the minimum needed to make their part work.</p>
       <p>Photographers: please only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Listings that don't meet this may be removed.</p>
       <p>Already listed but lost your personal dashboard link? <a href="become-photographer.html?resend=1" style="color:var(--hi-vis);">Get a new one emailed to you</a>. Not listed yet? <a href="become-photographer.html" style="color:var(--hi-vis);">Sign up here</a>.</p>
       <p>Questions, or want your data removed entirely? Email <a href="#" id="aboutContactLink" style="color:var(--hi-vis);">us</a>.</p>
@@ -1329,6 +1329,21 @@ function avatarFor(name){
     + `<text x="64" y="76" font-family="Segoe UI, Roboto, sans-serif" font-size="${fontSize}" `
     + `font-weight="800" fill="#d4ff3f" text-anchor="middle">${initials}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+// Photographers link their own externally-hosted logo/profile picture -
+// nothing stops that link pointing at a multi-MB full-resolution photo,
+// which every visitor's browser would otherwise download in full just to
+// display a ~40px dot. Routes it through images.weserv.nl (a free,
+// no-signup image proxy) requesting a small fixed output size instead -
+// every visitor downloads roughly the same small file regardless of what
+// was actually linked. `fit=cover` crops to a square the same way this
+// site's own CSS (object-fit/background-size:cover) already did visually
+// before this existed. sizePx is the on-screen display size; requests 2x
+// that for retina-ish sharpness.
+function resizedLogoUrl(rawUrl, sizePx){
+  const px = Math.round(sizePx * 2);
+  return `https://images.weserv.nl/?url=${encodeURIComponent(rawUrl)}&w=${px}&h=${px}&fit=cover`;
 }
 
 // =========================================================================
@@ -1534,20 +1549,26 @@ function getPhotographerDisplayName(shootTabName){
 function buildSpots(rawSpotData, galleriesByShootId){
   return rawSpotData
     .filter((row, idx) => validateSpot(row, idx))
-    .map(row => ({
-      name: String(row.name).trim(),
-      logo: (hasUsableCellValue(row.logo) && isSafeUrl(row.logo)) ? String(row.logo).trim() : avatarFor(String(row.name).trim()),
-      lat: row.lat,
-      lng: row.lng,
-      location: String(row.location).trim(),
-      description: row.description ? String(row.description).trim() : '',
-      start: parseUKDateTime(row.start),
-      end: parseUKDateTime(row.end),
-      link: (hasUsableCellValue(row.link) && isSafeUrl(row.link)) ? String(row.link).trim() : '',
-      galleries: (row.shootId && galleriesByShootId[row.shootId]) || [],
-      shootTabName: row.shootTabName || '',
-      shootId: row.shootId || ''
-    }));
+    .map(row => {
+      const name = String(row.name).trim();
+      const initialsAvatar = avatarFor(name); // always computed - doubles as the onerror fallback even when a real logo link is set
+      const hasRealLogo = hasUsableCellValue(row.logo) && isSafeUrl(row.logo);
+      return {
+        name,
+        logo: hasRealLogo ? resizedLogoUrl(String(row.logo).trim(), 96) : initialsAvatar,
+        logoFallback: initialsAvatar,
+        lat: row.lat,
+        lng: row.lng,
+        location: String(row.location).trim(),
+        description: row.description ? String(row.description).trim() : '',
+        start: parseUKDateTime(row.start),
+        end: parseUKDateTime(row.end),
+        link: (hasUsableCellValue(row.link) && isSafeUrl(row.link)) ? String(row.link).trim() : '',
+        galleries: (row.shootId && galleriesByShootId[row.shootId]) || [],
+        shootTabName: row.shootTabName || '',
+        shootId: row.shootId || ''
+      };
+    });
 }
 
 const now = new Date();
@@ -2064,19 +2085,23 @@ function makeIcon(spot, status){
   const pulseOffsetStyle = isLive ? `--pulse-offset:-${(Math.random() * 1.6).toFixed(2)}s;` : '';
   const icon = L.divIcon({
     className: '',
+    // Real <img> with overflow:hidden on its circular parent, not a CSS
+    // background-image - a linked logo can fail to load (dead link, a
+    // temporary/expiring URL, the resize proxy itself having a bad day),
+    // and background-image has no equivalent of <img>'s onerror event to
+    // recover from that. See render()'s marker.on('add', ...) for where
+    // the fallback-to-initials-avatar listener actually gets attached.
     html: `<div style="position:relative; width:${size}px; height:${size}px;">
       <div class="${isLive ? 'live-marker-ring' : ''}" style="
         width:${size}px;height:${size}px;border-radius:50%;
-        background-image:url('${escapeHtml(spot.logo)}');
-        background-size:cover;
-        background-position:center;
+        overflow:hidden;
         background-color:#1c1e22;
         border:3px ${isPast ? 'dashed' : 'solid'} ${statusColor};
         box-shadow:0 0 0 2px ${statusColor}55;
         opacity:${isPast ? 0.55 : 1};
         filter:${isPast ? 'grayscale(80%)' : 'none'};
         ${pulseOffsetStyle}
-      "></div>
+      "><img class="marker-logo-img" src="${escapeHtml(spot.logo)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" /></div>
       ${flashHtml}
     </div>`,
     iconSize: [size, size],
@@ -2086,6 +2111,7 @@ function makeIcon(spot, status){
   // render()'s marker.on('add', ...) rather than started here directly.
   icon._flashUid = isLive ? flashUid : null;
   icon._flashStartPattern = startPattern;
+  icon._logoFallback = spot.logoFallback || '';
   return icon;
 }
 
@@ -2426,7 +2452,7 @@ function popupHtml(spot){
     : '';
   return `
     <div class="popup-header">
-      <img class="popup-logo" src="${escapeHtml(spot.logo)}" alt="${escapeHtml(spot.name)} logo" />
+      <img class="popup-logo" src="${escapeHtml(spot.logo)}" alt="${escapeHtml(spot.name)} logo" onerror="this.onerror=null;this.src='${escapeHtml(spot.logoFallback)}';" />
       <p class="popup-name" style="margin:0;">${escapeHtml(spot.name)}</p>
     </div>
     <p class="popup-meta">${escapeHtml(spot.location)}</p>
@@ -2738,6 +2764,16 @@ function render(){
       // time). No-ops for non-live markers, and safely no-ops here too if
       // the element isn't found for some other reason (see startFlashCycle).
       if (icon._flashUid) startFlashCycle(icon._flashUid, icon._flashStartPattern);
+      // A linked logo can fail to load (dead link, temporary URL, resize
+      // proxy hiccup) - fall back to the initials avatar rather than
+      // leaving a blank circle. once:true since a fresh <img> (and this
+      // whole listener) gets recreated on every mount anyway.
+      const img = el && el.querySelector('.marker-logo-img');
+      if (img && icon._logoFallback){
+        img.addEventListener('error', function onLogoError(){
+          img.src = icon._logoFallback;
+        }, { once: true });
+      }
     });
     clusterGroups[status].addLayer(marker);
   });
