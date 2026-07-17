@@ -669,16 +669,30 @@
     border-radius:8px;
   }
   .leaflet-popup-tip{ background:var(--asphalt-light); }
+  /* Leaflet's default margin-right:24px on .leaflet-popup-content exists
+     entirely to clear the close button - but that button is only ever
+     24px tall, sitting in the top-right corner, while the margin was
+     applied to the WHOLE content box, indenting every single row by the
+     same 24px whether or not it's anywhere near the button. Shrunk to
+     16px here (still comfortable for normal text) and the extra 8px the
+     header specifically needs is added back just on .popup-header below
+     - same total clearance exactly where the button actually is, without
+     taxing every row underneath it for space nothing occupies. */
+  .leaflet-popup-content{ margin-right:16px; }
+  .popup-header{ margin-right:8px; }
   /* A long description/gallery list makes a popup scroll internally past
      POPUP_AUTOPAN_PADDING's maxHeight (see the JS) - Leaflet adds
      .leaflet-popup-scrolled and switches .leaflet-popup-content to
      overflow-y:auto at that point, but never reserves any room for the
      scrollbar itself, so the themed scrollbar (see the global *::-
      webkit-scrollbar rules near the top of this file) sits flush against
-     the text with no gap. Only added when actually scrolled - the
-     common short-content case doesn't need the extra space. */
+     the text with no gap. A small 6px padding is enough breathing room
+     for a 10px scrollbar without stacking a whole extra reserved column
+     on top of the close-button margin above - total right-side space
+     when scrolled (16+6=22px) ends up LESS than the old unscrolled
+     default (24px), not more. */
   .leaflet-popup-scrolled .leaflet-popup-content{
-    padding-right:10px;
+    padding-right:6px;
   }
   /* Leaflet's own default close-button styling (plain grey #757575,
      16px) never got themed along with the rest of the popup - left as-is
@@ -791,7 +805,13 @@
      the buttons above - same muted-outline-then-hi-vis-on-hover pattern
      already used for secondary actions elsewhere (see add-shoot.html's
      .chip-btn), so it still reads as a button without competing with
-     the primary ones for attention. */
+     the primary ones for attention. Border is --past-grey, not --line -
+     --line (#3a3d44) is nearly the same dark tone as this popup's own
+     background (--asphalt-light, #2a2d33), so a --line border was
+     technically present but essentially invisible here; --past-grey
+     already has confirmed WCAG AA contrast (see its own definition) and
+     matches this button's own text color, so it actually reads as an
+     outline. */
   .popup-share-btn{
     display:inline-flex;
     align-items:center;
@@ -801,7 +821,7 @@
     font-size:0.74rem;
     font-weight:700;
     background:none;
-    border:1px solid var(--line);
+    border:1px solid var(--past-grey);
     color:var(--past-grey);
     cursor:pointer;
     font-family:inherit;
