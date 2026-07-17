@@ -689,11 +689,14 @@
      24px tall, sitting in the top-right corner, while the margin was
      applied to the WHOLE content box, indenting every single row by the
      same 24px whether or not it's anywhere near the button. Shrunk to
-     16px here (still comfortable for normal text) and the extra 8px the
-     header specifically needs is added back just on .popup-header below
-     - same total clearance exactly where the button actually is, without
-     taxing every row underneath it for space nothing occupies. */
-  .leaflet-popup-content{ margin-right:16px; }
+     12px here (matching the left margin's 20px far more closely than
+     the original 24 did, and tight enough that word-wrapped text
+     actually reaches close to the true right edge instead of reading as
+     a permanently reserved column) and the extra 8px the header
+     specifically needs is added back just on .popup-header below - 20px
+     total there, exactly matching the left margin, right where the
+     button actually is. */
+  .leaflet-popup-content{ margin-right:12px; }
   .popup-header{ margin-right:8px; }
   /* A long description/gallery list makes a popup scroll internally past
      POPUP_AUTOPAN_PADDING's maxHeight (see the JS) - Leaflet adds
