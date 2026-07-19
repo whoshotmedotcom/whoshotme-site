@@ -1,7 +1,7 @@
 # WhoShotMe.com
 
-A community site connecting motorcycle riders in the Peak District/Derbyshire
-with photographers shooting them on the road. Three pages:
+A community site connecting motorcycle riders across the UK with
+photographers shooting them on the road. Three pages:
 
 - **`index.html`** — public map. Riders browse/search for photographers
   currently shooting (live/upcoming/past), filter by date, view a photographer's
@@ -10,9 +10,11 @@ with photographers shooting them on the road. Three pages:
   link (`?p=<shootTabName>&key=<KEY>`). Photographers add/edit/delete their own
   shoot listings, manage gallery links, and see basic stats.
 - **`become-photographer.html`** — public self-service signup form.
-  Photographers submit their name/email/website; it creates a pending row
-  in the Photographers workbook for the site owner to review and activate
-  (see item #12 below).
+  Photographers submit their name/email/website; a confirmation email
+  verifies they own the address, then their dashboard is created
+  automatically, no manual review from the site owner (see item #12
+  below — upgraded from manual-review to fully automatic same day it
+  was built).
 
 No build step. Plain HTML/CSS/JS, single `<script>` blocks per page, no
 framework, no bundler. Edit the files directly and refresh the browser.
@@ -119,6 +121,29 @@ framework, no bundler. Edit the files directly and refresh the browser.
   selected day falls anywhere within `[start, end]`, not just an exact match.
   If you touch date filtering, keep this — the original bug (shoots vanishing
   from the slider on any day after their start) is exactly what this fixes.
+- **`PhotographersImport`'s IMPORTRANGE loses its "Allow access" grant more
+  often than you'd expect** — confirmed twice now (17/07/2026, both times
+  triggered by editing the Photographers workbook: an account ownership
+  transfer the first time, a manual row deletion the second). The failure
+  is silent and easy to miss: the public map still loads fine, but every
+  row's Photographer Name/Logo/Website comes back blank, so `index.html`'s
+  own validation quietly rejects every shoot as "missing name" — a real,
+  live photographer can go fully invisible on the public map with zero
+  errors anywhere. If shoots vanish from the map after ANY edit to the
+  Photographers workbook, check `PhotographersImport` for a re-authorize
+  prompt before assuming something else broke.
+- **Google's publish-to-web CSV can silently under-return rows** — confirmed
+  17/07/2026 (the "Tommyboy" incident): a real photographer's rows were
+  present in ~50% of fresh page loads and absent in the other 50%, while
+  repeated direct fetches from one connection were 100% consistent — looks
+  like inconsistent replicas behind Google's CDN, not a client-side caching
+  issue (browser cache was already ruled out; `fetchCsv()` uses
+  `cache: 'no-store'`). `index.html`'s `loadSpotsWithRetry()` /
+  `scheduleBackgroundRefresh()` now defend against this (a confirmatory
+  second fetch on initial load, and a `knownGoodRawCount` floor the
+  background refresh won't regress below) — don't remove that logic
+  thinking it's redundant, it's covering a real, previously-reproduced
+  failure mode, not a hypothetical one.
 
 ## Recent significant features
 
@@ -143,6 +168,46 @@ framework, no bundler. Edit the files directly and refresh the browser.
   keyboard navigation path** — only the search box does. Fixing this properly
   is a real feature decision (roving tabindex vs. a list-view alternative),
   not a quick patch.
+- **Busy overlay in `add-shoot.html`** (17/07/2026) — create/edit/delete
+  shoot and add/edit/delete gallery were measured taking 7-15s against the
+  Apps Script backend. A dimmed full-screen overlay (`showBusy()`/
+  `hideBusy()`) now covers exactly those operations, tied to the real
+  write+refresh promise resolving rather than a timer, so a photographer
+  can't tap away mid-save with only a disabled button as a hint.
+- **4th "Map" tab in `add-shoot.html`** (17/07/2026, built after a
+  photographer requested it) — a lazy-loaded iframe embedding the public
+  map filtered to just that photographer's own shoots
+  (`index.html?photographer=SHOOT_TAB_NAME`, the same URL "Share your
+  listing" already generates). Revisiting the tab calls the embedded
+  page's own `map.invalidateSize()` directly (same-origin iframe) rather
+  than reloading, to fix the usual hidden-container Leaflet sizing gotcha.
+- **Self-service logo/profile picture** (17/07/2026) — Logo URL now has a
+  Profile-tab field with a live preview, instead of being settable only by
+  editing the Photographers sheet directly. Every linked logo is routed
+  through `images.weserv.nl` (free image-resize proxy) requesting a small
+  fixed output size, so a photographer linking a multi-MB photo doesn't
+  mean every visitor downloads it in full for a ~40px marker. Both the
+  marker (`makeIcon()`, now a real `<img>` not a CSS `background-image`)
+  and the popup fall back to the existing initials-avatar generator
+  (`avatarFor()`) if the linked logo fails to load.
+- **Sender-email + future-monetisation disclosure** (17/07/2026) — every
+  "check your inbox" moment (signup confirmation, lost-link resend,
+  contact email change) now names the actual sender address
+  (`whoshotmedotcom@gmail.com`, built from parts in JS rather than a
+  literal string in the page source, to raise the bar past simple
+  scrapers) so people can search their inbox for it directly. The About
+  modal also now states upfront that core listing features stay free
+  forever, with optional paid extras/light advertising possible down the
+  line — added deliberately before wider rollout rather than after, so
+  early photographers (who are being asked to personally vouch for the
+  site) don't feel blindsided later.
+- **Site copy is UK-wide, not Derbyshire-scoped** (as of 20/07/2026) —
+  titles, meta/OG/Twitter tags, and both About modal intros were changed
+  from naming Derbyshire/Peak District to saying "the UK" or dropping the
+  location qualifier entirely. Peter's own personal bio paragraph ("I'm a
+  keen motorcyclist... from the Peak District") is the one deliberate
+  exception, kept in all three About modals — that's about him personally,
+  not the site's scope.
 
 ## 10 suggested improvements (given 15/07/2026, status below)
 
