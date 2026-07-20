@@ -70,6 +70,11 @@
   /* Removes the default blue/grey tap flash mobile browsers show on
      clickable elements — see index.html for the full note. */
   *{ -webkit-tap-highlight-color: transparent; }
+  /* Not selectable by default (dashboard buttons/tabs/map dragging kept
+     accidentally highlighting text) - re-enabled for actual form fields
+     below. See index.html for the full note. */
+  *{ -webkit-user-select:none; user-select:none; }
+  input, textarea{ -webkit-user-select:text; user-select:text; }
   html,body{ height:100%; }
   body{
     margin:0;

@@ -187,6 +187,13 @@
      since it's a one-line fix with no downside and the same flash would
      otherwise show up on every button on the site, not just this one. */
   *{ -webkit-tap-highlight-color: transparent; }
+  /* This is a map/UI app, not a document - dragging the map, double-tapping
+     to zoom, or clicking chips/buttons was accidentally highlighting text
+     as a side effect on most browsers. Nothing here needs to be selectable
+     except what's actually typed into (the search box), which is
+     re-enabled explicitly below. */
+  *{ -webkit-user-select:none; user-select:none; }
+  input, textarea{ -webkit-user-select:text; user-select:text; }
   html,body{ height:100%; }
   body{
     margin:0;

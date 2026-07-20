@@ -50,6 +50,10 @@
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
   *{ scrollbar-color: var(--line) var(--asphalt-light); scrollbar-width: thin; }
+  /* Not selectable by default - re-enabled for actual form fields below.
+     See index.html for the full note. */
+  *{ -webkit-user-select:none; user-select:none; }
+  input, textarea{ -webkit-user-select:text; user-select:text; }
   html,body{ height:100%; }
   body{
     margin:0;
