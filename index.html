@@ -217,9 +217,13 @@
      length. */
   .headerText{ min-width:0; }
   header h1{ margin:0; line-height:0; }
-  /* Cropped from the top part of og-image.png (the wordmark, not the
-     "whoshotme.com" tagline underneath it) - background made transparent
-     so it sits cleanly on --asphalt regardless of exact shade match.
+  /* logo-header.svg is a vector trace of the wordmark cropped from the
+     top of og-image.png (not the "whoshotme.com" tagline underneath it) -
+     the original PNG export lost edge detail on the aperture "O" once
+     quantized down small (visible at 19px mobile height under zoom), so
+     it was traced to actual paths instead so it stays sharp at any
+     display size or zoom level. Flat single fill (--hi-vis) rather than
+     a background-color match, since it's transparent by construction.
      width/height attrs on the <img> itself keep the aspect ratio known
      before it loads, so nothing shifts layout. Small and simple enough
      at any width that a separate text-only mobile fallback isn't needed -
@@ -1186,7 +1190,7 @@
 
 <header>
   <div class="headerText">
-    <h1><img class="logo-header" src="logo-header.png" alt="Who Shot Me?" width="1028" height="142"></h1>
+    <h1><img class="logo-header" src="logo-header.svg" alt="Who Shot Me?" width="1028" height="142"></h1>
     <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
   </div>
   <a id="getListedBtn" href="become-photographer.html">📷 Get listed</a>
