@@ -216,14 +216,16 @@
      without this would stop it shrinking below the tagline's natural
      length. */
   .headerText{ min-width:0; }
-  header h1{
-    margin:0;
-    font-size:1.5rem;
-    letter-spacing:0.5px;
-    font-weight:900;
-    font-family:'Poppins', 'Segoe UI', Roboto, system-ui, sans-serif;
-  }
-  header h1 span{ color:var(--hi-vis); }
+  header h1{ margin:0; line-height:0; }
+  /* Cropped from the top part of og-image.png (the wordmark, not the
+     "whoshotme.com" tagline underneath it) - background made transparent
+     so it sits cleanly on --asphalt regardless of exact shade match.
+     width/height attrs on the <img> itself keep the aspect ratio known
+     before it loads, so nothing shifts layout. Small and simple enough
+     at any width that a separate text-only mobile fallback isn't needed -
+     just a shorter height on narrow screens, same as the old text
+     heading's own mobile font-size override did. */
+  .logo-header{ height:24px; width:auto; display:block; }
   header p{
     margin:4px 0 0;
     color:var(--muted-grey);
@@ -1127,7 +1129,7 @@
   ===================================================================== */
   @media (max-width: 480px){
     header{ padding:10px 14px 8px; }
-    header h1{ font-size:1.15rem; }
+    .logo-header{ height:19px; }
     header p{ font-size:0.74rem; }
     #aboutLink{ font-size:0.78rem; }
 
@@ -1184,7 +1186,7 @@
 
 <header>
   <div class="headerText">
-    <h1>Who <span>Shot</span> Me?</h1>
+    <h1><img class="logo-header" src="logo-header.png" alt="Who Shot Me?" width="1028" height="142"></h1>
     <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
   </div>
   <a id="getListedBtn" href="become-photographer.html">📷 Get listed</a>
