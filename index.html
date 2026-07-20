@@ -507,11 +507,24 @@
   }
 
   /* Shown across the top of the map when viewing one photographer's
-     shared link (?photographer=...) instead of everyone. Sits as a
-     normal flex item between the header and the map, not absolutely
-     positioned, so it doesn't need to coordinate with the search box. */
+     shared link (?photographer=...) instead of everyone, or when falling
+     back to past shoots on a fresh landing. Used to be a normal flex item
+     between the header and the map - simple, but it meant #map's own box
+     resized every time one appeared/disappeared, which Lighthouse (rightly)
+     flagged as a large layout shift, and which affects real visitors too
+     since this banner fires on most landings while the site has little
+     live/upcoming data yet. Now an absolute overlay pinned to the top of
+     #mapWrap instead (#mapWrap already has position:relative for
+     #searchWrap, so this needed no new positioning context) - #map's box
+     never changes. #searchWrap shifts down to sit below it instead (see
+     the #mapWrap.bannerActive rule below); a shift confined to the small
+     search box has far less layout-shift impact than the entire map does. */
   #photographerFilterBanner, #defaultModeBanner{
-    flex-shrink:0;
+    position:absolute;
+    top:0;
+    left:0;
+    right:0;
+    z-index:900;
     background:var(--hi-vis);
     color:var(--asphalt);
     padding:8px 14px;
@@ -523,6 +536,9 @@
     font-weight:700;
   }
   #photographerFilterBanner.hidden, #defaultModeBanner.hidden{ display:none; }
+  /* Set via JS (setBannerActive()) to the shown banner's real measured
+     height, so this works whether the message wraps to one line or two. */
+  #mapWrap.bannerActive #searchWrap{ top:calc(var(--bannerHeight, 40px) + 12px); }
   #clearPhotographerFilterBtn, #dismissDefaultModeBtn{
     background:var(--asphalt);
     color:var(--hi-vis);
@@ -1234,17 +1250,17 @@
   </div>
 </div>
 
-<div id="photographerFilterBanner" class="hidden" role="status" aria-live="polite">
-  <span id="photographerFilterText"></span>
-  <button id="clearPhotographerFilterBtn">Show everyone ✕</button>
-</div>
-
-<div id="defaultModeBanner" class="hidden" role="status" aria-live="polite">
-  <span id="defaultModeText"></span>
-  <button id="dismissDefaultModeBtn" aria-label="Dismiss this message">✕</button>
-</div>
-
 <main id="mapWrap">
+  <div id="photographerFilterBanner" class="hidden" role="status" aria-live="polite">
+    <span id="photographerFilterText"></span>
+    <button id="clearPhotographerFilterBtn">Show everyone ✕</button>
+  </div>
+
+  <div id="defaultModeBanner" class="hidden" role="status" aria-live="polite">
+    <span id="defaultModeText"></span>
+    <button id="dismissDefaultModeBtn" aria-label="Dismiss this message">✕</button>
+  </div>
+
   <div id="searchWrap">
     <div id="searchBox">
       <input type="text" id="searchInput" placeholder="Search photographer or location…" autocomplete="off" aria-label="Search photographer or location">
@@ -3304,9 +3320,31 @@ function resolveDefaultMode(){
   // into that same banner instead of showing a second one underneath it.
   if (photographerFilter){
     photographerBannerText.textContent += ' - nothing live or upcoming right now, showing recent past shoots instead';
-    map.invalidateSize(); // the longer text may wrap to a second line - same reflow issue as elsewhere, see applyPhotographerFilterFromUrl
+    setBannerActive(photographerBanner); // re-measure - the longer text may now wrap to a second line
   } else {
     showDefaultModeBanner('Nothing live or upcoming right now - showing recent past shoots instead.');
+  }
+}
+
+const mapWrap = document.getElementById('mapWrap');
+// #photographerFilterBanner and #defaultModeBanner are absolute overlays
+// (see their CSS comment) so showing/hiding one never resizes #map itself -
+// this just keeps #searchWrap sitting below whichever one is currently
+// visible. Only one of the two banners is ever shown at once (see the
+// comment in resolveDefaultMode()), so a single shared class is enough.
+// The CSS default (40px, matching one line of banner text) covers the
+// common case immediately; offsetHeight is read a frame later via rAF
+// rather than right here, since reading it synchronously right after the
+// classList change above would force a layout recalc mid-task instead of
+// letting the browser fold it into its normal next paint.
+function setBannerActive(bannerEl){
+  if (bannerEl){
+    mapWrap.classList.add('bannerActive');
+    requestAnimationFrame(() => {
+      mapWrap.style.setProperty('--bannerHeight', bannerEl.offsetHeight + 'px');
+    });
+  } else {
+    mapWrap.classList.remove('bannerActive');
   }
 }
 
@@ -3316,17 +3354,17 @@ let defaultModeBannerTimer = null;
 function showDefaultModeBanner(message){
   defaultModeText.textContent = message;
   defaultModeBanner.classList.remove('hidden');
-  map.invalidateSize(); // same reflow issue as photographerBanner — see applyPhotographerFilterFromUrl
+  setBannerActive(defaultModeBanner);
   clearTimeout(defaultModeBannerTimer);
   defaultModeBannerTimer = setTimeout(() => {
     defaultModeBanner.classList.add('hidden');
-    map.invalidateSize();
+    setBannerActive(null);
   }, 8000);
 }
 document.getElementById('dismissDefaultModeBtn').addEventListener('click', () => {
   clearTimeout(defaultModeBannerTimer);
   defaultModeBanner.classList.add('hidden');
-  map.invalidateSize();
+  setBannerActive(null);
 });
 
 async function init(){
@@ -3396,12 +3434,7 @@ function applyPhotographerFilterFromUrl(){
   photographerFilter = requested;
   photographerBannerText.textContent = `Showing shoots from ${getPhotographerDisplayName(requested)} only`;
   photographerBanner.classList.remove('hidden');
-  // Showing the banner shrinks the map (it's a normal flex item above it),
-  // but Leaflet caches container size/position at init and won't notice
-  // the reflow on its own — without this, popups opened afterwards get
-  // positioned against the map's old (taller) size and can render up
-  // under the banner instead of in the visible map area.
-  map.invalidateSize();
+  setBannerActive(photographerBanner);
 }
 
 function applySharedShootFromUrl(){
@@ -3422,9 +3455,7 @@ function applySharedShootFromUrl(){
   sharedShootActive = true;
   photographerBannerText.textContent = `Viewing a shared shoot - ${spot.name} at ${spot.location}`;
   photographerBanner.classList.remove('hidden');
-  // See applyPhotographerFilterFromUrl above — this is the flow where it
-  // actually bites, since flyToSpot() opens a popup right after this runs.
-  map.invalidateSize();
+  setBannerActive(photographerBanner);
   pendingSharedShootFocus = spot;
   return true;
 }
@@ -3442,7 +3473,7 @@ document.getElementById('clearPhotographerFilterBtn').addEventListener('click', 
     url.searchParams.delete('photographer');
   }
   photographerBanner.classList.add('hidden');
-  map.invalidateSize(); // hiding the banner grows the map back — see the show-side comment above
+  setBannerActive(null);
   history.replaceState(null, '', url);
   rebuildDateAxis();
   rebuildMonthOptions();
