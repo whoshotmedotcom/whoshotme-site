@@ -1410,8 +1410,8 @@ function escapeHtml(str){
 // =========================================================================
 // Map + pin (used by the add/edit form)
 //
-// Same switchable basemaps as the public map — OS Road (default),
-// OpenStreetMap, and Aerial (Esri World Imagery, keyless legacy endpoint
+// Same switchable basemaps as the public map — OpenStreetMap (default),
+// OS Roads (UK), and Aerial (Esri World Imagery, keyless legacy endpoint
 // — see index.html for the full note on why this isn't guaranteed to
 // work indefinitely, and on the OS Maps API key below). OS Light and OS
 // Outdoor are temporarily disabled (commented out below).
@@ -1514,7 +1514,7 @@ const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoa
 streetsLayer.addTo(map); // OpenStreetMap is the default basemap, matching index.html
 const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
-  'OS Road': osRoadLayer,
+  'OS Roads (UK)': osRoadLayer,
   // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels

@@ -128,9 +128,10 @@
      first paint. -->
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="preconnect" href="https://tile.openstreetmap.org">
-<!-- OS Road is the default basemap (see the layer definitions below), so
-     its tile server gets the earliest possible connection too - same
-     reasoning as the other two preconnects above. -->
+<!-- OpenStreetMap (tile.openstreetmap.org, preconnected above) is the
+     default basemap, but OS Roads (UK) is one tap away in the layer
+     switcher and commonly picked, so its tile server gets an early
+     connection too - same reasoning as the other two preconnects above. -->
 <link rel="preconnect" href="https://api.os.uk">
 <!-- Preload (not preconnect) for the two scripts themselves - starts the
      actual download in parallel with the rest of the page parsing,
@@ -1643,8 +1644,8 @@ function showToast(text, isError){
 }
 
 // =========================================================================
-// MAP SETUP — switchable basemaps: OS Road (default), OpenStreetMap, and
-// Aerial (Esri World Imagery). OS Light and OS Outdoor are temporarily
+// MAP SETUP — switchable basemaps: OpenStreetMap (default), OS Roads (UK),
+// and Aerial (Esri World Imagery). OS Light and OS Outdoor are temporarily
 // disabled (commented out below, easy to re-enable).
 //
 // The OS layers use OS Maps API (raster ZXY), free under the OS Data Hub's
@@ -1828,7 +1829,7 @@ const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoa
 streetsLayer.addTo(map); // OpenStreetMap is the default basemap
 const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
-  'OS Road': osRoadLayer,
+  'OS Roads (UK)': osRoadLayer,
   // 'OS Outdoor': osOutdoorLayer, — temporarily disabled, see definition above
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels

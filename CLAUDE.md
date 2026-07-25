@@ -57,15 +57,27 @@ framework, no bundler. Edit the files directly and refresh the browser.
   running out of free-tier build credits — see `whoshotmedotcom/whoshotme-site`
   on GitHub, public repo, no build step so a push is the whole deploy).
 - **Map**: Leaflet 1.9.4 + Leaflet.markercluster.
-- **Basemaps**: OS Maps API (OS Data Hub, free OpenData plan — default), Esri
-  World Imagery (aerial, keyless legacy endpoint), OpenStreetMap. OS Light and
-  OS Outdoor are currently **disabled** (commented out in the layer definitions
-  and the layer-switcher config) — OS Road is the only OS layer live. Easy to
-  re-enable by uncommenting.
+- **Basemaps**: OpenStreetMap (default, as of 25/07/2026), "OS Roads (UK)"
+  (OS Maps API via OS Data Hub's free OpenData plan — labelled with "(UK)"
+  since its coverage genuinely stops at the UK, unlike the other two), and
+  Esri World Imagery (aerial, keyless legacy endpoint). OS Light and OS
+  Outdoor are currently **disabled** (commented out in the layer definitions
+  and the layer-switcher config). Easy to re-enable by uncommenting.
+  Panning is only clamped to the UK while OS Roads (UK) is the active
+  layer (`applyBoundsForLayer()`, called from `baselayerchange` on both
+  pages) — switching to it snaps the view back into the UK automatically
+  if you'd panned away on one of the other two, and switching away lifts
+  the clamp again immediately. OpenStreetMap and Aerial both have real
+  worldwide coverage so they're never bounded.
 - **Geocoding/search**: postcodes.io (UK postcodes) falling back to Nominatim
   (OpenStreetMap) for general place names, on both pages.
 - **Geolocation**: browser-native `getCurrentPosition`, one-shot (not
-  `watchPosition`), entirely client-side. Never sent to any server.
+  `watchPosition`), entirely client-side. Never sent to any server. On
+  `index.html`, a fresh landing shows a dismissible in-page banner
+  ("Want the map centred on your location?") before ever touching the
+  real browser permission prompt — only clicking "Yes, use it" triggers
+  that; dismissing does nothing further at all. Skipped entirely for a
+  `?shoot=`/`?photographer=` link. See `tryAutoLocate()`.
 
 ## Conventions established in this project
 
