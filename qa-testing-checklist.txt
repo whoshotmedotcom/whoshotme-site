@@ -266,11 +266,56 @@ close when it shouldn't, closes via every path a user would expect.
        have a min-height:44px floor, on every viewport (mobile no longer
        shrinks these below desktop size, which it previously did).
        Mirrored the zoom/layer-switcher sizing to add-shoot.html for
-       consistency. Recalculated POPUP_AUTOPAN_PADDING's bottom-right
-       reserve to match the now-taller control stack (~146px -> ~206px)
-       and verified a real popup still correctly clears it. Full
-       device-tests.py suite (64/64) and a visual screenshot check both
-       confirmed no layout breakage.
+       consistency.
+
+       Follow-up round (same day) after the site owner asked about
+       remaining gaps: the popup close button (Leaflet's untouched
+       24x24 default) and the About modal's close buttons (32x32
+       circle, ~38px text button) hadn't been covered - fixed to 44px
+       where practical (About modal, both buttons, all 3 pages) and to
+       32x32 for the popup close button specifically (not the full
+       44px - that would eat ~18% of this popup's own 240px maxWidth;
+       32px is the best real improvement that fits without a larger
+       popup redesign). "Get listed", the banner buttons, and "Back to
+       today" also bumped to 44px. The plain-text "About" link (not a
+       button visually) got a bigger invisible tap zone via padding +
+       matching negative margin instead of a visual resize, since
+       growing it to look like a button would clash with the sentence
+       it sits in.
+
+       This round of resizing surfaced 3 REAL, confirmed bugs from the
+       combined-control/bigger-button changes, all found via testing on
+       a real iPhone 14 viewport (not just synthetic desktop sizes) and
+       all fixed:
+       - Popups could render underneath the bottom-left control stack -
+         two compounding causes: Leaflet's cached map size was stale
+         (~50px taller than the map's true height, measured before the
+         page's real layout had settled - fixed with an explicit
+         map.invalidateSize() once initial load completes), and the
+         3-row control stack itself left too little room even with
+         correct math (fixed by combining Reset view + My location into
+         one row, cutting the stack from ~206px to ~152px). Popup
+         maxHeight is now also computed dynamically from the map's
+         actual current size rather than a fixed 320px guess.
+       - Aerial's attribution (3 stacked layers each contributing their
+         own credit string) wrapped to 2 lines wide enough to reach the
+         zoom control despite being anchored bottom-right - fixed by
+         attributing the group once instead of 3 times, and capping the
+         attribution box's width so it can't grow that wide regardless.
+       - Popups could open underneath the search bar specifically while
+         the location-consent/photographer-filter banner was showing
+         (fixed top-left padding didn't account for the banner pushing
+         the search box down) - fixed by measuring the search box's
+         real current position. Testing this surfaced a genuinely
+         separate pre-existing race: flyToSpot() closed the search
+         dropdown as the LAST line of the function (too late if
+         setView() resolves synchronously) and a debounced place-search
+         lookup could re-show the dropdown after a result was already
+         selected - both fixed.
+
+       Full device-tests.py suite (76/76, up from 64) and repeated real-
+       viewport testing confirmed no remaining overlap or layout
+       breakage. See git log 25/07/2026 for full detail on each.
 
 =============================================================================
 6. SITE-SPECIFIC DATA EDGE CASES
