@@ -1435,7 +1435,12 @@ const map = L.map('map', { zoomControl: true, attributionControl: false, tap: fa
 // isn't hemmed in right at the coastline while placing a pin either.
 const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
 const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.48], [64.125, 14.04]);
-map.setMaxBounds(MAP_PAN_BOUNDS);
+// Only actually applied while OS Road is the active basemap - see
+// applyBoundsForLayer below (called from baselayerchange), and index.html
+// for the full reasoning. UK_BOUNDS above is the real, always-on gate on
+// where a shoot can actually be saved either way, so this is purely about
+// not hard-walling a photographer into the UK on a layer with real
+// worldwide coverage while they're just looking around for a pin spot.
 L.control.attribution({ prefix: false }).addTo(map);
 
 // The free OpenData plan only serves OS Maps API tiles up to z16 — z17+
@@ -1515,10 +1520,26 @@ const layersControl = L.control.layers({
   'Aerial': aerialWithLabels
 }, null, { position: 'topright' }).addTo(map);
 
+// Switching TO OS Road clamps panning to the UK (its only real coverage)
+// and snaps the view back in if the photographer had panned off it on a
+// worldwide layer already. See index.html for the full reasoning.
+function applyBoundsForLayer(layer){
+  if (layer === osRoadLayer){
+    map.setMaxBounds(MAP_PAN_BOUNDS);
+    map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
+  } else {
+    map.setMaxBounds(null);
+  }
+}
+applyBoundsForLayer(streetsLayer); // matches the default basemap set above
+
 // Leaflet auto-collapses this on mouseout, which never fires on touch —
 // without this, picking a basemap on mobile leaves the expanded list
 // sitting open over the map until tapped shut manually.
-map.on('baselayerchange', () => layersControl.collapse());
+map.on('baselayerchange', (e) => {
+  applyBoundsForLayer(e.layer);
+  layersControl.collapse();
+});
 
 let marker = null;
 let currentLat = null;

@@ -1698,7 +1698,11 @@ const map = L.map('map', { zoomControl: false, attributionControl: false, tap: f
 // total east-west pan room matches total north-south pan room exactly
 // (see the commit this landed in for the full calculation).
 const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.48], [64.125, 14.04]);
-map.setMaxBounds(MAP_PAN_BOUNDS);
+// Only actually applied while OS Road is the active basemap (see
+// applyBoundsForLayer below, called from baselayerchange) - OS Data Hub's
+// coverage is UK-only, so panning off it just hits blank grey tiles, but
+// OpenStreetMap and the Esri aerial imagery both have real worldwide
+// coverage and shouldn't be artificially penned into a UK box.
 // Same reflow issue as the banners (see applyPhotographerFilterFromUrl) but
 // triggered by rotation or the on-screen keyboard opening/closing (e.g.
 // tapping the search box) — setRealVH() already corrects the CSS height
@@ -1822,10 +1826,26 @@ const layersControl = L.control.layers({
   'Aerial': aerialWithLabels
 }, null, { position: 'bottomright' }).addTo(map);
 
+// Switching TO OS Road clamps panning to the UK (its only real coverage)
+// and, if the visitor had already panned outside that box on a worldwide
+// layer, snaps the view back in immediately rather than leaving them
+// staring at blank grey tiles until they scroll back themselves.
+// Switching to either worldwide layer lifts the clamp entirely.
+function applyBoundsForLayer(layer){
+  if (layer === osRoadLayer){
+    map.setMaxBounds(MAP_PAN_BOUNDS);
+    map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
+  } else {
+    map.setMaxBounds(null);
+  }
+}
+applyBoundsForLayer(streetsLayer); // matches the default basemap set above
+
 // Which basemap people actually use (see sendSiteEvent above) — slugified
 // from the layer's own display name rather than a hardcoded map, so
 // re-enabling OS Light/OS Outdoor above doesn't also need an update here.
 map.on('baselayerchange', (e) => {
+  applyBoundsForLayer(e.layer);
   sendSiteEvent('basemap_' + e.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
   // Leaflet auto-collapses this on mouseout, which never fires on touch —
   // without this, picking a basemap on mobile leaves the expanded list
