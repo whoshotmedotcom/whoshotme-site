@@ -291,8 +291,15 @@
     text-decoration:underline;
     font-size:0.85rem;
     cursor:pointer;
-    padding:0;
-    margin-left:4px;
+    /* Plain underlined text inline in a sentence, not a button-styled
+       pill - growing it to look like a 44px button would clash with the
+       rest of the paragraph it sits in. Padding + a matching negative
+       margin expands the actual clickable/tappable area around the
+       word without shifting the surrounding text or changing how it
+       looks, the standard technique for this exact situation. */
+    display:inline-block;
+    padding:14px 4px;
+    margin:-14px -4px -14px 0;
   }
   #aboutLink:hover{ color:var(--hi-vis); }
   #aboutOverlay{
@@ -337,9 +344,9 @@
     color:var(--hi-vis);
     border:1px solid var(--line);
     border-radius:50%;
-    width:32px;
-    height:32px;
-    min-width:32px;
+    width:44px;
+    height:44px;
+    min-width:44px;
     flex-shrink:0;
     font-size:1rem;
     line-height:1;
@@ -385,6 +392,10 @@
     background:transparent;
     color:var(--hi-vis);
     padding:8px 18px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     border-radius:18px;
     font-size:0.8rem;
     cursor:pointer;
@@ -670,6 +681,10 @@
     border:none;
     border-radius:14px;
     padding:5px 12px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     font-size:0.76rem;
     font-weight:700;
     cursor:pointer;
@@ -764,12 +779,14 @@
     flex-shrink:0;
     display:inline-flex;
     align-items:center;
+    justify-content:center;
     gap:6px;
     background:var(--hi-vis);
     color:var(--asphalt);
     border:none;
     border-radius:20px;
     padding:9px 14px;
+    min-height:44px;
     font-size:0.82rem;
     font-weight:700;
     text-decoration:none;
@@ -875,29 +892,26 @@
   }
   .leaflet-popup-tip{ background:var(--asphalt-light); }
   /* Leaflet's default margin-right:24px on .leaflet-popup-content exists
-     entirely to clear the close button - but that button is only ever
-     24px tall, sitting in the top-right corner, while the margin was
-     applied to the WHOLE content box, indenting every single row by the
-     same 24px whether or not it's anywhere near the button. Shrunk to
-     12px here (matching the left margin's 20px far more closely than
-     the original 24 did, and tight enough that word-wrapped text
-     actually reaches close to the true right edge instead of reading as
-     a permanently reserved column) and the extra 8px the header
-     specifically needs is added back just on .popup-header below - 20px
-     total there, exactly matching the left margin, right where the
-     button actually is. */
-  .leaflet-popup-content{ margin-right:12px; }
-  .popup-header{ margin-right:8px; }
+     entirely to clear the close button, applied to the WHOLE content box
+     rather than just the rows near the button. Originally shrunk to 12px
+     (tight enough that word-wrapped text reaches close to the true right
+     edge) with the header getting an extra 8px on top of that (20px
+     total) specifically where the button sits. Bumped up again
+     25/07/2026 alongside enlarging the close button itself from Leaflet's
+     default 24px to 32px (see .leaflet-popup-close-button below) for a
+     bigger touch target - 20px/16px keeps the same "header gets a bit
+     more than the rest of the content" relationship, just scaled up to
+     actually clear the now-bigger button. */
+  .leaflet-popup-content{ margin-right:20px; }
+  .popup-header{ margin-right:16px; }
   /* A long description/gallery list makes a popup scroll internally past
      getPopupAutoPanOptions()'s maxHeight (see the JS) - Leaflet adds
      .leaflet-popup-scrolled and switches to overflow-y:auto at that
      point, but never reserves any room for the scrollbar itself, so the
      themed scrollbar (see the global *::-webkit-scrollbar rules near the
      top of this file) sits flush against the text with no gap. A small
-     6px padding is enough breathing room for a 10px scrollbar without
-     stacking a whole extra reserved column on top of the close-button
-     margin above - total right-side space when scrolled (16+6=22px)
-     ends up LESS than the old unscrolled default (24px), not more.
+     6px padding stacked on top of .leaflet-popup-content's own
+     margin-right above is enough breathing room for a 10px scrollbar.
      Selector is .leaflet-popup-content.leaflet-popup-scrolled (both
      classes on the SAME element), not a descendant combinator - Leaflet
      adds "leaflet-popup-scrolled" directly to .leaflet-popup-content
@@ -909,18 +923,27 @@
     padding-right:6px;
   }
   /* Leaflet's own default close-button styling (plain grey #757575,
-     16px) never got themed along with the rest of the popup - left as-is
-     it's both low-contrast against the dark popup background and visibly
-     inconsistent with everything else on the page. Same hi-vis used for
-     the popup's own title, just a smaller/plainer treatment than the
-     About modal's circular close button - a popup close doesn't need
-     that much visual weight, just to be readable and on-brand. Matching
-     selector specificity to Leaflet's own rule (see the inlined Leaflet
-     stylesheet above) rather than !important. */
+     16px, 24x24px tap target) never got themed along with the rest of
+     the popup - left as-is it's both low-contrast against the dark
+     popup background and visibly inconsistent with everything else on
+     the page. Same hi-vis used for the popup's own title, just a
+     smaller/plainer treatment than the About modal's circular close
+     button - a popup close doesn't need that much visual weight, just
+     to be readable and on-brand. Matching selector specificity to
+     Leaflet's own rule (see the inlined Leaflet stylesheet above) rather
+     than !important.
+     Enlarged from Leaflet's default 24x24px to 32x32px (25/07/2026) as
+     the best real improvement that fits - a full 44x44px guideline
+     target would eat ~18% of this popup's own 240px maxWidth, which
+     isn't practical without a much larger popup redesign. 32px still
+     meaningfully improves the tap target (+78% area) without that cost -
+     see qa-testing-checklist.txt for the full reasoning. */
   .leaflet-container a.leaflet-popup-close-button{
     color:var(--hi-vis);
     font-size:1.3rem;
-    line-height:24px;
+    width:32px;
+    height:32px;
+    line-height:32px;
   }
   .leaflet-container a.leaflet-popup-close-button:hover,
   .leaflet-container a.leaflet-popup-close-button:focus{
@@ -1108,6 +1131,10 @@
     border:none;
     border-radius:14px;
     padding:5px 12px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     font-size:0.76rem;
     font-weight:700;
     cursor:pointer;

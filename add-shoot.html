@@ -106,8 +106,12 @@
     text-decoration:underline;
     font-size:0.85rem;
     cursor:pointer;
-    padding:0;
-    margin-left:4px;
+    /* See index.html for the full reasoning - padding + a matching
+       negative margin expands the tappable area without visually
+       changing this inline text link or shifting surrounding text. */
+    display:inline-block;
+    padding:14px 4px;
+    margin:-14px -4px -14px 0;
   }
   #aboutLink:hover{ color:var(--hi-vis); }
   #aboutOverlay{
@@ -152,9 +156,9 @@
     color:var(--hi-vis);
     border:1px solid var(--line);
     border-radius:50%;
-    width:32px;
-    height:32px;
-    min-width:32px;
+    width:44px;
+    height:44px;
+    min-width:44px;
     flex-shrink:0;
     font-size:1rem;
     line-height:1;
@@ -200,6 +204,10 @@
     background:transparent;
     color:var(--hi-vis);
     padding:8px 18px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     border-radius:18px;
     font-size:0.8rem;
     cursor:pointer;
