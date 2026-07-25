@@ -396,6 +396,14 @@
      the moment a manual pan/zoom makes it actually actionable, so it
      visually "wakes up" right when it becomes useful instead of sitting
      unnoticed the whole time. */
+  /* Reset view + My location's shared row - see the comment on
+     RecenterControl in the JS for why these two share one control
+     instead of stacking as separate ones. */
+  .bottomleft-controls-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
   .recenter-btn{
     padding:6px 12px;
     /* min-height:44px (+ flex centering) rather than relying on padding
@@ -870,7 +878,7 @@
   .leaflet-popup-content{ margin-right:12px; }
   .popup-header{ margin-right:8px; }
   /* A long description/gallery list makes a popup scroll internally past
-     POPUP_AUTOPAN_PADDING's maxHeight (see the JS) - Leaflet adds
+     getPopupAutoPanOptions()'s maxHeight (see the JS) - Leaflet adds
      .leaflet-popup-scrolled and switches to overflow-y:auto at that
      point, but never reserves any room for the scrollbar itself, so the
      themed scrollbar (see the global *::-webkit-scrollbar rules near the
@@ -2135,10 +2143,21 @@ map.on('movestart zoomstart', () => {
   if (!suppressInteractionTracking) setUserHasMovedMap(true);
 });
 
+// Reset view and My location share a single control (one row, laid out
+// side by side) rather than two separate stacked controls - each one
+// used to add its own ~44px + 10px-margin row to the bottom-left corner
+// stack, and on a short mobile map viewport that stack (plus the zoom
+// control above it) left barely any real height for a popup to open in
+// without autoPan's reserved padding eating almost the entire map area.
+// Combining them into one row cuts a full row + margin back out of that
+// stack - see getPopupAutoPanOptions()'s comment for the full picture.
 const RecenterControl = L.Control.extend({
   options: { position: 'bottomleft' },
   onAdd: function(){
-    const btn = L.DomUtil.create('button', 'recenter-btn');
+    const wrap = L.DomUtil.create('div', 'bottomleft-controls-row');
+    L.DomEvent.disableClickPropagation(wrap);
+
+    const btn = L.DomUtil.create('button', 'recenter-btn', wrap);
     // Text label rather than an icon: a crosshair reads as "my location"
     // and corner-brackets reads as "fullscreen" — neither actually says
     // "show all current results", so a plain label is the clearest option.
@@ -2147,13 +2166,18 @@ const RecenterControl = L.Control.extend({
     // visually identical whether or not there's anything to reset.
     btn.textContent = 'Reset view';
     btn.title = 'Snap back to fit all currently-filtered results';
-    L.DomEvent.disableClickPropagation(btn);
     btn.addEventListener('click', () => {
       setUserHasMovedMap(false);
       render();
     });
     recenterBtnEl = btn;
-    return btn;
+
+    const locateBtn = L.DomUtil.create('button', 'locate-btn', wrap);
+    locateBtn.textContent = '🧭';
+    locateBtn.title = "Center the map on your current location (your browser will ask permission first)";
+    locateBtn.addEventListener('click', () => findMyLocation(locateBtn));
+
+    return wrap;
   }
 });
 map.addControl(new RecenterControl());
@@ -2210,24 +2234,10 @@ function findMyLocation(btn){
   );
 }
 
-// Circular icon-only button matching the layer switcher's visual language
-// (see .leaflet-control-layers-toggle) rather than the pill-shaped text
-// buttons used for Reset view — a compass glyph reads as "locate me" on
-// its own without needing a text label. The disabled state during lookup
-// is a dimmed icon (see .locate-btn:disabled), not swapped-out text, so
-// the button doesn't need to grow/shrink to fit a "Locating…" label.
-const LocateControl = L.Control.extend({
-  options: { position: 'bottomleft' },
-  onAdd: function(){
-    const btn = L.DomUtil.create('button', 'locate-btn');
-    btn.textContent = '🧭';
-    btn.title = "Center the map on your current location (your browser will ask permission first)";
-    L.DomEvent.disableClickPropagation(btn);
-    btn.addEventListener('click', () => findMyLocation(btn));
-    return btn;
-  }
-});
-map.addControl(new LocateControl());
+// "My location" (circular icon-only button matching the layer switcher's
+// visual language - a compass glyph reads as "locate me" on its own
+// without needing a text label) now lives inside RecenterControl above,
+// sharing one row with "Reset view" instead of its own separate control.
 
 // Automatic on-load offer to center the map on the visitor's location -
 // same underlying browser permission dialog, same one-shot
@@ -2843,28 +2853,54 @@ function popupHtml(spot){
 //   - top-left: the search box (#searchWrap, top:12px + its own ~41px
 //     height)
 //   - bottom-right: whichever is taller/wider of the bottom-left control
-//     stack (zoom + Reset view + My location together, remeasured at
-//     ~206px tall from the map's bottom edge to the top of the stack
-//     after bumping every control to a 44px touch target 25/07/2026 -
-//     was ~146px at the old 30-36px sizes - My location is the topmost
-//     since controls stack upward in the order they're added) and the
-//     bottom-right layer switcher (remeasured at ~64px wide, was ~60px)
-//     - Leaflet only takes one padding value per corner pair, not one
-//     per actual control, so this has to cover the largest of them; a
-//     small buffer is added on top of the measured values.
-// maxHeight caps how tall a popup's content can grow before it scrolls
-// internally instead — a spot with a long description and several
-// galleries could otherwise grow tall enough that no amount of autoPan
-// padding could keep both ends clear at once on a short mobile viewport
-// (there's only so much map height to work with). 320px comfortably
-// fits within a typical mobile map area alongside both padding amounts
-// above; anything past that scrolls within the popup rather than
-// pushing its edges past where auto-pan can still guarantee clearance.
-const POPUP_AUTOPAN_PADDING = {
-  autoPanPaddingTopLeft: L.point(20, 70),
-  autoPanPaddingBottomRight: L.point(80, 225),
-  maxHeight: 320
-};
+//     stack (zoom + the combined Reset view/My location row, remeasured
+//     at ~152px tall from the map's bottom edge to the top of the stack
+//     - Reset view/My location share one row since 25/07/2026 rather
+//     than stacking as two separate controls, specifically to keep this
+//     number down after bumping every control to a 44px touch target
+//     made the OLD 3-row-stacked version ~206px, which combined with a
+//     real popup's height left no usable room on a short mobile map at
+//     all - see the CONFIRMED BUG note below) and the bottom-right layer
+//     switcher (~64px wide) - Leaflet only takes one padding value per
+//     corner pair, not one per actual control, so this has to cover the
+//     largest of them; a small buffer is added on top of the measured
+//     values.
+//
+// CONFIRMED BUG (25/07/2026): a real popup on a real iPhone 14 (390x664,
+// ~372px of actual map height once the header/search/filters/date bar
+// above it are accounted for) measured ~352px tall - on its own, close
+// to the ENTIRE map height, before any padding is even reserved. With
+// the top+bottom padding both reserved on top of that, there was
+// nowhere near enough room, and the popup rendered under the bottom-
+// left controls regardless of what padding values were used - no amount
+// of padding tuning fixes this on its own; the control stack's own
+// height had to come down too (see above). getPopupAutoPanOptions()
+// below additionally caps maxHeight dynamically against the map's
+// actual current size, rather than a fixed guess, so a short viewport
+// forces earlier internal scrolling instead of assuming a fixed 320px
+// will always fit.
+function getPopupAutoPanOptions(){
+  const mapH = map.getSize().y;
+  // Reserve top+bottom padding, plus ~40px for the popup wrapper's own
+  // chrome (tip, close button spacing) that sits outside its content
+  // box, then clamp to a sensible range. The floor here used to be 140,
+  // picked as "a popup shorter than that couldn't show much anyway" -
+  // but that reasoning was backwards: on a real short mobile viewport
+  // (iPhone 14, ~372px of actual map height) the honest formula comes
+  // out to ~87px, and forcing 140 anyway (a value bigger than the actual
+  // available room) was exactly what caused popups to still overlap the
+  // bottom controls even after the padding fix above - confirmed by
+  // testing 90px there directly and getting a clean, non-overlapping
+  // fit. 60 is a much lower genuine floor, just enough to avoid a
+  // degenerate zero/negative height on an extreme edge case, not an
+  // attempt to guarantee a "comfortable" size at the cost of overlap.
+  const maxHeight = Math.max(60, Math.min(320, mapH - 70 - 175 - 40));
+  return {
+    autoPanPaddingTopLeft: L.point(20, 70),
+    autoPanPaddingBottomRight: L.point(80, 175),
+    maxHeight
+  };
+}
 
 // =========================================================================
 // EMPTY STATE — when a view (a given day, "live now", etc.) has zero
@@ -2878,7 +2914,7 @@ const POPUP_AUTOPAN_PADDING = {
 // it on caused a real, confirmed bug: on a narrow mobile viewport, the
 // popup (previously missing the maxWidth every other popup on the site
 // sets, so defaulting to Leaflet's 300px) didn't comfortably fit within
-// the autoPan padding reserved on both sides (see POPUP_AUTOPAN_PADDING
+// the autoPan padding reserved on both sides (see getPopupAutoPanOptions()
 // above, which is asymmetric - more reserved on the bottom-right than the
 // top-left), so opening it forced the map to pan to accommodate. Because
 // the popup gets re-anchored to map.getCenter() again on every render()
@@ -3169,7 +3205,7 @@ function render(){
     const icon = makeIcon(spot, status);
     const marker = L.marker([spot.lat, spot.lng], { icon, pane: `pane-${status}` });
     marker._spotRef = spot;
-    marker.bindPopup(popupHtml(spot), { maxWidth: 240, className: `status-popup-${status}`, ...POPUP_AUTOPAN_PADDING });
+    marker.bindPopup(popupHtml(spot), { maxWidth: 240, className: `status-popup-${status}`, ...getPopupAutoPanOptions() });
     // Leaflet's marker element already gets role="button" tabindex="0"
     // (interactive markers are keyboard-focusable by default), but ships
     // with no accessible name, so screen readers just announce "button"
@@ -3481,7 +3517,7 @@ function flyToLocation(lat, lng, label){
   // programmaticMapMove so it doesn't light up "Reset view" or suppress
   // auto-recentre, the same as a popup click.
   programmaticMapMove(() => map.setView([lat, lng], 14, { animate: true }));
-  L.popup({ maxWidth: 240, ...POPUP_AUTOPAN_PADDING })
+  L.popup({ maxWidth: 240, ...getPopupAutoPanOptions() })
     .setLatLng([lat, lng])
     .setContent(`<p class="popup-meta" style="margin:0;">${escapeHtml(label)}</p>`)
     .openOn(map);
@@ -3619,7 +3655,7 @@ function flyToSpot(spot){
   // correctly whether setView ends up animating or snapping instantly.
   programmaticMapMove(() => map.setView([spot.lat, spot.lng], 15, { animate: true }));
   map.once('moveend', () => {
-    const popup = L.popup({ maxWidth: 240, className: `status-popup-${getStatus(spot)}`, ...POPUP_AUTOPAN_PADDING })
+    const popup = L.popup({ maxWidth: 240, className: `status-popup-${getStatus(spot)}`, ...getPopupAutoPanOptions() })
       .setLatLng([spot.lat, spot.lng])
       .setContent(popupHtml(spot));
     popup._spotRef = spot; // standalone popup, no marker — see popupopen handler below
@@ -3949,6 +3985,17 @@ async function init(){
       resolveDefaultMode();
     }
     hideLoadingState();
+    // Leaflet measured #map's size back when L.map() was first constructed,
+    // while the page was still in its pre-data-load layout (the loading
+    // overlay showing, the filter/date-bar rows not yet holding their real
+    // content) - confirmed via testing to cache a size ~50px taller than
+    // the map's actual final height once everything above it (header,
+    // search, filters, date bar) has settled into place. Every one of
+    // Leaflet's own internal size-dependent calculations (autoPan among
+    // them) was working off that stale, too-large number the whole time -
+    // this is what was silently undermining getPopupAutoPanOptions() above
+    // even after its own padding/maxHeight numbers were corrected.
+    map.invalidateSize();
     rebuildDateAxis();
     rebuildMonthOptions();
     render();

@@ -431,6 +431,94 @@ def test_emoji_name_no_crash(p, device_name, engine):
     browser.close()
 
 
+REAL_SPOT_CSV = (
+    "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
+    "Real Photog,,https://example.com,Winnats Pass - top of the climb,Shooting bikes coming up the hill all afternoon - wave if you see me!,53.1,-1.6,2026-07-25 00:00,2026-07-25 23:59,S1,realphotog\r\n"
+)
+
+
+def route_real_spot_csv(ctx):
+    def handler(route):
+        url = route.request.url
+        if "gid=1737338184" in url:
+            route.fulfill(status=200, content_type="text/csv", body=REAL_SPOT_CSV)
+        elif "gid=1842250391" in url:
+            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
+        else:
+            route.continue_()
+    ctx.route("**/docs.google.com/**", handler)
+
+
+def test_popup_clears_bottom_controls(p, device_name, engine):
+    # Regression test for a confirmed bug: on a real phone-sized map
+    # viewport (~372px of actual map height on an iPhone 14, once the
+    # header/search/filters/date bar above it are accounted for), a
+    # popup with real content (logo, description, directions buttons)
+    # rendered underneath the bottom-left "Reset view"/"My location"
+    # controls - both when opening a marker's popup directly and when
+    # selecting a search result. Two compounding root causes, both fixed:
+    # (1) Leaflet's cached map size was stale (measured before the page's
+    # real layout had settled, ~50px taller than the map's true height),
+    # feeding wrong numbers into every size-dependent calculation
+    # including autoPan - fixed with an explicit map.invalidateSize()
+    # once initial load settles; (2) the bottom-left control stack itself
+    # was tall enough (3 stacked rows) that even correct autoPan math
+    # left barely any room for a popup on a short viewport - fixed by
+    # combining Reset view + My location into one row instead of two.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_real_spot_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- popup clears bottom controls on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    if page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')"):
+        page.tap("#dismissLocationPromptBtn")
+        page.wait_for_timeout(300)
+
+    def rects_overlap(a, b):
+        return not (
+            a["x"] + a["width"] < b["x"] or a["x"] > b["x"] + b["width"]
+            or a["y"] + a["height"] < b["y"] or a["y"] > b["y"] + b["height"]
+        )
+
+    # Path 1: opening a marker's popup directly.
+    page.evaluate(
+        "() => { const spot = spots[0]; "
+        "['live','soon','past'].forEach(s => clusterGroups[s].eachLayer(m => { "
+        "if (m._spotRef === spot) m.openPopup(); })); }"
+    )
+    page.wait_for_timeout(400)
+    popup_box = page.eval_on_selector(".leaflet-popup-content-wrapper", "el => el.getBoundingClientRect()")
+    reset_box = page.eval_on_selector(".recenter-btn", "el => el.getBoundingClientRect()")
+    locate_box = page.eval_on_selector(".locate-btn", "el => el.getBoundingClientRect()")
+    check(
+        "marker popup doesn't overlap Reset view / My location",
+        not rects_overlap(popup_box, reset_box) and not rects_overlap(popup_box, locate_box),
+        f"popup={popup_box} reset={reset_box} locate={locate_box}",
+    )
+    page.evaluate("() => map.closePopup()")
+    page.wait_for_timeout(200)
+
+    # Path 2: opening the same popup via a search result selection.
+    page.fill("#searchInput", "Real")
+    page.wait_for_timeout(500)
+    result = page.query_selector("#searchResults .resultItem")
+    result.tap()
+    page.wait_for_timeout(700)
+    popup_box2 = page.eval_on_selector(".leaflet-popup-content-wrapper", "el => el.getBoundingClientRect()")
+    check(
+        "search-result popup doesn't overlap Reset view / My location",
+        not rects_overlap(popup_box2, reset_box) and not rects_overlap(popup_box2, locate_box),
+        f"popup={popup_box2}",
+    )
+    ctx.close()
+    browser.close()
+
+
 def main():
     httpd = start_server_if_needed()
     try:
@@ -440,6 +528,7 @@ def main():
                 test_add_shoot(p, device_name, engine)
                 test_empty_state_no_drift(p, device_name, engine)
                 test_emoji_name_no_crash(p, device_name, engine)
+                test_popup_clears_bottom_controls(p, device_name, engine)
     finally:
         if httpd:
             httpd.shutdown()
