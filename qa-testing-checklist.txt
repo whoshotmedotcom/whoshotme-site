@@ -93,10 +93,18 @@ close when it shouldn't, closes via every path a user would expect.
 =============================================================================
 2. FORM VALIDATION & BOUNDARY CASES
 =============================================================================
-[ ]    Required-field validation on every form (some spot-checked, not
-       systematic - empty submissions, whitespace-only input)
-[ ]    Invalid formats: malformed email, garbage URLs in website/logo
-       fields, invalid image URLs
+[DONE] Required-field validation on every form (25/07/2026) - click-
+       tested systematically across add-shoot.html's shoot form (empty
+       location, no pin dropped, end<=start, pin outside the UK - each
+       blocked with a clear error and zero network requests fired) and
+       profile form (empty name blocked, no request fired). Exactly one
+       request fires on a genuinely valid submission in each case.
+[DONE] Invalid formats: email (25/07/2026) - add-shoot.html's email-
+       change field correctly rejects "not-an-email", "missing@dot",
+       "@nodomain.com", "spaced out@example.com", and empty, with zero
+       network requests fired for any of them; a valid address fires
+       exactly one request. (Garbage URLs in website/logo fields not
+       covered here - see note below.)
 [ ]    Boundary values: very long photographer names/descriptions/
        location names - do they overflow their containers anywhere
        (popups, list view, search results, marker labels)?
@@ -112,11 +120,15 @@ close when it shouldn't, closes via every path a user would expect.
        computed dates, hardcoded strings never fed by user input) or use
        .textContent/.setAttribute() instead of innerHTML. Zero real
        findings - genuinely clean.
-[ ]    Date/time edge cases: end time before start time (client-side
-       check exists - confirm server-side app-script.gs also rejects it,
-       not just trusts the client)
-[ ]    Coordinates right at the UK_BOUNDS edge (client validates, server
-       validates - confirm both use the exact same box, still in sync)
+[DONE] Date/time edge cases: end time before start time (25/07/2026) -
+       confirmed both client (add-shoot.html) AND server (app-script.gs's
+       validateShoot()) independently reject end<=start via a direct
+       string comparison of the "YYYY-MM-DD HH:MM" format. Not just
+       trusting the client.
+[DONE] Coordinates at the UK_BOUNDS edge (25/07/2026) - confirmed
+       app-script.gs's validateShoot() uses the exact same box
+       (49.5,-10.9 to 61.2,2.1) as add-shoot.html's UK_BOUNDS, with an
+       explicit comment tying the two together. Still in sync.
 [DONE] Google Sheets formula injection (25/07/2026) - the site already
        has a sanitizeForCell() helper (leading apostrophe forces plain-
        text if a value starts with =/+/-/@) applied consistently at
