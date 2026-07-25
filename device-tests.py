@@ -197,6 +197,28 @@ def test_index(p, device_name, engine):
         page.wait_for_timeout(300)
         check("filter chip responds to tap", "active" in (chip.get_attribute("class") or ""))
 
+    # Accessible list view - the alternative to clustered map markers having
+    # no keyboard path at all (see the #listViewPanel CSS comment). Real tap
+    # to open, checks it covers the map's own controls (not just the tile
+    # layer - z-index needs to beat #searchWrap/Leaflet's own controls,
+    # which are all z-index:1000; this panel was originally 950 and got
+    # rendered *under* them, a real bug caught only by an actual screenshot,
+    # not by checking classList alone), then a real keyboard Escape to close.
+    page.tap("#listViewToggleBtn")
+    page.wait_for_timeout(300)
+    panel_open = page.evaluate("() => !document.getElementById('listViewPanel').classList.contains('hidden')")
+    check("list view opens on tap", panel_open)
+    covers_controls = page.evaluate("() => getComputedStyle(document.getElementById('listViewPanel')).zIndex > getComputedStyle(document.getElementById('searchWrap')).zIndex")
+    check("list view panel z-index is above the search box/map controls", covers_controls)
+    focus_on_open = page.evaluate("() => document.activeElement.id")
+    check("opening the list view moves focus to its close button", focus_on_open == "listViewCloseBtn", focus_on_open)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    panel_closed = page.evaluate("() => document.getElementById('listViewPanel').classList.contains('hidden')")
+    check("Escape closes the list view", panel_closed)
+    focus_on_close = page.evaluate("() => document.activeElement.id")
+    check("closing the list view returns focus to its toggle button", focus_on_close == "listViewToggleBtn", focus_on_close)
+
     # Text selection: blocked on chrome, allowed in real inputs. Checked via
     # actual computed style (both prefixed/unprefixed - WebKit's JS doesn't
     # expose the unprefixed accessor reliably, even though the CSS rule

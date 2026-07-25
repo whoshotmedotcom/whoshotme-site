@@ -530,6 +530,50 @@
   }
   #dataStateOverlay.hidden{ display:none; }
   #dataStateBox{ max-width:320px; }
+
+  /* Accessible alternative to the map itself - individual markers are
+     keyboard-focusable (Leaflet gives them that by default, plus a real
+     aria-label set in render() below), but clustered markers have no
+     keyboard path to expand at all, and even for individual ones there's
+     no way to jump straight to "the list of shoots" without tabbing
+     through the whole page first. This panel shows the exact same
+     currently-visible spots (same filter/date state) as a plain
+     keyboard-navigable list instead, sidestepping clustering entirely.
+     z-index:1010 - deliberately above #searchWrap/#dataStateOverlay/
+     Leaflet's own controls (all z-index:1000), since this needs to fully
+     cover the map INCLUDING its own search box and zoom/layer controls
+     while open, not just the tile layer underneath them. Found the hard
+     way: at 950 the search box and Leaflet's zoom/layers controls were
+     still rendering on top of this panel, visually broken. */
+  #listViewPanel{
+    position:absolute;
+    inset:0;
+    z-index:1010;
+    background:var(--asphalt);
+    padding:16px;
+    overflow-y:auto;
+  }
+  #listViewPanel.hidden{ display:none; }
+  #listViewHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
+  #listViewHeader h2{ margin:0; font-size:1rem; color:var(--hi-vis); }
+  #listViewCloseBtn{
+    background:var(--asphalt-light);
+    color:var(--paper);
+    border:none;
+    border-radius:14px;
+    padding:6px 14px;
+    font-size:0.82rem;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #listViewCloseBtn:hover{ background:var(--line); }
+  #listViewItems .resultItem{ border-radius:8px; margin-bottom:6px; border-bottom:none; background:var(--asphalt-light); }
+  #listViewEmpty{ color:var(--muted-grey); font-size:0.85rem; }
   #dataStateTitle{
     margin:0 0 8px;
     font-weight:800;
@@ -736,6 +780,21 @@
      chip's dot matches its marker color), so a separate legend row
      listing the same three colors isn't needed. */
   .chipDot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
+  #listViewToggleBtn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--paper);
+    padding:7px 14px;
+    border-radius:20px;
+    font-size:0.82rem;
+    font-weight:700;
+    cursor:pointer;
+    margin-left:auto;
+  }
+  #listViewToggleBtn:hover{ border-color:var(--hi-vis); }
   /* When the chip is active, its background becomes that same status
      color (e.g. Live's hi-vis dot on a hi-vis background), so the dot
      disappears entirely. box-shadow (not border) rings it without
@@ -1328,6 +1387,14 @@
 
   <div id="map"></div>
 
+  <div id="listViewPanel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="listViewHeading">
+    <div id="listViewHeader">
+      <h2 id="listViewHeading">Currently shown shoots</h2>
+      <button id="listViewCloseBtn">Close list ✕</button>
+    </div>
+    <div id="listViewItems" role="listbox" aria-label="Currently shown shoots"></div>
+  </div>
+
   <div id="dataStateOverlay" role="status" aria-live="polite">
     <div id="dataStateBox">
       <p id="dataStateTitle">Loading shoots…</p>
@@ -1343,6 +1410,7 @@
     <button class="chip active" data-filter="upcoming"><span class="chipDot" style="background:#d97a53;"></span>Upcoming</button>
     <span class="count-pill" id="countPill"></span>
     <span id="lastUpdated"></span>
+    <button id="listViewToggleBtn" aria-haspopup="dialog">📋 List view</button>
   </div>
 
   <div id="dateBar">
@@ -2985,6 +3053,14 @@ function render(){
   // chronologically forward (soonest/live first).
   visible = visible.slice().sort((a, b) => currentMode === 'past' ? b.start - a.start : a.start - b.start);
 
+  // Keeps the accessible list view (see renderListViewPanel) in sync with
+  // exactly what the map itself is currently showing - same filter/date
+  // state, same spots, just as a plain keyboard-navigable list instead of
+  // markers on a map. Cheap to keep updated even while the panel's
+  // closed; only actually re-renders its DOM if it's open.
+  currentVisibleSpots = visible;
+  if (listViewOpen) renderListViewPanel();
+
   visible.forEach(spot => {
     const status = getStatus(spot); // 'live', 'soon', or 'past' — matches a clusterGroups key
     const icon = makeIcon(spot, status);
@@ -3082,6 +3158,87 @@ function render(){
     setDateLabel('No shoot days found');
   }
 }
+
+// =========================================================================
+// ACCESSIBLE LIST VIEW — see the #listViewPanel CSS comment for why this
+// exists: clustered markers have no keyboard path to expand at all, and
+// even individual ones require tabbing through the whole page first. This
+// shows the exact same currently-visible spots as a plain list instead,
+// each one a real keyboard-focusable option (mirrors the search results'
+// own .resultItem pattern - role="option"/tabindex="0" with both a click
+// and an Enter/Space handler, for the same reason: these started as plain
+// divs with no keyboard path to picking one at all).
+// =========================================================================
+let currentVisibleSpots = [];
+let listViewOpen = false;
+const listViewPanel = document.getElementById('listViewPanel');
+const listViewItemsEl = document.getElementById('listViewItems');
+const listViewToggleBtn = document.getElementById('listViewToggleBtn');
+const listViewCloseBtn = document.getElementById('listViewCloseBtn');
+
+function renderListViewPanel(){
+  if (!currentVisibleSpots.length){
+    const msg = emptyStateMessage();
+    listViewItemsEl.innerHTML = `<p id="listViewEmpty">${escapeHtml(msg.title)} - ${escapeHtml(msg.body)}</p>`;
+    return;
+  }
+  listViewItemsEl.innerHTML = currentVisibleSpots.map((spot, i) => {
+    const status = getStatus(spot);
+    const tag = status === 'past' ? '<span class="rTagPast">(past)</span>' :
+                status === 'live' ? '<span style="color:#d4ff3f;">(live now)</span>' :
+                '<span style="color:#d97a53;">(upcoming)</span>';
+    return `<div class="resultItem" role="option" tabindex="0" data-list-idx="${i}">
+      <span class="rName">${escapeHtml(spot.name)} ${tag}</span>
+      <span class="rMeta">${escapeHtml(spot.location)} - ${fmtTime(spot.start)}</span>
+    </div>`;
+  }).join('');
+
+  listViewItemsEl.querySelectorAll('.resultItem[data-list-idx]').forEach(el => {
+    const action = () => {
+      const spot = currentVisibleSpots[parseInt(el.dataset.listIdx, 10)];
+      closeListView();
+      flyToSpot(spot);
+    };
+    el.addEventListener('click', action);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        action();
+      }
+    });
+  });
+}
+
+function openListView(){
+  listViewOpen = true;
+  renderListViewPanel();
+  listViewPanel.classList.remove('hidden');
+  // Moves focus into the panel itself (standard modal/dialog practice) -
+  // the close button rather than the first list item, since a screen
+  // reader user lands on it and immediately hears the panel's own title
+  // via aria-labelledby before hearing any of its content.
+  listViewCloseBtn.focus();
+}
+
+function closeListView(){
+  listViewOpen = false;
+  listViewPanel.classList.add('hidden');
+  // Returns focus to whatever opened the panel - without this, focus
+  // would silently land on <body> (the toggle button and its parent are
+  // both still in the DOM, but a closed/hidden panel doesn't happen to
+  // take focus with it), leaving a keyboard user with no sense of where
+  // they are on the page.
+  listViewToggleBtn.focus();
+}
+
+listViewToggleBtn.addEventListener('click', openListView);
+listViewCloseBtn.addEventListener('click', closeListView);
+// Esc is the conventional way to dismiss a dialog - without this, a
+// keyboard user's only way out is tabbing all the way to the close
+// button first.
+listViewPanel.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeListView();
+});
 
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {

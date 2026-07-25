@@ -195,10 +195,25 @@ framework, no bundler. Edit the files directly and refresh the browser.
   this private, non-authoritative version.
 - **Accessibility pass** (see the 10 ideas list below, #6) — contrast fixes,
   aria-live regions on dynamic content, aria-valuetext on the date slider.
-  One known gap deliberately left unfixed: **individual map markers have no
-  keyboard navigation path** — only the search box does. Fixing this properly
-  is a real feature decision (roving tabindex vs. a list-view alternative),
-  not a quick patch.
+  One known gap left unfixed at the time: individual map markers had a
+  keyboard focus path (Leaflet gives interactive markers `tabindex="0"` by
+  default) but clustered ones had no way to expand via keyboard at all, and
+  even individual markers required tabbing through the whole page first.
+  **Done 25/07/2026** via a list-view alternative rather than making
+  Leaflet's clustering plugin itself keyboard-operable (the other option
+  considered - touches the plugin's internals, higher risk of subtle bugs
+  like focus loss when a cluster splits apart). The "📋 List view" button
+  in `#filters` opens `#listViewPanel`, a plain keyboard-navigable list of
+  exactly what render() currently has visible (same filter/date state),
+  each item reusing the same role="option"/tabindex="0" + click/Enter
+  pattern already established for search results, selecting one calls the
+  existing `flyToSpot()`. Sidesteps clustering entirely rather than making
+  cluster icons keyboard-operable. `#listViewPanel` needed `z-index:1010`,
+  not the more conservative value first tried - it needs to sit above
+  `#searchWrap`/Leaflet's own controls (all `z-index:1000`), not just the
+  tile layer underneath them, or they render on top of the panel. Covered
+  by permanent checks in `device-tests.py` (open/close, focus management,
+  z-index stacking).
 - **Busy overlay in `add-shoot.html`** (17/07/2026) — create/edit/delete
   shoot and add/edit/delete gallery were measured taking 7-15s against the
   Apps Script backend. A dimmed full-screen overlay (`showBusy()`/
