@@ -796,10 +796,15 @@
   }
   /* (hover: hover) scoped - on touch devices a plain :hover rule can get
      "stuck" green after a tap since there's no mouse-leave event to clear
-     it (same issue already fixed on .recenter-btn above). */
+     it (same issue already fixed on .recenter-btn above). The "list view
+     is currently open" state is a separate, deliberate .is-open class
+     toggled in JS (see openListView/closeListView) rather than reusing
+     :hover for it, so it shows correctly on touch devices too and only
+     clears when the panel actually closes. */
   @media (hover: hover){
     #listViewToggleBtn:hover{ border-color:var(--hi-vis); }
   }
+  #listViewToggleBtn.is-open{ border-color:var(--hi-vis); }
   /* When the chip is active, its background becomes that same status
      color (e.g. Live's hi-vis dot on a hi-vis background), so the dot
      disappears entirely. box-shadow (not border) rings it without
@@ -3279,6 +3284,7 @@ function renderListViewPanel(){
 
 function openListView(){
   listViewOpen = true;
+  listViewToggleBtn.classList.add('is-open');
   renderListViewPanel();
   listViewPanel.classList.remove('hidden');
   // Moves focus into the panel itself (standard modal/dialog practice) -
@@ -3290,6 +3296,7 @@ function openListView(){
 
 function closeListView(){
   listViewOpen = false;
+  listViewToggleBtn.classList.remove('is-open');
   listViewPanel.classList.add('hidden');
   // Returns focus to whatever opened the panel - without this, focus
   // would silently land on <body> (the toggle button and its parent are
