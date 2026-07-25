@@ -78,9 +78,17 @@ close when it shouldn't, closes via every path a user would expect.
        toggle (data isn't lost), and a successful signup's confirmation
        panel correctly stays shown (not reverting to a blank form) after
        toggling away and back.
-[ ]    Proximity/conflict warning banner in add-shoot.html (shows when a
-       dropped pin is near another photographer's overlapping shoot) -
-       not tested this session at all
+[DONE] Proximity/conflict warning banner in add-shoot.html (25/07/2026) -
+       verified with synthetic overlapping-time shoots at varying
+       distances: grey markers correctly show for every overlapping-time
+       shoot regardless of distance (informational, not distance-
+       filtered), the warning banner correctly filters to within 150m
+       and excludes non-overlapping-time shoots, singular/plural wording
+       and "X and Y" listing are both correct, a linked photographer
+       renders as a real anchor while a link-less one renders as plain
+       text, and the warning updates correctly after a real marker drag
+       (not just a programmatic move), after clearing the pin, and after
+       clearing the time window. Zero console errors. No bugs found.
 
 =============================================================================
 2. FORM VALIDATION & BOUNDARY CASES
