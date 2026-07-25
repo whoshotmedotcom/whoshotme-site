@@ -526,7 +526,7 @@
      never changes. #searchWrap shifts down to sit below it instead (see
      the #mapWrap.bannerActive rule below); a shift confined to the small
      search box has far less layout-shift impact than the entire map does. */
-  #photographerFilterBanner, #defaultModeBanner{
+  #photographerFilterBanner, #defaultModeBanner, #locationPromptBanner{
     position:absolute;
     top:0;
     left:0;
@@ -542,11 +542,11 @@
     font-size:0.82rem;
     font-weight:700;
   }
-  #photographerFilterBanner.hidden, #defaultModeBanner.hidden{ display:none; }
+  #photographerFilterBanner.hidden, #defaultModeBanner.hidden, #locationPromptBanner.hidden{ display:none; }
   /* Set via JS (setBannerActive()) to the shown banner's real measured
      height, so this works whether the message wraps to one line or two. */
   #mapWrap.bannerActive #searchWrap{ top:calc(var(--bannerHeight, 40px) + 12px); }
-  #clearPhotographerFilterBtn, #dismissDefaultModeBtn{
+  #clearPhotographerFilterBtn, #dismissDefaultModeBtn, #useMyLocationBtn, #dismissLocationPromptBtn{
     background:var(--asphalt);
     color:var(--hi-vis);
     border:none;
@@ -557,7 +557,7 @@
     cursor:pointer;
     white-space:nowrap;
   }
-  #clearPhotographerFilterBtn:hover, #dismissDefaultModeBtn:hover{ background:var(--asphalt-light); }
+  #clearPhotographerFilterBtn:hover, #dismissDefaultModeBtn:hover, #useMyLocationBtn:hover, #dismissLocationPromptBtn:hover{ background:var(--asphalt-light); }
 
   /* Floating search box over the map, top-left */
   #searchWrap{
@@ -1245,7 +1245,7 @@
 
       <h3>Your privacy</h3>
       <p>Visiting this site: we keep a simple count of page visits and which photographer links get clicked, entirely within our own systems - no third-party analytics company is involved. No cookies, nothing stored in your browser, nothing that identifies you personally - just anonymous counts.</p>
-      <p>Location: the map also asks for your location automatically when it first loads, using the exact same browser permission prompt as the "My location" button below - that's still a conversation between you and your browser, not something WhoShotMe controls, and you can simply dismiss it. Either way, if you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
+      <p>Location: on first load, the map asks in its own words whether you'd like it centred on your location - dismiss it and nothing happens at all. Say yes (or use the "My location" button below anytime) and only then does your browser show its own separate permission prompt - that part's a conversation between you and your browser, not something WhoShotMe controls. If you allow it, your coordinates are used only to center the map on your device there and then; they're never sent to us, never stored, and never logged anywhere. Close the tab and it's gone.</p>
       <p>Photographer listings: if you're listed, we store the details needed to run your listing - your name, contact email, logo and website links, and the shoot times/locations you submit. You manage this yourself via your own personal link; contact us (see below) to have your listing removed entirely. We keep this data for as long as you're listed, and delete it once you ask us to.</p>
       <p style="color:var(--muted-grey); font-size:0.82rem;">This runs on Google Sheets/Apps Script (data storage), GitHub Pages (hosting), the OS Data Hub, Esri, and OpenStreetMap (map tiles - whichever basemap you've got selected), postcodes.io / OpenStreetMap's Nominatim (turning a typed postcode or place name into a map location), and images.weserv.nl (resizing a photographer's linked logo down to icon size, so your browser isn't downloading a full-size photo for a tiny marker) - each processes the minimum needed to make their part work.</p>
       <p>Photographers: please only submit content you have the rights to post, and keep listings accurate - no illegal or offensive content. Listings that don't meet this may be removed.</p>
@@ -1266,6 +1266,14 @@
   <div id="defaultModeBanner" class="hidden" role="status" aria-live="polite">
     <span id="defaultModeText"></span>
     <button id="dismissDefaultModeBtn" aria-label="Dismiss this message">✕</button>
+  </div>
+
+  <div id="locationPromptBanner" class="hidden" role="status" aria-live="polite">
+    <span>Want the map centred on your location?</span>
+    <span style="display:flex; gap:8px; flex-shrink:0;">
+      <button id="useMyLocationBtn">Yes, use it</button>
+      <button id="dismissLocationPromptBtn" aria-label="No thanks">✕</button>
+    </span>
   </div>
 
   <div id="searchWrap">
@@ -1989,44 +1997,81 @@ const LocateControl = L.Control.extend({
 });
 map.addControl(new LocateControl());
 
-// Automatic on-load version of the same "My location" prompt above - same
-// browser permission dialog, same one-shot getCurrentPosition, same
-// guarantee (coordinates go straight into setView and nowhere else). The
-// only difference is it asks proactively on a fresh landing rather than
-// waiting for someone to notice and tap the button, and it centers on a
-// regional zoom (9, roughly "which part of the UK") rather than the tight
-// street-level zoom (15) a deliberate button tap implies.
+// Automatic on-load offer to center the map on the visitor's location -
+// same underlying browser permission dialog, same one-shot
+// getCurrentPosition, same guarantee (coordinates go straight into
+// setView and nowhere else) as the "My location" button above. But it
+// doesn't fire that native prompt itself on load - it asks first, via
+// this site's own dismissible banner, and only triggers the real browser
+// prompt if the visitor actually says yes. A surprise permission dialog
+// the instant the page loads reads as pushy even though nothing's
+// actually collected without a second, explicit yes from them; asking in
+// our own words first (which any visitor can just dismiss, no browser
+// dialog involved at all) is a friendlier order for the exact same two
+// outcomes. Centers on a regional zoom (9, roughly "which part of the
+// UK") rather than the tight street-level zoom (15) a deliberate button
+// tap implies.
 //
-// Routed through programmaticMapMove rather than treated as a locked-in
-// manual move (contrast findMyLocation above) - this is a starting guess,
-// not a deliberate choice, so it should still yield to the real
-// fit-to-visible-spots logic in render() once data loads if there's
-// anything to show. It only ends up mattering on its own when nothing's
-// currently live/upcoming/past to fit to (see resolveDefaultMode) - which,
-// while the site has sparse listings, is common - in which case it's the
-// difference between defaulting to Derbyshire and defaulting to wherever
-// the visitor actually is.
+// The eventual setView is routed through programmaticMapMove rather than
+// treated as a locked-in manual move (contrast findMyLocation above) -
+// this is a starting guess, not a deliberate choice, so it should still
+// yield to the real fit-to-visible-spots logic in render() once data
+// loads if there's anything to show. It only ends up mattering on its
+// own when nothing's currently live/upcoming/past to fit to (see
+// resolveDefaultMode) - which, while the site has sparse listings, is
+// common - in which case it's the difference between defaulting to
+// Derbyshire and defaulting to wherever the visitor actually is.
 //
-// Skipped entirely for a shared/photographer link (?shoot=, ?photographer=)
-// since those already define a deliberate view of their own that a guessed
-// location shouldn't fight with. Fails silently (no toast) on decline,
-// timeout, or an unsupported browser - unlike the button, nobody asked for
-// this one, so there's nothing to apologise for if it doesn't work out.
+// Skipped entirely for a shared/photographer link (?shoot=,
+// ?photographer=) since those already define a deliberate view of their
+// own that a guessed location shouldn't fight with.
+const locationPromptBanner = document.getElementById('locationPromptBanner');
+let locationPromptActive = false;
+let locationPromptTimer = null;
+let onLocationPromptResolved = null; // see showDefaultModeBanner's own check below
+
+function dismissLocationPrompt(){
+  if (!locationPromptActive) return;
+  locationPromptActive = false;
+  clearTimeout(locationPromptTimer);
+  locationPromptBanner.classList.add('hidden');
+  setBannerActive(null);
+  if (onLocationPromptResolved){
+    const cb = onLocationPromptResolved;
+    onLocationPromptResolved = null;
+    cb();
+  }
+}
+
 function tryAutoLocate(){
   if (!navigator.geolocation) return;
   const params = new URLSearchParams(location.search);
   if (params.get('shoot') || params.get('photographer')) return;
 
+  locationPromptActive = true;
+  locationPromptBanner.classList.remove('hidden');
+  setBannerActive(locationPromptBanner);
+  locationPromptTimer = setTimeout(dismissLocationPrompt, 10000); // an unanswered offer shouldn't linger forever
+}
+
+document.getElementById('useMyLocationBtn').addEventListener('click', () => {
+  dismissLocationPrompt();
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       sendSiteEvent('auto_location_used'); // just that it happened — never the coordinates themselves
       const { latitude, longitude } = pos.coords;
       programmaticMapMove(() => map.setView([latitude, longitude], 9, { animate: false }));
     },
-    () => { /* declined, timed out, or failed — the existing UK-wide default is a fine fallback */ },
+    (err) => {
+      const message = err.code === err.PERMISSION_DENIED
+        ? "Location access was denied - check your browser's site settings if you'd like to allow it."
+        : "Couldn't get your location - please try again.";
+      showToast(message, true);
+    },
     { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
   );
-}
+});
+document.getElementById('dismissLocationPromptBtn').addEventListener('click', dismissLocationPrompt);
 
 // =========================================================================
 // STATUS + ICONS
@@ -3418,6 +3463,15 @@ const defaultModeBanner = document.getElementById('defaultModeBanner');
 const defaultModeText = document.getElementById('defaultModeText');
 let defaultModeBannerTimer = null;
 function showDefaultModeBanner(message){
+  // Both banners share the same overlay slot - if the location-consent
+  // prompt is still up (hasn't been answered or auto-dismissed yet), wait
+  // for it to resolve rather than stomping over it. It resolves quickly
+  // either way (a click, or its own 10s timeout), so this is a short delay
+  // at most, not an indefinite one.
+  if (locationPromptActive){
+    onLocationPromptResolved = () => showDefaultModeBanner(message);
+    return;
+  }
   defaultModeText.textContent = message;
   defaultModeBanner.classList.remove('hidden');
   setBannerActive(defaultModeBanner);
