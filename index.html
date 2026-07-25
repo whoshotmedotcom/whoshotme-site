@@ -794,7 +794,12 @@
     cursor:pointer;
     margin-left:auto;
   }
-  #listViewToggleBtn:hover{ border-color:var(--hi-vis); }
+  /* (hover: hover) scoped - on touch devices a plain :hover rule can get
+     "stuck" green after a tap since there's no mouse-leave event to clear
+     it (same issue already fixed on .recenter-btn above). */
+  @media (hover: hover){
+    #listViewToggleBtn:hover{ border-color:var(--hi-vis); }
+  }
   /* When the chip is active, its background becomes that same status
      color (e.g. Live's hi-vis dot on a hi-vis background), so the dot
      disappears entirely. box-shadow (not border) rings it without
@@ -2845,26 +2850,40 @@ const POPUP_AUTOPAN_PADDING = {
 // removes the whole mechanism at its root rather than just the trigger.
 const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false, autoPan: false, maxWidth: 240 });
 
+// Matches the 'live'/'soon'/'past' vocabulary getStatus() uses for real
+// spots, so the empty-state popup can reuse the same .status-popup-*
+// border theming (green/rust/grey) instead of always showing the same
+// fixed color regardless of which view produced it.
+function dateStatus(selected){
+  if (!selected) return 'soon';
+  const key = ukDateKey(selected);
+  const todayKey = ukDateKey(now);
+  if (key < todayKey) return 'past';
+  if (key > todayKey) return 'soon';
+  return 'live';
+}
+
 function emptyStateMessage(){
   const who = photographerFilter ? getPhotographerDisplayName(photographerFilter) : null;
   const suffix = who ? ` for ${who}` : '';
   if (currentMode === 'live') {
-    return { title: `No live shoots right now${suffix}`, body: 'Nobody\u2019s out shooting at this exact moment. Try "Upcoming" or "Past" instead.' };
+    return { title: `No live shoots right now${suffix}`, body: 'Nobody\u2019s out shooting at this exact moment. Try "Upcoming" or "Past" instead.', status: 'live' };
   }
   if (currentMode === 'upcoming') {
-    return { title: `No upcoming shoots listed${suffix}`, body: 'Nothing scheduled yet - check back soon, or switch to "Past" to see what\u2019s already happened.' };
+    return { title: `No upcoming shoots listed${suffix}`, body: 'Nothing scheduled yet - check back soon, or switch to "Past" to see what\u2019s already happened.', status: 'soon' };
   }
   if (currentMode === 'past') {
-    return { title: `No past shoots yet${suffix}`, body: 'Nothing\u2019s wrapped up yet - switch to "Upcoming" to see what\u2019s coming up.' };
+    return { title: `No past shoots yet${suffix}`, body: 'Nothing\u2019s wrapped up yet - switch to "Upcoming" to see what\u2019s coming up.', status: 'past' };
   }
   if (currentMode === 'month') {
-    return { title: `No shoots that month${suffix}`, body: 'Try a different month from the dropdown, or hit "Today" to jump back to now.' };
+    return { title: `No shoots that month${suffix}`, body: 'Try a different month from the dropdown, or hit "Today" to jump back to now.', status: dateStatus(lockedDates[selectedIndex]) };
   }
   const selected = shootDates[selectedIndex];
   const isToday = selected && ukDateKey(selected) === ukDateKey(now);
   return {
     title: (isToday ? 'No planned shoots today' : 'No shoots that day') + suffix,
-    body: 'Try scrubbing to a different date below, or switch to "Upcoming" to see what\u2019s coming up.'
+    body: 'Try scrubbing to a different date below, or switch to "Upcoming" to see what\u2019s coming up.',
+    status: dateStatus(selected)
   };
 }
 
@@ -3158,6 +3177,15 @@ function render(){
       .setLatLng(map.getCenter())
       .setContent(`<p class="noShootsTitle">${msg.title}</p><p class="noShootsBody">${msg.body}</p>`)
       .openOn(map);
+    // The popup's DOM is created once and reused (autoClose:false), so its
+    // status class has to be swapped by hand on every render rather than
+    // relying on Leaflet re-applying options.className, which only happens
+    // at initial creation.
+    const popupEl = emptyStatePopup.getElement();
+    if (popupEl){
+      popupEl.classList.remove('status-popup-live', 'status-popup-soon', 'status-popup-past');
+      popupEl.classList.add(`status-popup-${msg.status}`);
+    }
   } else {
     map.closePopup(emptyStatePopup);
   }

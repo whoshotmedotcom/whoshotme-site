@@ -22,8 +22,13 @@ close when it shouldn't, closes via every path a user would expect.
 [DONE] "No shoots" empty-state popup - was causing the map to drift
        indefinitely on repeated "Reset view" taps (fixed: autoPan was the
        root cause, popup is always self-centred so never needed it)
-[ ]    Filter chips - re-click-to-toggle-off behaviour (confirmed
-       intentional in code, not yet explicitly tested end-to-end)
+[DONE] Filter chips - re-click-to-toggle-off behaviour (25/07/2026).
+       Verified end-to-end with real clicks against synthetic live/
+       upcoming/past data: first click activates and filters correctly,
+       second click on the same chip deactivates and snaps the slider
+       back to today, a third click re-activates cleanly, and switching
+       directly to a different chip correctly deactivates the previous
+       one. No bugs found - working as intended.
 [ ]    Date bar: month select + "back to today" exit-lock round trip
        (lightly tested once, not thoroughly)
 [ ]    Date slider drag (not just prev/next steppers) - does dragging
@@ -75,12 +80,12 @@ close when it shouldn't, closes via every path a user would expect.
        the already-sanitized Signups row without re-applying
        sanitizeForCell() to the NEW row - Sheets' plain-text marker
        doesn't carry over on a fresh cell write, so this was a real,
-       exploitable second-order gap. Fixed in app-script.gs.
-       ** NEEDS MANUAL REDEPLOY ** - app-script.gs changes don't go live
-       via git push; copy the updated confirmSignup() into the Apps
-       Script editor and redeploy. Couldn't be tested end-to-end (no live
-       Sheets test environment available), so worth a real signup-flow
-       smoke test after redeploying.
+       exploitable second-order gap. Fixed in app-script.gs, redeployed,
+       and verified end-to-end via a real signup: submitted "=1+1 Test"
+       as a photographer name through become-photographer.html, confirmed
+       via the real email link, and the resulting Photographers row shows
+       the literal text '=1+1 Test rather than evaluating to 2. Confirmed
+       working - test row should be deleted from the Photographers sheet.
 [DONE] Client-side form validation (25/07/2026) - verified empirically,
        not just read from code: invalid email format and empty required
        fields both correctly block submission (0 network requests fired,
