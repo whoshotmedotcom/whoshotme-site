@@ -44,8 +44,15 @@ close when it shouldn't, closes via every path a user would expect.
        time, currentMode stays unlocked ('date'), and dragging to a given
        index shows the exact same result as stepping to it via the
        prev/next buttons. No bugs found.
-[ ]    add-shoot.html: "Use current location" button (drops a pin via
-       geolocation - untested this session)
+[DONE] add-shoot.html: "Use current location" button (25/07/2026) -
+       verified with mocked browser geolocation (real permissions API,
+       real getCurrentPosition call, mocked coordinates). Correctly
+       stays disabled/no-ops until start+end time are set, drops a real
+       draggable marker at the returned coordinates, updates the coord
+       readout and shows a success toast, works repeatably (not a
+       one-shot handler), and handles a permission denial gracefully -
+       re-enables the button, restores its label, shows a clear error
+       toast rather than failing silently. No bugs found.
 [ ]    add-shoot.html: gallery add/edit/delete UI (buttons exist, double-
        submit protection confirmed via code pattern, but the actual
        add/edit/delete UI flow itself not click-tested)
