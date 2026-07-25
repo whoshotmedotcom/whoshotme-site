@@ -1743,12 +1743,10 @@ Object.entries(PANE_ZINDEX).forEach(([status, z]) => {
 // riders zoomed in to street/village scale still see a background map
 // instead of a blank one.
 //
-// minZoom:5 + minNativeZoom:7 — all five basemaps now share the same
-// zoom-out floor (14 clicks from the shared maxZoom:19 ceiling), rather
-// than OS stopping 7 levels earlier than OSM/Aerial. Getting there safely
+// minZoom:5 + minNativeZoom:7 (OS Roads (UK) only) — getting this safe
 // took two parts:
-//   - minZoom:5 is a HARD floor — the map can never go lower than this on
-//     any layer. Critically, z5 is well above the low zoom levels where
+//   - minZoom:5 is a HARD floor — OS Roads (UK) can never go lower than
+//     this. Critically, z5 is well above the low zoom levels where
 //     Leaflet starts horizontally duplicating the world to fill the
 //     viewport ("world wrap"). That combination — open-ended underzoom
 //     stretching reaching all the way down into world-wrap territory —
@@ -1757,12 +1755,16 @@ Object.entries(PANE_ZINDEX).forEach(([status, z]) => {
 //     tiles below z7): Leaflet stretches the z7 tile to cover z5–z6.
 //     Because minZoom:5 stops it from ever being asked to stretch further
 //     than that, this is a bounded, modest use of the same trick rather
-//     than the previous unbounded one — should be safe, but worth a real
-//     zoom-out test after deploying given the history here.
+//     than the previous unbounded one.
 //
-// OSM and Aerial get minZoom:5 too, purely as a UI restriction — they
-// have real tiles all the way to z0, so no stretching involved there,
-// just capping how far out the zoom control lets you go.
+// OSM and Aerial deliberately do NOT share that floor (as of 25/07/2026) -
+// they have real tiles all the way to z0 (no stretching, so none of the
+// risk above applies), so they're free to zoom out as far as they're
+// genuinely able to. Only OS Roads (UK) needs a floor at all, and only
+// because of its own underzoom stretching - so applyBoundsForLayer()
+// below explicitly zooms back up to that floor (and recentres into the
+// UK) the moment someone switches to it, in case they'd zoomed out
+// further than z5 on one of the other two first.
 /* OS Light — temporarily disabled, may bring back later.
 const osLightLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Light_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
   maxZoom: 19,
@@ -1789,7 +1791,7 @@ const osOutdoorLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Outdoor
 });
 */
 const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, minZoom: 5, attribution: '&copy; OpenStreetMap contributors'
+  maxZoom: 19, minZoom: 0, attribution: '&copy; OpenStreetMap contributors'
 });
 // maxZoom:19 (was 23) — Esri's tile cache technically has slots up to
 // z23, but that's just the cache's structural ceiling, not a guarantee
@@ -1797,12 +1799,12 @@ const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}
 // actual captured imagery runs out around z19 — beyond that Esri serves
 // a placeholder "imagery not available at this scale" tile rather than
 // real detail. Capping here matches what's actually usable, and (per
-// the note above osLightLayer) now matches OSM/OS's ceiling exactly
-// rather than diverging by several levels. minZoom:5 matches OSM/OS's
-// floor too, for the same reason.
+// the note above osLightLayer) now matches OS's ceiling exactly rather
+// than diverging by several levels. minZoom:0 matches OSM's floor too -
+// both have real tiles all the way out to a full world view.
 const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Tiles &copy; Esri - Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
 });
 // Hybrid reference overlay — Esri's "World Boundaries and Places" layer, drawn
@@ -1812,7 +1814,7 @@ const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/ser
 // caveat: works today with zero signup, not guaranteed indefinitely.
 const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Esri, DeLorme'
 });
 // Second reference overlay — Boundaries and Places has no road names, so
@@ -1820,7 +1822,7 @@ const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/re
 // railways) on top of it. Same keyless endpoint family, same caveat.
 const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Esri'
 });
 // Grouped, roads on top, so the layer switcher's "Aerial" entry toggles all
@@ -1836,13 +1838,26 @@ const layersControl = L.control.layers({
 }, null, { position: 'bottomright' }).addTo(map);
 
 // Switching TO OS Road clamps panning to the UK (its only real coverage)
-// and, if the visitor had already panned outside that box on a worldwide
-// layer, snaps the view back in immediately rather than leaving them
-// staring at blank grey tiles until they scroll back themselves.
-// Switching to either worldwide layer lifts the clamp entirely.
+// and, if the visitor had already panned/zoomed outside what it can show
+// while on a worldwide layer, snaps straight back to a valid view rather
+// than leaving them staring at blank grey tiles until they correct it
+// themselves. Two separate corrections, since OSM/Aerial can now go
+// further out on both axes than OS Road ever could:
+//   - zoom: OSM/Aerial can zoom out to a full world view (minZoom:0);
+//     OS Road has a hard floor at its own minZoom (see the big comment
+//     above osRoadLayer's definition) - so zoom back up to that floor
+//     first if the current zoom is below it.
+//   - pan: OS Road only has real coverage over the UK - panInsideBounds
+//     nudges the view back in with the minimum necessary movement if
+//     it's currently outside that box, a no-op if it's already inside.
+// Switching to either worldwide layer lifts the clamp entirely (and
+// never touches zoom - they're free to go as far out as they're able).
 function applyBoundsForLayer(layer){
   if (layer === osRoadLayer){
     map.setMaxBounds(MAP_PAN_BOUNDS);
+    if (map.getZoom() < osRoadLayer.options.minZoom){
+      map.setZoom(osRoadLayer.options.minZoom);
+    }
     map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
   } else {
     map.setMaxBounds(null);

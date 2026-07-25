@@ -101,12 +101,20 @@ framework, no bundler. Edit the files directly and refresh the browser.
 
 ## Known fragile areas — read before touching these
 
-- **Map layer zoom ranges must stay matched across all basemaps.** All layers
-  (OSM, OS, Esri) are deliberately set to identical `minZoom`/`maxZoom` (5 and
-  19). A past attempt at letting OS Maps API "underzoom" past its real data
-  floor (z7) using `minNativeZoom` with no hard `minZoom` floor caused the map
-  to lock up completely when zoomed out near world-wrap territory. If you
-  change zoom ranges, keep them matched or you risk reintroducing this.
+- **OS Roads (UK)'s `minZoom:5` is a hard floor and must never be removed
+  or lowered without also removing `minNativeZoom:7` from that layer.** A
+  past attempt at letting OS Maps API "underzoom" past its real data floor
+  (z7) using `minNativeZoom` with no hard `minZoom` floor caused the map to
+  lock up completely when zoomed out near world-wrap territory. `minZoom:5`
+  is what stops that stretching from ever reaching that far.
+  OpenStreetMap and Aerial deliberately do **not** share that floor (as of
+  25/07/2026 - they used to, purely as a UI restriction, back when OS Road
+  was the default) — they have real tiles all the way to z0, no stretching
+  involved, so they're free to zoom out as far as they're genuinely able
+  to. Switching to OS Roads (UK) explicitly zooms back up to its floor (and
+  recentres into the UK) via `applyBoundsForLayer()`, in case you'd zoomed
+  out further than that on one of the other two first — see the big
+  comment above `osRoadLayer`'s definition in both files.
 - **Esri's aerial layer uses a keyless legacy endpoint** Esri has asked
   developers to migrate off (since ~2022). It still works but could stop
   without warning. If it ever breaks, that's expected, not a regression to

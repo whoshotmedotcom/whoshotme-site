@@ -127,17 +127,36 @@ def test_index(p, device_name, engine):
     # switch, lifted again on switching away
     unset_by_default = page.evaluate("() => !map.options.maxBounds")
     check("no pan bounds while on OpenStreetMap", unset_by_default)
-    page.evaluate("() => map.setView([-25.2744, 133.7751], 4, {animate:false})")
+
+    # OSM/Aerial can zoom out to a true world view (minZoom:0) - OS Roads
+    # (UK) can't (its own minZoom is a hard floor, see the big comment
+    # above osRoadLayer's definition). Zoom out past that floor AND pan
+    # off the UK at the same time, then switch to OS Roads (UK) and check
+    # both corrections happen together.
+    page.evaluate("() => map.setView([0, 0], 0, {animate:false})")
+    page.wait_for_timeout(300)
+    world_zoom = page.evaluate("() => map.getZoom()")
+    check("OpenStreetMap can zoom out to a true world view", world_zoom == 0, str(world_zoom))
+
+    page.evaluate("() => map.setView([-25.2744, 133.7751], 3, {animate:false})")
     page.evaluate("() => { map.removeLayer(streetsLayer); osRoadLayer.addTo(map); }")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(700)
     bounds_after = page.evaluate("() => map.options.maxBounds ? map.options.maxBounds.toBBoxString() : null")
     check("switching to OS Roads (UK) applies UK pan bounds", bounds_after == "-17.48,46.575,14.04,64.125", str(bounds_after))
+    zoom_after = page.evaluate("() => map.getZoom()")
+    os_road_floor = page.evaluate("() => osRoadLayer.options.minZoom")
+    check("switching to OS Roads (UK) zooms back up to its floor", zoom_after == os_road_floor, f"zoom={zoom_after}, floor={os_road_floor}")
     center_after = page.evaluate("() => map.getCenter()")
     check("switching to OS Roads (UK) snaps view back into the UK", -11 < center_after["lng"] < 15 and 46 < center_after["lat"] < 65, str(center_after))
+
     page.evaluate("() => { map.removeLayer(osRoadLayer); streetsLayer.addTo(map); }")
     page.wait_for_timeout(300)
     bounds_lifted = page.evaluate("() => !map.options.maxBounds")
     check("switching back to OpenStreetMap lifts the pan bounds", bounds_lifted)
+    page.evaluate("() => map.setView([0, 0], 1, {animate:false})")
+    page.wait_for_timeout(300)
+    zoom_free_again = page.evaluate("() => map.getZoom()")
+    check("switching back to OpenStreetMap frees the zoom floor again", zoom_free_again == 1, str(zoom_free_again))
 
     # Search (real tap + fill)
     page.tap("#searchInput")

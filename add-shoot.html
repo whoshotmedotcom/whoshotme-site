@@ -1449,13 +1449,15 @@ L.control.attribution({ prefix: false }).addTo(map);
 // riders zoomed in to street/village scale still see a background map
 // instead of a blank one.
 //
-// minZoom:5 + minNativeZoom:7 — see index.html for the full reasoning:
-// all five basemaps now share the same zoom-out floor (14 clicks from
-// the shared maxZoom:19 ceiling). minZoom:5 is a hard floor that keeps
-// the map above the low-zoom "world wrap" territory that caused the
-// original lock-up; minNativeZoom:7 fills the small remaining gap by
-// stretching the z7 tile over z5–z6, now safely bounded rather than
-// open-ended.
+// minZoom:5 + minNativeZoom:7 — see index.html for the full reasoning.
+// minZoom:5 is a hard floor, only needed on OS Road, that keeps it above
+// the low-zoom "world wrap" territory that caused the original lock-up;
+// minNativeZoom:7 fills the small remaining gap by stretching the z7
+// tile over z5–z6, safely bounded by that floor rather than open-ended.
+// OSM/Aerial deliberately do NOT share this floor (25/07/2026) - they
+// have real tiles to z0, so none of the stretching risk above applies,
+// and applyBoundsForLayer() below zooms back up to it (and recentres
+// into the UK) the moment someone switches to OS Road anyway.
 /* OS Light — temporarily disabled, may bring back later.
 const osLightLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Light_3857/{z}/{x}/{y}.png?key=${OS_MAPS_API_KEY}`, {
   maxZoom: 19,
@@ -1483,18 +1485,17 @@ const osOutdoorLayer = L.tileLayer(`https://api.os.uk/maps/raster/v1/zxy/Outdoor
 */
 const streetsLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   subdomains: 'abc',
   attribution: '&copy; OpenStreetMap contributors'
 });
 // maxZoom:19 (was 23) — see index.html for the full reasoning: Esri's
 // cache structurally allows z23, but the real imagery for this area
-// runs out around z19 and shows a placeholder beyond that. minZoom:5
-// matches OSM/OS's floor for the same reason maxZoom matches their
-// ceiling.
+// runs out around z19 and shows a placeholder beyond that. minZoom:0
+// matches OSM's floor - both have real tiles out to a full world view.
 const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Tiles &copy; Esri - Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
 });
 // Hybrid reference overlays — same as index.html's Aerial basemap: place
@@ -1502,12 +1503,12 @@ const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/ser
 // keyless server.arcgisonline.com endpoint family as aerialLayer above.
 const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Esri, DeLorme'
 });
 const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 5,
+  minZoom: 0,
   attribution: 'Esri'
 });
 const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
@@ -1520,12 +1521,16 @@ const layersControl = L.control.layers({
   'Aerial': aerialWithLabels
 }, null, { position: 'topright' }).addTo(map);
 
-// Switching TO OS Road clamps panning to the UK (its only real coverage)
-// and snaps the view back in if the photographer had panned off it on a
-// worldwide layer already. See index.html for the full reasoning.
+// Switching TO OS Road clamps panning to the UK (its only real coverage),
+// zooms back up to its floor if the photographer had zoomed out further
+// on a worldwide layer, and snaps the view back in if they'd panned off
+// it too. See index.html for the full reasoning.
 function applyBoundsForLayer(layer){
   if (layer === osRoadLayer){
     map.setMaxBounds(MAP_PAN_BOUNDS);
+    if (map.getZoom() < osRoadLayer.options.minZoom){
+      map.setZoom(osRoadLayer.options.minZoom);
+    }
     map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
   } else {
     map.setMaxBounds(null);
