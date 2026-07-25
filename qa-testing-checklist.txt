@@ -37,8 +37,13 @@ close when it shouldn't, closes via every path a user would expect.
        re-picking the blank dropdown option) - all three correctly clear
        monthLockKey, reset the dropdown, restore the today marker, and
        land back on today's index. No bugs found.
-[ ]    Date slider drag (not just prev/next steppers) - does dragging
-       directly to a date work the same as stepping to it?
+[DONE] Date slider drag (25/07/2026) - verified with real mouse drag
+       events (press/move/release on the thumb, not a programmatic value
+       set) across a 7-day synthetic axis. Dragging forward and backward
+       both correctly update selectedIndex and the visible spot each
+       time, currentMode stays unlocked ('date'), and dragging to a given
+       index shows the exact same result as stepping to it via the
+       prev/next buttons. No bugs found.
 [ ]    add-shoot.html: "Use current location" button (drops a pin via
        geolocation - untested this session)
 [ ]    add-shoot.html: gallery add/edit/delete UI (buttons exist, double-
