@@ -219,6 +219,17 @@ def test_index(p, device_name, engine):
     focus_on_close = page.evaluate("() => document.activeElement.id")
     check("closing the list view returns focus to its toggle button", focus_on_close == "listViewToggleBtn", focus_on_close)
 
+    # The toggle button itself must also close it on a second tap - it was
+    # originally wired to always call openListView() regardless of current
+    # state, so tapping it again while already open silently re-opened it
+    # instead of closing, with no visible sign anything had happened.
+    page.tap("#listViewToggleBtn")
+    page.wait_for_timeout(300)
+    page.tap("#listViewToggleBtn")
+    page.wait_for_timeout(300)
+    panel_closed_by_toggle = page.evaluate("() => document.getElementById('listViewPanel').classList.contains('hidden')")
+    check("tapping the toggle button again closes the list view", panel_closed_by_toggle)
+
     # Text selection: blocked on chrome, allowed in real inputs. Checked via
     # actual computed style (both prefixed/unprefixed - WebKit's JS doesn't
     # expose the unprefixed accessor reliably, even though the CSS rule

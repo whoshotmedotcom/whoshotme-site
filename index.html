@@ -3238,7 +3238,13 @@ function closeListView(){
   listViewToggleBtn.focus();
 }
 
-listViewToggleBtn.addEventListener('click', openListView);
+// A real toggle - was wired to always call openListView() regardless of
+// current state, so clicking it again while already open just silently
+// re-opened it (re-rendered, re-focused the close button) instead of
+// closing, with no visible sign anything had happened.
+listViewToggleBtn.addEventListener('click', () => {
+  if (listViewOpen) closeListView(); else openListView();
+});
 listViewCloseBtn.addEventListener('click', closeListView);
 // Esc is the conventional way to dismiss a dialog - without this, a
 // keyboard user's only way out is tabbing all the way to the close
