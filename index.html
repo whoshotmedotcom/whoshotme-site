@@ -2925,6 +2925,20 @@ function popupHtml(spot){
 // will always fit.
 function getPopupAutoPanOptions(){
   const mapH = map.getSize().y;
+  // CONFIRMED BUG (25/07/2026): the top padding below used to be a fixed
+  // 70, sized for #searchWrap sitting at its normal top:12px position -
+  // but #searchWrap actually shifts further down (see #mapWrap.bannerActive
+  // and its --bannerHeight variable) whenever the location-consent
+  // banner or the photographer-filter banner is showing, and a fixed 70
+  // didn't account for that. A popup could open right underneath the
+  // search box specifically while one of those banners was up. Measuring
+  // #searchWrap's actual current bottom edge (relative to the map's own
+  // top) instead of guessing a fixed number automatically adapts to
+  // whichever banner state is active, the same fix already applied to
+  // the bottom-left control stack below.
+  const mapTop = map.getContainer().getBoundingClientRect().top;
+  const searchBottom = searchWrapEl.getBoundingClientRect().bottom;
+  const topPadding = Math.max(20, Math.round(searchBottom - mapTop) + 12);
   // Reserve top+bottom padding, plus ~40px for the popup wrapper's own
   // chrome (tip, close button spacing) that sits outside its content
   // box, then clamp to a sensible range. The floor here used to be 140,
@@ -2938,9 +2952,9 @@ function getPopupAutoPanOptions(){
   // fit. 60 is a much lower genuine floor, just enough to avoid a
   // degenerate zero/negative height on an extreme edge case, not an
   // attempt to guarantee a "comfortable" size at the cost of overlap.
-  const maxHeight = Math.max(60, Math.min(320, mapH - 70 - 175 - 40));
+  const maxHeight = Math.max(60, Math.min(320, mapH - topPadding - 175 - 40));
   return {
-    autoPanPaddingTopLeft: L.point(20, 70),
+    autoPanPaddingTopLeft: L.point(20, topPadding),
     autoPanPaddingBottomRight: L.point(80, 175),
     maxHeight
   };
@@ -3557,6 +3571,11 @@ async function geocodeQuery(query){
 }
 
 function flyToLocation(lat, lng, label){
+  // Close the dropdown and invalidate any in-flight debounced geocode
+  // lookup FIRST - see the matching comments in flyToSpot for why both
+  // of these need to happen before the pan/popup, not after.
+  searchResultsEl.classList.remove('show');
+  geocodeRequestId++;
   // A search-driven jump, not a manual drag/zoom — routed through
   // programmaticMapMove so it doesn't light up "Reset view" or suppress
   // auto-recentre, the same as a popup click.
@@ -3565,7 +3584,6 @@ function flyToLocation(lat, lng, label){
     .setLatLng([lat, lng])
     .setContent(`<p class="popup-meta" style="margin:0;">${escapeHtml(label)}</p>`)
     .openOn(map);
-  searchResultsEl.classList.remove('show');
 }
 
 let geocodeDebounceTimer = null;
@@ -3682,6 +3700,30 @@ function flyToSpot(spot){
   selectedIndex = todaySnapIndex;
   sliderEl.value = selectedIndex;
   render();
+  // CONFIRMED BUG (25/07/2026): this used to run at the very end of the
+  // function, after map.once('moveend', ...) was already registered
+  // below. That's fine when the pan genuinely animates, but setView()
+  // can resolve (and fire 'moveend') SYNCHRONOUSLY, before execution
+  // ever reaches that line, if the target is already at/near the
+  // current view - so the popup's own autoPan padding calculation
+  // (which reads #searchWrap's current height, see
+  // getPopupAutoPanOptions()) could run while the search results
+  // dropdown was still visually expanded, reserving far more top space
+  // than actually needed and pushing the popup down into the bottom
+  // controls. Closing the dropdown FIRST, before the pan/popup even
+  // start, means #searchWrap is already back to its normal height no
+  // matter how setView()/moveend end up sequencing.
+  searchResultsEl.classList.remove('show');
+  // A SECOND, separate bug this uncovered: runSearch()'s debounced
+  // geocodeQuery() lookup (500ms) can resolve and call
+  // renderSearchResults() - which re-adds .show - AFTER a result's
+  // already been selected here, if the two happen to land within that
+  // same 500ms window. Bumping geocodeRequestId reuses the exact
+  // staleness guard already built for "a newer search superseded this
+  // one" (see runSearch) to make that stale callback a no-op too,
+  // rather than letting it silently re-open the dropdown after
+  // navigation has already moved on.
+  geocodeRequestId++;
 
   // A search/share-link-driven jump, not a manual drag/zoom — routed
   // through programmaticMapMove so it doesn't light up "Reset view" or
@@ -3705,7 +3747,6 @@ function flyToSpot(spot){
     popup._spotRef = spot; // standalone popup, no marker — see popupopen handler below
     popup.openOn(map);
   });
-  searchResultsEl.classList.remove('show');
 }
 
 searchInput.addEventListener('input', (e) => runSearch(e.target.value));

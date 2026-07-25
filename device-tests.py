@@ -518,6 +518,72 @@ def test_popup_clears_bottom_controls(p, device_name, engine):
     browser.close()
 
 
+def test_popup_clears_search_bar_during_banner(p, device_name, engine):
+    # Regression test for a confirmed bug: with the location-consent
+    # banner showing (which pushes #searchWrap further down via
+    # --bannerHeight), a popup could still open using a fixed top-left
+    # autoPan padding sized for #searchWrap's NORMAL position, landing
+    # underneath the search box. Fixed by measuring #searchWrap's actual
+    # current bottom edge in getPopupAutoPanOptions() instead of a fixed
+    # guess. A second, separate bug surfaced while fixing this: opening a
+    # popup once, closing it, then quickly selecting a search result
+    # could re-open the search dropdown out from under the just-opened
+    # popup - runSearch()'s debounced place-geocode lookup (500ms) could
+    # resolve and re-render (re-showing) the dropdown after a result had
+    # already been selected, if the two landed in the same window. Fixed
+    # by invalidating the debounce's request ID on selection, reusing the
+    # exact staleness guard already built for "a newer search superseded
+    # this one".
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_real_spot_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- popup clears search bar during banner on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    # Deliberately leave the location-consent banner showing this time.
+    banner_showing = page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')")
+    check("location banner is showing for this test", banner_showing)
+
+    def rects_overlap(a, b):
+        return not (
+            a["x"] + a["width"] < b["x"] or a["x"] > b["x"] + b["width"]
+            or a["y"] + a["height"] < b["y"] or a["y"] > b["y"] + b["height"]
+        )
+
+    search_box = page.eval_on_selector("#searchWrap", "el => el.getBoundingClientRect()")
+    page.evaluate(
+        "() => { const spot = spots[0]; "
+        "['live','soon','past'].forEach(s => clusterGroups[s].eachLayer(m => { "
+        "if (m._spotRef === spot) m.openPopup(); })); }"
+    )
+    page.wait_for_timeout(400)
+    popup_box = page.eval_on_selector(".leaflet-popup-content-wrapper", "el => el.getBoundingClientRect()")
+    check(
+        "popup doesn't overlap the search bar while the location banner is showing",
+        not rects_overlap(popup_box, search_box),
+        f"popup={popup_box} search={search_box}",
+    )
+    page.evaluate("() => map.closePopup()")
+    page.wait_for_timeout(200)
+
+    # The debounced-geocode-race scenario: open+close a popup, then
+    # quickly search and select a result within the 500ms debounce window.
+    page.fill("#searchInput", "Real")
+    page.wait_for_timeout(500)
+    page.tap("#searchResults .resultItem")
+    page.wait_for_timeout(700)
+    check(
+        "search dropdown doesn't silently reappear after selecting a result",
+        page.eval_on_selector("#searchResults", "el => !el.classList.contains('show')"),
+    )
+    ctx.close()
+    browser.close()
+
+
 def test_aerial_attribution_no_overlap(p, device_name, engine):
     # Regression test for a confirmed bug: Aerial's basemap is really 3
     # stacked layers (imagery + 2 label/road overlays), each of which had
@@ -575,6 +641,7 @@ def main():
                 test_empty_state_no_drift(p, device_name, engine)
                 test_emoji_name_no_crash(p, device_name, engine)
                 test_popup_clears_bottom_controls(p, device_name, engine)
+                test_popup_clears_search_bar_during_banner(p, device_name, engine)
                 test_aerial_attribution_no_overlap(p, device_name, engine)
     finally:
         if httpd:
