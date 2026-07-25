@@ -256,6 +256,26 @@ framework, no bundler. Edit the files directly and refresh the browser.
    `creator-photo.jpg` eager-load bug (see item 7) that had only been
    fixed in `index.html` — `add-shoot.html`'s own About section had the
    same issue, now fixed the same way.
+
+   **`device-tests.py`** (added 25/07/2026) complements `tests.html` -
+   where that page checks pure logic in one desktop browser, this checks
+   real *interaction* (taps, not clicks) on real emulated device profiles
+   (viewport, touch input, device pixel ratio, mobile user-agent), across
+   both Chromium and WebKit engines (iPhone 14 + Pixel 7 profiles) - the
+   kind of cross-engine gap a desktop-only click-based check can't catch.
+   Covers the location consent banner, the OS Roads (UK) pan-bounds
+   clamp/release, the basemap default/rename, search, filter chips, and
+   the site-wide text-selection block. A dev-only tool (not served to
+   visitors, so it's fine for it to depend on Playwright even though the
+   site itself has zero dependencies) - one-time setup is
+   `pip install playwright && playwright install chromium webkit`, then
+   `python device-tests.py`. Starts its own local static server if one
+   isn't already running on port 8802. Stubs out all map-tile requests
+   (OS Data Hub, OpenStreetMap, Esri) rather than hitting the real
+   servers - discovered *why* this matters the hard way, by triggering a
+   wall of real 400 responses from OpenStreetMap's tile servers on the
+   first run, a small live demonstration of exactly the usage-policy risk
+   noted above.
 5. **Validate submitted coordinates are within the UK before saving** —
    **done**. `saveShootBtn`'s click handler in `add-shoot.html` now rejects
    a pin outside `UK_BOUNDS` before submitting, and `validateShoot()` in
