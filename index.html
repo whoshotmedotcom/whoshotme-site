@@ -49,6 +49,40 @@
 <meta name="twitter:image" content="https://whoshotme.com/og-image.png">
 <meta name="twitter:image:alt" content="Who Shot Me? logo - wordmark on a dark background, with a camera aperture forming the O and a road forming the T">
 
+<!-- Structured data (JSON-LD) - doesn't change anything a visitor sees,
+     just tells Google explicitly "this is an Organization named X, at
+     this URL, with this logo" instead of leaving it to infer that from
+     visible page text. Mainly affects whether Google shows the real logo
+     next to search results/knowledge panels rather than a generic globe
+     icon, and helps exact brand-name searches resolve correctly.
+     Deliberately NOT declaring a SearchAction (the "sitelinks search
+     box" feature) - that requires a real, crawlable ?q=-style URL for
+     search results, and this site's search is client-side JS over data
+     fetched from Google Sheets with no such URL, so declaring one would
+     be inaccurate and simply wouldn't work if Google tried to use it.
+     logo uses favicon.png (square, icon-shaped) rather than og-image.png
+     (a wide banner) - a closer match to what Google's knowledge-panel
+     logo display actually expects. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Who Shot Me?",
+  "url": "https://whoshotme.com/",
+  "logo": "https://whoshotme.com/favicon.png",
+  "image": "https://whoshotme.com/og-image.png",
+  "description": "Find the photographer who shot you on your ride - live now, upcoming, or already wrapped up across the UK."
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Who Shot Me?",
+  "url": "https://whoshotme.com/"
+}
+</script>
+
 <!-- ====================================================================
   VISITOR COUNT — no third-party analytics at all. Every page load pings
   the same Apps Script backend used for photographer stats and adds one
