@@ -1849,16 +1849,29 @@ const layersControl = L.control.layers({
 // addTo() above, capturing the original function reference at that
 // point, not a live "call whatever this._checkDisabledLayers currently
 // is" lookup, so reassigning the property afterwards has no effect on
-// the already-registered listener. Instead, register our own 'zoomend'
-// listener below (which, added after addTo() above, fires after
-// Leaflet's internal one on the same event) and directly force every
-// radio input back to enabled - simple, and correct regardless of
-// Leaflet's exact internal wiring. There are no overlay layers in this
-// control for the original disabling behaviour to be protecting anyway.
-function keepLayerInputsEnabled(){
-  layersControl._container.querySelectorAll('input[type="radio"]').forEach(el => { el.disabled = false; });
-}
-map.on('zoomend baselayerchange', keepLayerInputsEnabled);
+// the already-registered listener.
+//
+// A 'zoomend'/'baselayerchange' listener of our own (added after addTo()
+// above, so it fires after Leaflet's internal one on the same event) is
+// ALSO not reliable enough - real scroll-wheel zooming fires a rapid
+// burst of 'zoomend' events as it settles through several levels, and at
+// a true zoom of 0 specifically, Leaflet's own disabling still won that
+// race often enough to matter (confirmed by testing zoom via an actual
+// mouse-over-map scroll rather than only ever driving zoom
+// programmatically, which had been masking this).
+//
+// A MutationObserver watching the `disabled` attribute directly doesn't
+// care which event fired it or in what order - it corrects it the
+// instant Leaflet sets it, full stop. There are no overlay layers in
+// this control for the original disabling behaviour to be protecting
+// anyway, so simply never letting it stick is the right call here.
+const layerRadioInputs = layersControl._container.querySelectorAll('input[type="radio"]');
+const keepLayerInputsEnabledObserver = new MutationObserver((mutations) => {
+  mutations.forEach(m => { if (m.target.disabled) m.target.disabled = false; });
+});
+layerRadioInputs.forEach(input => {
+  keepLayerInputsEnabledObserver.observe(input, { attributes: true, attributeFilter: ['disabled'] });
+});
 
 // Switching TO OS Road clamps panning to the UK (its only real coverage)
 // and, if the visitor had already panned/zoomed outside what it can show

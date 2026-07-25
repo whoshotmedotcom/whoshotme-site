@@ -1522,15 +1522,22 @@ const layersControl = L.control.layers({
 }, null, { position: 'topright' }).addTo(map);
 // Leaflet auto-disables base layers whose zoom range doesn't cover the
 // current zoom - wrong here now that OS Roads (UK) has a tighter minZoom
-// than OSM/Aerial. Overriding _checkDisabledLayers itself doesn't work
-// (Leaflet binds it to 'zoomend' inside addTo() above, capturing the
-// original reference, not a live lookup) - see index.html for the full
-// reasoning. Force the inputs back to enabled after Leaflet's own
-// handler runs instead.
-function keepLayerInputsEnabled(){
-  layersControl._container.querySelectorAll('input[type="radio"]').forEach(el => { el.disabled = false; });
-}
-map.on('zoomend baselayerchange', keepLayerInputsEnabled);
+// than OSM/Aerial. Overriding _checkDisabledLayers doesn't work (Leaflet
+// binds it to 'zoomend' inside addTo() above, capturing the original
+// reference, not a live lookup), and neither did a 'zoomend'/
+// 'baselayerchange' listener of our own reliably enough - a real
+// scroll-wheel zoom fires a rapid burst of 'zoomend' events, and
+// Leaflet's own disabling still won that race often enough to matter at
+// a true zoom of 0. A MutationObserver on the `disabled` attribute
+// itself doesn't care which event fired it or when - see index.html for
+// the full reasoning.
+const layerRadioInputs = layersControl._container.querySelectorAll('input[type="radio"]');
+const keepLayerInputsEnabledObserver = new MutationObserver((mutations) => {
+  mutations.forEach(m => { if (m.target.disabled) m.target.disabled = false; });
+});
+layerRadioInputs.forEach(input => {
+  keepLayerInputsEnabledObserver.observe(input, { attributes: true, attributeFilter: ['disabled'] });
+});
 
 // Switching TO OS Road clamps panning to the UK (its only real coverage),
 // zooms back up to its floor if the photographer had zoomed out further

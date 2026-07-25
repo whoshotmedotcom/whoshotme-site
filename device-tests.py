@@ -130,11 +130,19 @@ def test_index(p, device_name, engine):
 
     # OSM/Aerial can zoom out to a true world view (minZoom:0) - OS Roads
     # (UK) can't (its own minZoom is a hard floor, see the big comment
-    # above osRoadLayer's definition). Zoom out past that floor AND pan
-    # off the UK at the same time, then switch to OS Roads (UK) and check
-    # both corrections happen together.
-    page.evaluate("() => map.setView([0, 0], 0, {animate:false})")
-    page.wait_for_timeout(300)
+    # above osRoadLayer's definition). Real repeated taps on the zoom-out
+    # button on purpose here (not a single programmatic setView) - it
+    # fires a rapid burst of 'zoomend' events as it settles, which is
+    # what actually exposed the disabled-input bug below in production; a
+    # single setView([...], 0) call didn't. (Mouse.wheel isn't supported
+    # under mobile WebKit emulation, so taps rather than scroll - real
+    # zoomend-burst behaviour either way.)
+    zoom_out_btn = page.query_selector(".leaflet-control-zoom-out")
+    for _ in range(20):
+        if page.evaluate("() => map.getZoom()") <= 0:
+            break  # the button correctly disables at the true floor - stop before tapping a disabled button
+        zoom_out_btn.tap()
+        page.wait_for_timeout(150)
     world_zoom = page.evaluate("() => map.getZoom()")
     check("OpenStreetMap can zoom out to a true world view", world_zoom == 0, str(world_zoom))
 
@@ -143,8 +151,9 @@ def test_index(p, device_name, engine):
     # Roads (UK) has a tighter floor than OSM/Aerial, that meant it became
     # unclickable in the switcher at exactly the zoom levels where you'd
     # need to click it to trigger the auto-correction back into range.
-    # keepLayerInputsEnabled() (wired to 'zoomend') should keep it usable
-    # regardless of current zoom.
+    # keepLayerInputsEnabledObserver (a MutationObserver on the `disabled`
+    # attribute itself) should keep it usable regardless of current zoom
+    # or how many rapid zoomend events got there.
     os_road_disabled_zoomed_out = page.evaluate("""
         () => {
             const labels = [...document.querySelectorAll('.leaflet-control-layers-list label')];
