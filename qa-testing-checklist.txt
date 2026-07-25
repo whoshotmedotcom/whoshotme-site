@@ -29,8 +29,14 @@ close when it shouldn't, closes via every path a user would expect.
        back to today, a third click re-activates cleanly, and switching
        directly to a different chip correctly deactivates the previous
        one. No bugs found - working as intended.
-[ ]    Date bar: month select + "back to today" exit-lock round trip
-       (lightly tested once, not thoroughly)
+[DONE] Date bar: month select + "back to today" exit-lock round trip
+       (25/07/2026). Verified end-to-end: selecting a month locks the
+       slider to that month's days, hides the today marker, deactivates
+       filter chips, and shows the "Back to today" button. Tested all
+       three ways to exit the lock (Today button, "Back to today" button,
+       re-picking the blank dropdown option) - all three correctly clear
+       monthLockKey, reset the dropdown, restore the today marker, and
+       land back on today's index. No bugs found.
 [ ]    Date slider drag (not just prev/next steppers) - does dragging
        directly to a date work the same as stepping to it?
 [ ]    add-shoot.html: "Use current location" button (drops a pin via
