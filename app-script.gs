@@ -752,9 +752,18 @@ function confirmSignup(token) {
     var headers = photographers.getRange(1, 1, 1, photographers.getLastColumn()).getValues()[0];
     var cols = requireColumnIndexes(headers, ['Photographer Name', 'Website URL', 'Contact Email', 'Shoot Tab Name', 'Secret Key']);
     var newRow = new Array(headers.length).fill('');
-    newRow[cols['Photographer Name']] = name;
-    newRow[cols['Website URL']] = website;
-    newRow[cols['Contact Email']] = email;
+    // name/website/email here are read back from the Signups row above
+    // (data[rowIndex][1..3]), not fresh request parameters - they WERE
+    // sanitizeForCell()'d when first written at signup time (see
+    // requestPhotographer below), but that protection doesn't carry over
+    // to this new row: Sheets' leading-apostrophe plain-text marker isn't
+    // part of the value getValues() returns, and appendRow() here is a
+    // fresh write that gets its own formula auto-detection from scratch.
+    // Re-sanitizing here closes that gap rather than assuming the earlier
+    // write already handled it.
+    newRow[cols['Photographer Name']] = sanitizeForCell(name);
+    newRow[cols['Website URL']] = sanitizeForCell(website);
+    newRow[cols['Contact Email']] = sanitizeForCell(email);
     newRow[cols['Shoot Tab Name']] = shootTabName;
     newRow[cols['Secret Key']] = key;
     photographers.appendRow(newRow);

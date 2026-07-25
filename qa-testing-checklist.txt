@@ -1,0 +1,196 @@
+QA TESTING CHECKLIST — whoshotme-site
+Started 25/07/2026. Working document - update status as items get done.
+Legend: [DONE] verified and fixed if needed | [PARTIAL] some coverage exists | [ ] not started
+
+=============================================================================
+1. INTERACTION CORRECTNESS
+Every dismissible/toggleable element: opens and closes correctly, doesn't
+close when it shouldn't, closes via every path a user would expect.
+=============================================================================
+[DONE] About modal - focus trap, Escape, backdrop click, X buttons, focus
+       restore on close (fixed a real bug: no focus trap existed)
+[DONE] List view panel - toggle open/close, Escape, focus management
+       (fixed a real bug: toggle button never actually closed it)
+[DONE] Search results dropdown - closes on outside click, not just
+       select/map click (fixed a real bug: stayed open on unrelated clicks)
+[DONE] Map popups - close on outside click, X button, Escape (fixed a real
+       bug: no Escape support existed)
+[DONE] Layer switcher - expand/collapse, auto-collapse after a real
+       selection change
+[DONE] Location consent banner - accept/dismiss, doesn't fire native
+       geolocation prompt until explicit "Yes"
+[DONE] "No shoots" empty-state popup - was causing the map to drift
+       indefinitely on repeated "Reset view" taps (fixed: autoPan was the
+       root cause, popup is always self-centred so never needed it)
+[ ]    Filter chips - re-click-to-toggle-off behaviour (confirmed
+       intentional in code, not yet explicitly tested end-to-end)
+[ ]    Date bar: month select + "back to today" exit-lock round trip
+       (lightly tested once, not thoroughly)
+[ ]    Date slider drag (not just prev/next steppers) - does dragging
+       directly to a date work the same as stepping to it?
+[ ]    add-shoot.html: "Use current location" button (drops a pin via
+       geolocation - untested this session)
+[ ]    add-shoot.html: gallery add/edit/delete UI (buttons exist, double-
+       submit protection confirmed via code pattern, but the actual
+       add/edit/delete UI flow itself not click-tested)
+[ ]    add-shoot.html: "Copy" button on the personal share link
+[ ]    become-photographer.html: "lost your link" / resend toggle - does
+       switching between signup and resend forms clear the right fields?
+[ ]    Proximity/conflict warning banner in add-shoot.html (shows when a
+       dropped pin is near another photographer's overlapping shoot) -
+       not tested this session at all
+
+=============================================================================
+2. FORM VALIDATION & BOUNDARY CASES
+=============================================================================
+[ ]    Required-field validation on every form (some spot-checked, not
+       systematic - empty submissions, whitespace-only input)
+[ ]    Invalid formats: malformed email, garbage URLs in website/logo
+       fields, invalid image URLs
+[ ]    Boundary values: very long photographer names/descriptions/
+       location names - do they overflow their containers anywhere
+       (popups, list view, search results, marker labels)?
+[ ]    Special characters / emoji in user-submitted text - render safely
+       everywhere they can appear
+[DONE] HTML/script injection audit (25/07/2026) - checked every single
+       innerHTML/.setContent() call site across all three pages (~20
+       locations). Every user-submitted field (name, location,
+       description, links, gallery labels, other-photographers' names in
+       the proximity-conflict warning) is correctly wrapped in
+       escapeHtml() everywhere it's rendered. Remaining unescaped
+       interpolations are all safe by construction (numeric coordinates,
+       computed dates, hardcoded strings never fed by user input) or use
+       .textContent/.setAttribute() instead of innerHTML. Zero real
+       findings - genuinely clean.
+[ ]    Date/time edge cases: end time before start time (client-side
+       check exists - confirm server-side app-script.gs also rejects it,
+       not just trusts the client)
+[ ]    Coordinates right at the UK_BOUNDS edge (client validates, server
+       validates - confirm both use the exact same box, still in sync)
+[DONE] Google Sheets formula injection (25/07/2026) - the site already
+       has a sanitizeForCell() helper (leading apostrophe forces plain-
+       text if a value starts with =/+/-/@) applied consistently at
+       nearly every write site. Found ONE real gap: confirmSignup()'s
+       photographers.appendRow() copied name/website/email straight from
+       the already-sanitized Signups row without re-applying
+       sanitizeForCell() to the NEW row - Sheets' plain-text marker
+       doesn't carry over on a fresh cell write, so this was a real,
+       exploitable second-order gap. Fixed in app-script.gs.
+       ** NEEDS MANUAL REDEPLOY ** - app-script.gs changes don't go live
+       via git push; copy the updated confirmSignup() into the Apps
+       Script editor and redeploy. Couldn't be tested end-to-end (no live
+       Sheets test environment available), so worth a real signup-flow
+       smoke test after redeploying.
+[DONE] Client-side form validation (25/07/2026) - verified empirically,
+       not just read from code: invalid email format and empty required
+       fields both correctly block submission (0 network requests fired,
+       browser's own native validation message shown); maxlength
+       correctly caps long input (tried 500 chars into an 80-char field,
+       held at 80); a genuinely valid submission fires exactly 1 request.
+       Raw HTML/script payloads in the name field ARE sent to the backend
+       as-is (expected/correct - sanitization belongs at output/render
+       time, already verified solid, not at submission time, which can
+       always be bypassed by calling the API directly anyway).
+
+=============================================================================
+3. DOUBLE-SUBMIT / RACE PROTECTION
+=============================================================================
+[DONE] All 8 save/submit buttons across add-shoot.html and
+       become-photographer.html - verified the disable-before-await
+       pattern is consistently applied and actually works under a real
+       in-flight-request race, not just present in the code
+[ ]    Two browser tabs open to the same add-shoot.html dashboard,
+       editing/saving from both - does one silently overwrite the other's
+       changes with no warning?
+
+=============================================================================
+4. CROSS-BROWSER / CROSS-DEVICE
+=============================================================================
+[PARTIAL] device-tests.py covers iPhone 14 (WebKit) + Pixel 7 (Chromium)
+          emulation for the core flows - not every interactive element,
+          and emulation isn't identical to a real device
+[ ]    Real Firefox (desktop and/or mobile)
+[ ]    A real physical phone (iOS Safari and Android Chrome specifically -
+       emulation has already caught real WebKit-only bugs this session,
+       e.g. the focus-on-click difference, so it's plausible more exist)
+[ ]    Landscape orientation on mobile
+[ ]    Browser page zoom (not map zoom) at 150%/200% - does the layout
+       hold up, or does anything break/overlap at larger text sizes?
+[ ]    Very narrow viewports below 375px (some older/smaller phones)
+
+=============================================================================
+5. ACCESSIBILITY DEPTH
+=============================================================================
+[PARTIAL] Specific reported issues fixed (markers had no keyboard path,
+          About modal had no focus trap, banners work correctly) - not a
+          full pass
+[ ]    Full keyboard-only pass: unplug the mouse, try to use the entire
+       site (both pages) with just Tab/Shift+Tab/Enter/Space/Arrow keys.
+       Everything a mouse user can do should be reachable.
+[ ]    Real screen reader pass (VoiceOver on Mac/iOS, or NVDA on Windows)
+       - aria attributes existing isn't the same as them being announced
+       sensibly. Popups, banners, and the list view are the highest-value
+       targets given how much aria-live/aria-label work already went into
+       them.
+[ ]    Colour contrast spot-check after this session's new elements
+       (location banner, list view panel) - the site had a full WCAG AA
+       pass earlier in the project, worth confirming nothing new regressed
+[ ]    Touch target sizes on mobile - roughly 44x44px minimum is the usual
+       guideline; some icon-only buttons (zoom +/-, locate) are close to
+       this, worth measuring exactly
+
+=============================================================================
+6. SITE-SPECIFIC DATA EDGE CASES
+=============================================================================
+[ ]    Multi-day shoots crossing a date boundary - confirm they still show
+       correctly on every day within their range, not just the start day
+       (this was a documented past bug fix - confirm it still holds)
+[ ]    British Summer Time transition (clocks changing) - do shoot times
+       display correctly right around a BST boundary?
+[ ]    Shoots missing optional fields entirely: no logo, no gallery, no
+       description - confirm nothing renders broken/blank oddly
+[ ]    A photographer with a very large number of shoots listed at once -
+       does "My Shoots" or the map itself handle that gracefully?
+[ ]    Duplicate or heavily overlapping shoots at the same location/time
+       from different photographers
+
+=============================================================================
+7. RESILIENCE / FAILURE MODES
+=============================================================================
+[PARTIAL] The site's own retry/reliability logic for flaky CSV fetches is
+          documented and was built deliberately after a real incident -
+          not re-tested this session
+[ ]    Network throttling (slow 3G-equivalent) - does the loading state
+       communicate clearly, does anything time out ungracefully?
+[ ]    Complete network failure mid-session (not just on load) - what
+       happens if the connection drops while the map's already showing?
+[ ]    Ad blockers / privacy extensions blocking the Google Sheets fetch
+       or Apps Script calls - does the site fail with a clear message or
+       silently show nothing?
+[ ]    Geolocation permission blocked at the OS level (not just browser-
+       denied) - does the consent banner's decline path handle this the
+       same as a normal "no"?
+
+=============================================================================
+8. NAVIGATION & STATE
+=============================================================================
+[ ]    Browser back/forward buttons - does the app state make sense after
+       navigating back to it (filter/date/photographer-filter state)?
+[ ]    Deep links (?shoot=, ?photographer=) - reloading the page on one,
+       bookmarking it, sharing it fresh in a new tab
+[ ]    URL state consistency - does the URL ever get out of sync with
+       what's actually showing on screen?
+
+=============================================================================
+NOTES
+=============================================================================
+- Several apparent bugs during this session's testing turned out to be
+  test-harness artifacts once re-verified cleanly (bad click coordinates
+  landing on an overlapping element, stale cached positions after the
+  page moved, a recurring Playwright .click() vs raw-mouse-event quirk,
+  unrelated background requests miscounted as duplicates). Worth staying
+  skeptical of a first "failing" result and re-testing under cleaner
+  conditions before treating it as real.
+- device-tests.py is the permanent regression suite - anything confirmed
+  as a real bug and fixed should get a permanent check added there,
+  matching the pattern already established.
