@@ -1506,7 +1506,7 @@ const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/res
   attribution: 'Esri'
 });
 const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
-osRoadLayer.addTo(map);
+streetsLayer.addTo(map); // OpenStreetMap is the default basemap, matching index.html
 const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
   'OS Road': osRoadLayer,
