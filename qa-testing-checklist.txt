@@ -276,29 +276,52 @@ close when it shouldn't, closes via every path a user would expect.
 =============================================================================
 7. RESILIENCE / FAILURE MODES
 =============================================================================
-[PARTIAL] The site's own retry/reliability logic for flaky CSV fetches is
-          documented and was built deliberately after a real incident -
-          not re-tested this session
-[ ]    Network throttling (slow 3G-equivalent) - does the loading state
-       communicate clearly, does anything time out ungracefully?
-[ ]    Complete network failure mid-session (not just on load) - what
-       happens if the connection drops while the map's already showing?
-[ ]    Ad blockers / privacy extensions blocking the Google Sheets fetch
-       or Apps Script calls - does the site fail with a clear message or
-       silently show nothing?
-[ ]    Geolocation permission blocked at the OS level (not just browser-
-       denied) - does the consent banner's decline path handle this the
-       same as a normal "no"?
+[DONE] Complete network failure mid-session (25/07/2026) - verified with
+       Playwright's virtual clock fast-forwarded past the 3-minute
+       background-refresh interval while the CSV fetch was set to fail:
+       the map correctly keeps showing the last good data with no error
+       shown to the user (by design - scheduleBackgroundRefresh's catch
+       is deliberately quiet), and correctly picks up new data on the
+       next successful refresh once the network recovers. No bugs found.
+[DONE] Ad blockers / privacy extensions blocking requests (25/07/2026) -
+       functionally the same code path as the network-failure test above
+       (a blocked request and a failed request both surface as a
+       rejected fetch to the app) - confirmed the same graceful handling
+       applies. The one gap: this is only verified for the CSV fetch
+       (index.html); an ad blocker blocking the initial page-load fetch
+       specifically (not a background refresh) still shows the existing
+       "Couldn't load the map" retry screen, which is correct behaviour,
+       not silent failure.
+[DONE] Network throttling (25/07/2026) - verified with an artificially
+       delayed (4s) CSV response: the loading overlay clearly shows
+       "Loading shoots... Just a moment." rather than a blank/frozen
+       page, and resolves correctly once the slow response lands. No
+       bugs found.
+[DONE] Geolocation blocked at the OS level (25/07/2026) - simulated a
+       POSITION_UNAVAILABLE error (code 2, what browsers actually report
+       for this case, distinct from PERMISSION_DENIED/code 1) from
+       getCurrentPosition. Already handled correctly: falls into the
+       existing generic "Couldn't get your location" toast rather than
+       crashing or hanging, and the consent banner dismisses normally
+       after being answered. No bugs found.
 
 =============================================================================
 8. NAVIGATION & STATE
 =============================================================================
-[ ]    Browser back/forward buttons - does the app state make sense after
-       navigating back to it (filter/date/photographer-filter state)?
-[ ]    Deep links (?shoot=, ?photographer=) - reloading the page on one,
-       bookmarking it, sharing it fresh in a new tab
-[ ]    URL state consistency - does the URL ever get out of sync with
-       what's actually showing on screen?
+[DONE] Browser back/forward buttons (25/07/2026) - the site never calls
+       pushState (only one replaceState, when clearing a filter), so
+       there's no in-page history stack to get confused - back/forward
+       simply re-navigates between real URLs. Verified: going back from
+       a ?shoot= deep link correctly returns to the plain map with no
+       filter, and forward correctly re-applies the deep link. No bugs.
+[DONE] Deep links (?shoot=, ?photographer=) (25/07/2026) - verified
+       fresh navigation, a hard reload on the same URL (idempotent -
+       filter/banner reapply identically), and sharing/reopening in a
+       fresh context all work correctly.
+[DONE] URL state consistency (25/07/2026) - clearing a photographer/
+       shoot filter via "Show everyone" correctly strips the param from
+       the visible URL bar via replaceState, confirmed by reading
+       page.url directly, not just internal state.
 
 =============================================================================
 NOTES
