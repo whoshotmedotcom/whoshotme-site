@@ -111,6 +111,17 @@ framework, no bundler. Edit the files directly and refresh the browser.
   developers to migrate off (since ~2022). It still works but could stop
   without warning. If it ever breaks, that's expected, not a regression to
   chase — the fallback plan discussed was defaulting to OS Outdoor.
+- **OpenStreetMap's tile servers have a real usage policy** (see
+  operations.osmfoundation.org/policies/tiles/) that isn't meant for heavy
+  traffic and can rate-limit or block a site that trips it — a bigger
+  exposure now that OSM is the *default* basemap (25/07/2026) than it was
+  when it was just one option someone could switch to. Not an issue at
+  the site's current traffic, but if OSM tiles ever start failing to load
+  broadly (not just individually flaky, which is normal for the free
+  service), that's the first thing to check — the fallback plan discussed
+  was reverting the default back to "OS Roads (UK)" (OS Data Hub is a
+  dedicated, rate-limited-but-provisioned-for-this API, not a shared
+  best-effort community service).
 - **`map.invalidateSize()` must be called after anything that changes the
   map's on-screen size** — Leaflet caches container size at init and doesn't
   auto-detect layout reflows (e.g. a banner appearing above the map). Every
