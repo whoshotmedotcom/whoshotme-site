@@ -2822,7 +2822,28 @@ const POPUP_AUTOPAN_PADDING = {
 // spots, show a small popup on the map explaining that rather than
 // leaving an unexplained blank map.
 // =========================================================================
-const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false, ...POPUP_AUTOPAN_PADDING });
+// autoPan:false — this popup is always deliberately positioned at
+// map.getCenter() itself (see below), so it's already sitting at the exact
+// centre of the visible area by construction; autoPan has no legitimate
+// job to do "revealing" something that's already centred. Worse, having
+// it on caused a real, confirmed bug: on a narrow mobile viewport, the
+// popup (previously missing the maxWidth every other popup on the site
+// sets, so defaulting to Leaflet's 300px) didn't comfortably fit within
+// the autoPan padding reserved on both sides (see POPUP_AUTOPAN_PADDING
+// above, which is asymmetric - more reserved on the bottom-right than the
+// top-left), so opening it forced the map to pan to accommodate. Because
+// the popup gets re-anchored to map.getCenter() again on every render()
+// call rather than a fixed real-world point, that pan wasn't a one-off
+// correction - each subsequent render() re-opened the popup at the
+// *already-shifted* centre, which still didn't fit, forcing another
+// identical shift. Confirmed via testing: a constant, non-converging
+// offset every time, not just an initial nudge - tapping "Reset view"
+// repeatedly (or scrubbing the date slider back onto a day with no
+// shoots) walked the map steadily sideways with no bound. Narrowing the
+// popup (maxWidth:240, matching every other popup on the site) helped but
+// wasn't sufficient on its own given the asymmetric padding; autoPan:false
+// removes the whole mechanism at its root rather than just the trigger.
+const emptyStatePopup = L.popup({ className: 'noShootsPopup', closeButton: true, autoClose: false, closeOnClick: false, autoPan: false, maxWidth: 240 });
 
 function emptyStateMessage(){
   const who = photographerFilter ? getPhotographerDisplayName(photographerFilter) : null;

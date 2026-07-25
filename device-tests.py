@@ -329,6 +329,63 @@ def test_add_shoot(p, device_name, engine):
     browser.close()
 
 
+EMPTY_CSV = "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
+
+
+def route_empty_csv(ctx):
+    def handler(route):
+        url = route.request.url
+        if "gid=1737338184" in url:
+            route.fulfill(status=200, content_type="text/csv", body=EMPTY_CSV)
+        elif "gid=1842250391" in url:
+            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
+        else:
+            route.continue_()
+    ctx.route("**/docs.google.com/**", handler)
+
+
+def test_empty_state_no_drift(p, device_name, engine):
+    # Regression test for a confirmed bug: the "no shoots" popup shown for
+    # an empty day is always re-anchored to map.getCenter() on every
+    # render(), not a fixed point. It used to also have autoPan on and no
+    # maxWidth (unlike every other popup on the site), which on a narrow
+    # mobile viewport didn't fit within the autoPan padding reserved on
+    # both sides - so opening it panned the map to compensate, and because
+    # it re-anchors to the *already-shifted* centre next time, that pan
+    # never converged: repeatedly tapping "Reset view" (or scrubbing the
+    # date slider back onto an empty day) walked the map steadily sideways
+    # with no bound. Uses a genuinely empty CSV (not live data) so this
+    # reliably hits the empty-state path regardless of what's actually
+    # listed on the day this happens to run.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_empty_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- empty-state popup drift on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    if page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')"):
+        page.tap("#dismissLocationPromptBtn")
+        page.wait_for_timeout(300)
+
+    start_center = page.evaluate("() => map.getCenter()")
+    recenter_btn = page.query_selector(".recenter-btn")
+    for _ in range(5):
+        recenter_btn.tap()
+        page.wait_for_timeout(300)
+    end_center = page.evaluate("() => map.getCenter()")
+    check(
+        "map doesn't drift from repeatedly resetting view on an empty day",
+        start_center["lat"] == end_center["lat"] and start_center["lng"] == end_center["lng"],
+        f"{start_center} -> {end_center}",
+    )
+    ctx.close()
+    browser.close()
+
+
 def main():
     httpd = start_server_if_needed()
     try:
@@ -336,6 +393,7 @@ def main():
             for device_name, engine in [("iPhone 14", "webkit"), ("Pixel 7", "chromium")]:
                 test_index(p, device_name, engine)
                 test_add_shoot(p, device_name, engine)
+                test_empty_state_no_drift(p, device_name, engine)
     finally:
         if httpd:
             httpd.shutdown()
