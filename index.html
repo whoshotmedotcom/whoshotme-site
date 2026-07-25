@@ -3000,6 +3000,18 @@ map.on('popupopen', () => {
 map.on('popupclose', () => {
   popupCurrentlyOpen = false;
 });
+// Escape closes an open popup, matching the same convention already used
+// for the About modal and the list view panel - clicking elsewhere on the
+// map already closes a popup (Leaflet's own closePopupOnClick default),
+// but there was no keyboard equivalent at all. Guarded so it only acts if
+// neither of those two (both full-screen overlays that would already be
+// sitting on top of the popup) is currently open, so Escape closes
+// whatever's actually on top first rather than reaching underneath it.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (aboutOverlay.classList.contains('show') || listViewOpen) return;
+  if (popupCurrentlyOpen) map.closePopup();
+});
 
 // Leaflet's popups auto-pan the map to fit themselves on screen by default
 // (Popup's autoPan:true, which we've never turned off) — clicking a pin

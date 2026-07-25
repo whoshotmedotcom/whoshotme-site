@@ -183,6 +183,29 @@ def test_index(p, device_name, engine):
     zoom_free_again = page.evaluate("() => map.getZoom()")
     check("switching back to OpenStreetMap frees the zoom floor again", zoom_free_again == 1, str(zoom_free_again))
 
+    # Popup Escape-to-close, matching the same convention as the About
+    # modal/list view - guarded so it only fires if neither of those two
+    # (both full-screen overlays that would already be on top of a popup)
+    # is currently open, so Escape closes whatever's actually on top first.
+    # Soft-skipped if there's no real marker to click - depends on live
+    # production data, which (per this project's own documented history)
+    # varies day to day.
+    marker = page.query_selector('.leaflet-marker-icon[role="button"]')
+    if marker:
+        box = marker.bounding_box()
+        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(500)
+        popup_open = page.evaluate("() => !!map._popup && map._popup.isOpen()")
+        if popup_open:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+            popup_closed = page.evaluate("() => !(!!map._popup && map._popup.isOpen())")
+            check("Escape closes an open map popup", popup_closed)
+        else:
+            print("  (skipped: marker click didn't open a popup)")
+    else:
+        print("  (skipped: no real marker available to test against)")
+
     # Search (real tap + fill)
     page.tap("#searchInput")
     page.fill("#searchInput", "Winnats")
