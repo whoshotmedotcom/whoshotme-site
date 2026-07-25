@@ -3333,6 +3333,7 @@ monthSelectEl.addEventListener('change', (e) => {
 const searchInput = document.getElementById('searchInput');
 const searchResultsEl = document.getElementById('searchResults');
 const searchClearBtn = document.getElementById('searchClear');
+const searchWrapEl = document.getElementById('searchWrap');
 
 // =========================================================================
 // GEOCODING — lets people search a postcode or place name too, not just
@@ -3528,6 +3529,14 @@ searchClearBtn.addEventListener('click', () => {
 });
 // Close the results dropdown if the person taps the map instead of a result
 map.on('click', () => searchResultsEl.classList.remove('show'));
+// Same for anywhere else on the page - a chip, the header, anywhere. The
+// map-click handler above only ever covered one specific case; clicking
+// anything else (confirmed via testing: a filter chip) left the dropdown
+// sitting open on top of whatever was clicked instead, which isn't how a
+// dropdown is expected to behave anywhere else on the web.
+document.addEventListener('click', (e) => {
+  if (!searchWrapEl.contains(e.target)) searchResultsEl.classList.remove('show');
+});
 
 // =========================================================================
 // GET LISTED — photographers tap this to sign up. Links to
@@ -3542,7 +3551,19 @@ if (aboutContactLink) aboutContactLink.href = `mailto:${LISTING_EMAIL}?subject=$
 // ABOUT — purely informational modal, opened from the header link.
 // =========================================================================
 const aboutOverlay = document.getElementById('aboutOverlay');
-document.getElementById('aboutLink').addEventListener('click', () => {
+const aboutModal = document.getElementById('aboutModal');
+const aboutCloseBtnTop = document.getElementById('aboutCloseBtnTop');
+let aboutTriggerEl = null;
+
+function aboutFocusableEls(){
+  // Queried fresh each time rather than cached once - aboutContactLink's
+  // href is only set a moment after page load (see LISTING_EMAIL above),
+  // and in general it's cheap enough not to need caching.
+  return [...aboutModal.querySelectorAll('a[href], button:not([disabled])')]
+    .filter(el => el.offsetParent !== null); // skip anything hidden
+}
+
+function openAbout(){
   // Loaded on first open rather than eagerly on page load — it sits inside
   // a display:none overlay most visitors never open, so there's no reason
   // to make everyone download it up front.
@@ -3551,20 +3572,56 @@ document.getElementById('aboutLink').addEventListener('click', () => {
     photo.src = photo.dataset.src;
     delete photo.dataset.src;
   }
+  // Safari/WebKit famously doesn't move focus to a <button> on a mouse
+  // click (only Chromium/Firefox do - a real, long-standing cross-browser
+  // difference, not a bug in this code) - document.activeElement there is
+  // still <body> at this point, which is truthy, so falling back to
+  // aboutLink only when this is falsy wouldn't catch it. Falling back
+  // whenever it isn't a real, focusable element instead.
+  const candidate = document.activeElement;
+  aboutTriggerEl = (candidate && candidate !== document.body) ? candidate : document.getElementById('aboutLink');
   aboutOverlay.classList.add('show');
-});
-document.getElementById('aboutCloseBtn').addEventListener('click', () => {
+  aboutCloseBtnTop.focus();
+}
+
+function closeAbout(){
   aboutOverlay.classList.remove('show');
-});
-document.getElementById('aboutCloseBtnTop').addEventListener('click', () => {
-  aboutOverlay.classList.remove('show');
-});
+  // Returns focus to whatever opened it - without this it'd silently
+  // land on <body>, leaving a keyboard user with no sense of where they
+  // are on the page (same reasoning as the list view's own focus
+  // handling above).
+  aboutTriggerEl.focus();
+}
+
+document.getElementById('aboutLink').addEventListener('click', openAbout);
+document.getElementById('aboutCloseBtn').addEventListener('click', closeAbout);
+aboutCloseBtnTop.addEventListener('click', closeAbout);
 aboutOverlay.addEventListener('click', (e) => {
-  if (e.target === aboutOverlay) aboutOverlay.classList.remove('show');
+  if (e.target === aboutOverlay) closeAbout();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && aboutOverlay.classList.contains('show')) {
-    aboutOverlay.classList.remove('show');
+  if (!aboutOverlay.classList.contains('show')) return;
+  if (e.key === 'Escape') {
+    closeAbout();
+    return;
+  }
+  // Focus trap - without this, Tab carries straight on into the page
+  // *behind* the modal (confirmed: one Tab press from the modal's own
+  // close button landed on the header's "Get listed" link, which the
+  // overlay visually covers entirely) rather than cycling within it,
+  // leaving a keyboard user interacting with controls they can't see.
+  if (e.key === 'Tab') {
+    const focusable = aboutFocusableEls();
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 });
 

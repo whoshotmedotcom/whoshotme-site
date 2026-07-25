@@ -190,12 +190,46 @@ def test_index(p, device_name, engine):
     result_count = page.eval_on_selector_all("#searchResults > *", "els => els.length")
     check("search returns results for a known place", result_count > 0, str(result_count))
 
+    # Search dropdown must close on ANY outside tap, not just a select/map
+    # tap - confirmed via testing it stayed open on top of an unrelated chip
+    # otherwise, which isn't how a dropdown behaves anywhere else on the web.
+    still_open_before_chip = page.eval_on_selector("#searchResults", "el => el.classList.contains('show')")
+    chip_upcoming = page.query_selector('.chip[data-filter="upcoming"]')
+    if chip_upcoming and still_open_before_chip:
+        chip_upcoming.tap()
+        page.wait_for_timeout(300)
+        closed_by_outside_tap = page.eval_on_selector("#searchResults", "el => !el.classList.contains('show')")
+        check("search dropdown closes on an unrelated outside tap", closed_by_outside_tap)
+
     # Filter chip tap
     chip = page.query_selector('.chip[data-filter="live"]')
     if chip:
         chip.tap()
         page.wait_for_timeout(300)
         check("filter chip responds to tap", "active" in (chip.get_attribute("class") or ""))
+
+    # About modal keyboard focus trap - confirmed via testing that without
+    # it, a single Tab from the modal's own close button landed on the
+    # header's "Get listed" link, which the overlay visually covers
+    # entirely - a keyboard user tabbing through controls they can't see.
+    page.click("#aboutLink")
+    page.wait_for_timeout(300)
+    focus_on_open = page.evaluate("() => document.activeElement.id")
+    check("opening About moves focus to its own close button", focus_on_open == "aboutCloseBtnTop", focus_on_open)
+    escaped = False
+    for _ in range(15):
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(20)
+        if not page.evaluate("() => document.getElementById('aboutModal').contains(document.activeElement)"):
+            escaped = True
+            break
+    check("About modal's focus trap keeps Tab inside it", not escaped)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    about_closed = page.eval_on_selector("#aboutOverlay", "el => !el.classList.contains('show')")
+    focus_after_about = page.evaluate("() => document.activeElement.id")
+    check("closing About (Escape) returns focus to its trigger link", focus_after_about == "aboutLink", focus_after_about)
+    check("About modal actually closed", about_closed)
 
     # Accessible list view - the alternative to clustered map markers having
     # no keyboard path at all (see the #listViewPanel CSS comment). Real tap
