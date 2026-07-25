@@ -208,14 +208,26 @@ close when it shouldn't, closes via every path a user would expect.
 [PARTIAL] device-tests.py covers iPhone 14 (WebKit) + Pixel 7 (Chromium)
           emulation for the core flows - not every interactive element,
           and emulation isn't identical to a real device
-[ ]    Real Firefox (desktop and/or mobile)
+[DONE] Real Firefox desktop (25/07/2026) - ran core flows (map load,
+       popups, filter chips, search, list view, About modal focus trap)
+       on Playwright's real Firefox engine. All passed cleanly; the only
+       console noise was Firefox's stricter PNG decoder complaining
+       about the test harness's minimal 1x1 stub tile image, not an app
+       issue. Real Firefox MOBILE still not covered.
 [ ]    A real physical phone (iOS Safari and Android Chrome specifically -
        emulation has already caught real WebKit-only bugs this session,
        e.g. the focus-on-click difference, so it's plausible more exist)
-[ ]    Landscape orientation on mobile
-[ ]    Browser page zoom (not map zoom) at 150%/200% - does the layout
-       hold up, or does anything break/overlap at larger text sizes?
-[ ]    Very narrow viewports below 375px (some older/smaller phones)
+[DONE] Landscape orientation on mobile (25/07/2026) - verified at
+       844x390 (rotated iPhone 14 dimensions): no horizontal overflow,
+       search/chips/date slider/map all remain visible and usable, About
+       modal and list view both still open/close correctly.
+[DONE] Browser page zoom 150%/200% (25/07/2026) - verified 200% zoom via
+       CSS zoom on a 1280px desktop viewport: no horizontal overflow,
+       key controls (search box, "Get listed") remain visible.
+[DONE] Very narrow viewports below 375px (25/07/2026) - verified at
+       320px (iPhone SE 1st-gen class): no horizontal overflow anywhere,
+       "Get listed" button stays fully on-screen, list view panel fits
+       without overflowing.
 
 =============================================================================
 5. ACCESSIBILITY DEPTH
@@ -223,17 +235,27 @@ close when it shouldn't, closes via every path a user would expect.
 [PARTIAL] Specific reported issues fixed (markers had no keyboard path,
           About modal had no focus trap, banners work correctly) - not a
           full pass
-[ ]    Full keyboard-only pass: unplug the mouse, try to use the entire
-       site (both pages) with just Tab/Shift+Tab/Enter/Space/Arrow keys.
-       Everything a mouse user can do should be reachable.
+[DONE] Full keyboard-only pass on index.html (25/07/2026) - tabbed
+       through the entire page (60 presses) with no stuck focus loop;
+       every key control (search, chips, list view toggle, date slider/
+       steppers, Today, About, Get listed) is reachable. Verified Enter
+       activates the About link (opens + focus trap), a filter chip, and
+       the list view toggle; Escape closes the list view; arrow keys
+       drive the focused date slider. All keyboard-only, no mouse
+       events. add-shoot.html/become-photographer.html not covered in
+       this pass.
 [ ]    Real screen reader pass (VoiceOver on Mac/iOS, or NVDA on Windows)
        - aria attributes existing isn't the same as them being announced
        sensibly. Popups, banners, and the list view are the highest-value
        targets given how much aria-live/aria-label work already went into
        them.
-[ ]    Colour contrast spot-check after this session's new elements
-       (location banner, list view panel) - the site had a full WCAG AA
-       pass earlier in the project, worth confirming nothing new regressed
+[DONE] Colour contrast spot-check (25/07/2026) - computed real WCAG
+       contrast ratios (relative luminance formula, not eyeballing) for
+       every new element: location consent banner (14.45:1), list view
+       header/close/toggle buttons (12.21-14.45:1), list item name/meta
+       text (5.23-11.94:1), and the themed empty-state popup
+       (8.32-11.94:1). All comfortably clear the 4.5:1 AA threshold for
+       normal text - no regressions.
 [PARTIAL] Touch target sizes on mobile (25/07/2026) - measured exactly,
        and the result is worse than "close": EVERY interactive map
        control is under the 44x44px guideline, not just the ones
