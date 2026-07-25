@@ -1836,6 +1836,29 @@ const layersControl = L.control.layers({
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels
 }, null, { position: 'bottomright' }).addTo(map);
+// Leaflet automatically greys out (disables) any base layer whose own
+// minZoom/maxZoom doesn't cover the current zoom - sensible in general,
+// but actively wrong here now that OS Roads (UK) deliberately has a
+// tighter minZoom than OSM/Aerial: someone zoomed out past z5 on one of
+// those two couldn't even click "OS Roads (UK)" to select it, a dead end
+// with no way out except zooming back in manually first - exactly the
+// case applyBoundsForLayer() below exists to fix automatically.
+//
+// Overriding layersControl._checkDisabledLayers itself does NOT work -
+// Leaflet binds that method to the map's own 'zoomend' listener inside
+// addTo() above, capturing the original function reference at that
+// point, not a live "call whatever this._checkDisabledLayers currently
+// is" lookup, so reassigning the property afterwards has no effect on
+// the already-registered listener. Instead, register our own 'zoomend'
+// listener below (which, added after addTo() above, fires after
+// Leaflet's internal one on the same event) and directly force every
+// radio input back to enabled - simple, and correct regardless of
+// Leaflet's exact internal wiring. There are no overlay layers in this
+// control for the original disabling behaviour to be protecting anyway.
+function keepLayerInputsEnabled(){
+  layersControl._container.querySelectorAll('input[type="radio"]').forEach(el => { el.disabled = false; });
+}
+map.on('zoomend baselayerchange', keepLayerInputsEnabled);
 
 // Switching TO OS Road clamps panning to the UK (its only real coverage)
 // and, if the visitor had already panned/zoomed outside what it can show

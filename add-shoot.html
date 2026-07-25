@@ -1520,6 +1520,17 @@ const layersControl = L.control.layers({
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels
 }, null, { position: 'topright' }).addTo(map);
+// Leaflet auto-disables base layers whose zoom range doesn't cover the
+// current zoom - wrong here now that OS Roads (UK) has a tighter minZoom
+// than OSM/Aerial. Overriding _checkDisabledLayers itself doesn't work
+// (Leaflet binds it to 'zoomend' inside addTo() above, capturing the
+// original reference, not a live lookup) - see index.html for the full
+// reasoning. Force the inputs back to enabled after Leaflet's own
+// handler runs instead.
+function keepLayerInputsEnabled(){
+  layersControl._container.querySelectorAll('input[type="radio"]').forEach(el => { el.disabled = false; });
+}
+map.on('zoomend baselayerchange', keepLayerInputsEnabled);
 
 // Switching TO OS Road clamps panning to the UK (its only real coverage),
 // zooms back up to its floor if the photographer had zoomed out further

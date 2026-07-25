@@ -138,6 +138,22 @@ def test_index(p, device_name, engine):
     world_zoom = page.evaluate("() => map.getZoom()")
     check("OpenStreetMap can zoom out to a true world view", world_zoom == 0, str(world_zoom))
 
+    # Leaflet auto-disables ("greys out") a base layer's radio input once
+    # the map zooms past that layer's own minZoom/maxZoom - now that OS
+    # Roads (UK) has a tighter floor than OSM/Aerial, that meant it became
+    # unclickable in the switcher at exactly the zoom levels where you'd
+    # need to click it to trigger the auto-correction back into range.
+    # keepLayerInputsEnabled() (wired to 'zoomend') should keep it usable
+    # regardless of current zoom.
+    os_road_disabled_zoomed_out = page.evaluate("""
+        () => {
+            const labels = [...document.querySelectorAll('.leaflet-control-layers-list label')];
+            const row = labels.find(l => l.textContent.includes('OS Roads'));
+            return row.querySelector('input').disabled;
+        }
+    """)
+    check("OS Roads (UK) stays selectable when zoomed out past its floor", not os_road_disabled_zoomed_out)
+
     page.evaluate("() => map.setView([-25.2744, 133.7751], 3, {animate:false})")
     page.evaluate("() => { map.removeLayer(streetsLayer); osRoadLayer.addTo(map); }")
     page.wait_for_timeout(700)
