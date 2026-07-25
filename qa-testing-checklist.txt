@@ -105,9 +105,18 @@ close when it shouldn't, closes via every path a user would expect.
        network requests fired for any of them; a valid address fires
        exactly one request. (Garbage URLs in website/logo fields not
        covered here - see note below.)
-[ ]    Boundary values: very long photographer names/descriptions/
-       location names - do they overflow their containers anywhere
-       (popups, list view, search results, marker labels)?
+[DONE] Boundary values: very long names (25/07/2026). Found and fixed a
+       real bug: a submitted name with no spaces (a run-on string,
+       garbage input, a pasted hashtag) had nowhere to wrap in
+       .resultItem (shared by the list view panel AND search results) -
+       confirmed a 200-char unbroken name overflowing to ~1800px inside
+       a ~360px box on a narrow mobile viewport. Fixed with
+       overflow-wrap:break-word on .resultItem. Also hardened the map
+       popup's .popup-name, which sits in a flex row (.popup-header)
+       with no min-width:0 - it wasn't visibly broken (the popup grew to
+       fit rather than overflowing), but was silently ignoring its own
+       240px maxWidth to do so; added min-width:0 + overflow-wrap so it
+       genuinely wraps within the intended width instead.
 [ ]    Special characters / emoji in user-submitted text - render safely
        everywhere they can appear
 [DONE] HTML/script injection audit (25/07/2026) - checked every single

@@ -704,6 +704,11 @@
     border-bottom:1px solid var(--line);
     cursor:pointer;
     font-size:0.85rem;
+    /* A submitted name/location with no spaces (garbage input, a pasted
+       hashtag, etc.) has nowhere to wrap by default and just overflows
+       this box instead of shrinking to fit - confirmed with a 200-char
+       unbroken string overflowing to ~5x this element's own width. */
+    overflow-wrap:break-word;
   }
   .resultItem:last-child{ border-bottom:none; }
   .resultItem:hover{ background:var(--asphalt-light); }
@@ -904,6 +909,14 @@
     font-size:1rem;
     margin:0 0 4px;
     color:var(--hi-vis);
+    /* Sits in a flex row (.popup-header) alongside the logo - a flex item's
+       default min-width is "auto", meaning it won't shrink below its
+       content's natural width, so an unbroken long name silently grows the
+       whole popup past its intended maxWidth instead of wrapping. min-width:0
+       lets it actually shrink to fit; overflow-wrap makes it wrap instead of
+       overflowing once it does. */
+    min-width:0;
+    overflow-wrap:break-word;
   }
   .popup-meta{ font-size:0.8rem; color:#c7c9cd; margin:2px 0; }
   .popup-status{
