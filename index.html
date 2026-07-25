@@ -2076,9 +2076,9 @@ map.addControl(new LocateControl());
 // actually collected without a second, explicit yes from them; asking in
 // our own words first (which any visitor can just dismiss, no browser
 // dialog involved at all) is a friendlier order for the exact same two
-// outcomes. Centers on a regional zoom (9, roughly "which part of the
-// UK") rather than the tight street-level zoom (15) a deliberate button
-// tap implies.
+// outcomes. Same zoom (15) as the button too, deliberately - "yes,
+// centre on me" should land the same place regardless of which of the
+// two ways someone actually said yes.
 //
 // The eventual setView is routed through programmaticMapMove rather than
 // treated as a locked-in manual move (contrast findMyLocation above) -
@@ -2128,7 +2128,7 @@ document.getElementById('useMyLocationBtn').addEventListener('click', () => {
     (pos) => {
       sendSiteEvent('auto_location_used'); // just that it happened — never the coordinates themselves
       const { latitude, longitude } = pos.coords;
-      programmaticMapMove(() => map.setView([latitude, longitude], 9, { animate: false }));
+      programmaticMapMove(() => map.setView([latitude, longitude], 15, { animate: false }));
     },
     (err) => {
       const message = err.code === err.PERMISSION_DENIED
