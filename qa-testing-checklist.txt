@@ -186,9 +186,21 @@ close when it shouldn't, closes via every path a user would expect.
        become-photographer.html - verified the disable-before-await
        pattern is consistently applied and actually works under a real
        in-flight-request race, not just present in the code
-[ ]    Two browser tabs open to the same add-shoot.html dashboard,
-       editing/saving from both - does one silently overwrite the other's
-       changes with no warning?
+[PARTIAL] Two browser tabs open to the same dashboard (25/07/2026) -
+       confirmed via testing: yes, this silently overwrites with no
+       warning. Tab A saves a location change; Tab B (opened earlier,
+       never reloaded) then saves its own description change and its
+       stale copy of the location field silently reverts Tab A's edit,
+       with no error or warning to either tab. Root cause: updateShoot()
+       does a full-row overwrite of every field the form holds, with no
+       version/timestamp check (LockService only prevents two
+       *simultaneous* writes from corrupting each other, it doesn't
+       detect a *stale* one). NOT fixed - this is a real architectural
+       gap (would need a version/last-modified check to fix properly,
+       not a small change), left as a known limitation rather than
+       built out unprompted. Practical risk is low given the single-
+       photographer usage pattern (same person on two devices at once
+       editing the identical shoot is rare), but worth knowing about.
 
 =============================================================================
 4. CROSS-BROWSER / CROSS-DEVICE
@@ -222,24 +234,44 @@ close when it shouldn't, closes via every path a user would expect.
 [ ]    Colour contrast spot-check after this session's new elements
        (location banner, list view panel) - the site had a full WCAG AA
        pass earlier in the project, worth confirming nothing new regressed
-[ ]    Touch target sizes on mobile - roughly 44x44px minimum is the usual
-       guideline; some icon-only buttons (zoom +/-, locate) are close to
-       this, worth measuring exactly
+[PARTIAL] Touch target sizes on mobile (25/07/2026) - measured exactly,
+       and the result is worse than "close": EVERY interactive map
+       control is under the 44x44px guideline, not just the ones
+       flagged as "close": locate/zoom in/zoom out/layer switcher are
+       30x30px, prevDay/nextDay steppers 30x30px, recenter/list-view
+       toggle/list-view close/today buttons are only 24-30px tall,
+       filter chips ~28px tall. This is a consistent, sitewide design
+       choice (compact chrome to maximise map viewport), not an
+       isolated oversight - NOT fixed, since resizing every control to
+       44px would be a real visual redesign of the map UI with real risk
+       of breaking the current dense layout, not a targeted bug fix.
+       Flagging for a deliberate decision rather than auto-changing it.
 
 =============================================================================
 6. SITE-SPECIFIC DATA EDGE CASES
 =============================================================================
-[ ]    Multi-day shoots crossing a date boundary - confirm they still show
-       correctly on every day within their range, not just the start day
-       (this was a documented past bug fix - confirm it still holds)
-[ ]    British Summer Time transition (clocks changing) - do shoot times
-       display correctly right around a BST boundary?
-[ ]    Shoots missing optional fields entirely: no logo, no gallery, no
-       description - confirm nothing renders broken/blank oddly
-[ ]    A photographer with a very large number of shoots listed at once -
-       does "My Shoots" or the map itself handle that gracefully?
-[ ]    Duplicate or heavily overlapping shoots at the same location/time
-       from different photographers
+[DONE] Multi-day shoots crossing a date boundary (25/07/2026) - a shoot
+       spanning 3 calendar days shows correctly on all 3 (start/middle/
+       end), confirming the past fix still holds.
+[DONE] British Summer Time transition (25/07/2026) - verified
+       parseUKDateTime() on both index.html and add-shoot.html's
+       independent copies against all 4 combinations of before/after
+       the 2026 spring-forward (29 March) and autumn (25 October)
+       transitions - all matched the correct UTC instant exactly. Relies
+       on Intl.DateTimeFormat's real Europe/London timezone database
+       rather than manual DST rules, which is why this holds correctly
+       without special-casing.
+[DONE] Shoots missing optional fields entirely (25/07/2026) - a shoot
+       with no logo, no gallery, no description, and no website renders
+       cleanly: no description paragraph, no gallery section, no "More
+       from" link, and the logo correctly falls back to the initials
+       avatar (not a broken image). Zero console errors.
+[DONE] A photographer with a very large number of shoots (25/07/2026) -
+       80 simultaneous shoots for one photographer load and render
+       correctly in both the map and the list view, zero console errors.
+[DONE] Duplicate/overlapping shoots at the same location/time from
+       different photographers (25/07/2026) - both load independently
+       (not merged or deduped), both appear correctly in list view.
 
 =============================================================================
 7. RESILIENCE / FAILURE MODES
