@@ -398,6 +398,15 @@
      unnoticed the whole time. */
   .recenter-btn{
     padding:6px 12px;
+    /* min-height:44px (+ flex centering) rather than relying on padding
+       alone to reach it - a WCAG/Apple/Google touch-target guideline
+       this and every other small control on the map used to fall well
+       short of (measured 24-30px). Keeps the same visual padding/pill
+       shape, just guarantees a floor on the actual tappable height. */
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     background:var(--asphalt-light);
     color:var(--muted-grey);
     border:2px solid rgba(0,0,0,0.2);
@@ -429,8 +438,8 @@
      switcher's sizing/style (.leaflet-control-layers-toggle below), not
      the pill-shaped text buttons above. */
   .locate-btn{
-    width:34px;
-    height:34px;
+    width:44px;
+    height:44px;
     border-radius:50%;
     background:var(--asphalt-light);
     border:2px solid rgba(0,0,0,0.2);
@@ -456,14 +465,14 @@
   .leaflet-control-zoom{
     border:none !important;
     background:var(--asphalt-light) !important;
-    border-radius:17px !important;
+    border-radius:22px !important;
     overflow:hidden;
     box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
   }
   .leaflet-control-zoom a{
-    width:34px !important;
-    height:34px !important;
-    line-height:34px !important;
+    width:44px !important;
+    height:44px !important;
+    line-height:44px !important;
     background:none !important;
     color:var(--hi-vis) !important;
     border:none !important;
@@ -497,8 +506,8 @@
   }
   .leaflet-control-layers-toggle{
     background-color:var(--asphalt-light) !important;
-    width:34px !important;
-    height:34px !important;
+    width:44px !important;
+    height:44px !important;
     border-radius:50% !important;
   }
   .leaflet-control-layers label{ font-size:0.82rem; color:var(--paper); }
@@ -567,6 +576,10 @@
     border:none;
     border-radius:14px;
     padding:6px 14px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     font-size:0.82rem;
     font-weight:700;
     cursor:pointer;
@@ -764,11 +777,13 @@
   .chip{
     display:inline-flex;
     align-items:center;
+    justify-content:center;
     gap:6px;
     border:1px solid var(--line);
     background:transparent;
     color:var(--paper);
     padding:7px 14px;
+    min-height:44px;
     border-radius:20px;
     font-size:0.82rem;
     font-weight:700;
@@ -788,11 +803,13 @@
   #listViewToggleBtn{
     display:inline-flex;
     align-items:center;
+    justify-content:center;
     gap:6px;
     border:1px solid var(--line);
     background:transparent;
     color:var(--paper);
     padding:7px 14px;
+    min-height:44px;
     border-radius:20px;
     font-size:0.82rem;
     font-weight:700;
@@ -1183,7 +1200,7 @@
     border:1px solid var(--line);
     background:transparent;
     color:var(--paper);
-    width:36px;height:36px;
+    width:44px;height:44px;
     border-radius:50%;
     font-size:1rem;
     font-weight:700;
@@ -1201,6 +1218,10 @@
     background:transparent;
     color:var(--paper);
     padding:6px 12px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
     border-radius:16px;
     font-size:0.78rem;
     cursor:pointer;
@@ -1285,9 +1306,10 @@
     #aboutLink{ font-size:0.78rem; }
 
     #searchWrap{ max-width:none; left:8px; right:8px; top:8px; }
-    /* Was 3px/7px (37px tall total) - visibly taller than every other
-       pill control on the map (chips/Reset view/zoom buttons all sit in
-       the 26-30px range). Trimmed to land in that same range. */
+    /* Was 3px/7px (37px tall total) - trimmed down to match the other
+       compact mobile controls' visual scale. Independent of the map
+       control buttons' own min-height:44px touch-target floor below -
+       this is about matching visual density, not a tap target itself. */
     #searchBox{ padding:2px 4px 2px 12px; border-radius:18px; }
     #searchInput{ font-size:0.84rem; padding:5px 4px; }
     /* #searchClear has no mobile override otherwise, so once it becomes
@@ -1298,17 +1320,13 @@
     .resultItem{ padding:8px 12px; font-size:0.8rem; }
     #getListedBtn{ padding:7px 11px; font-size:0.74rem; }
 
-    /* Bottom-left map control stack (zoom, Reset view, My location) -
-       shrunk like everything else on mobile instead of staying at full
-       desktop size. 30px matches .stepBtn's established mobile size
-       elsewhere in this file, rather than picking a new arbitrary value -
-       still comfortably tappable, just consistent with the rest of the
-       page's mobile scale-down. */
-    .leaflet-control-zoom{ border-radius:15px !important; }
-    .leaflet-control-zoom a{ width:30px !important; height:30px !important; line-height:30px !important; font-size:1rem; }
-    .leaflet-control-layers-toggle{ width:30px !important; height:30px !important; }
+    /* Bottom-left map control stack (zoom, Reset view, My location) used
+       to shrink to 30px here, actually going BELOW the 44x44 touch-
+       target guideline right where touch matters most. These now stay
+       at their full 44px size on every viewport - only the pill
+       buttons' padding/font keep shrinking below, which doesn't affect
+       their own min-height:44px floor. */
     .recenter-btn{ padding:5px 10px; font-size:0.7rem; }
-    .locate-btn{ width:30px; height:30px; font-size:0.9rem; }
 
     #filters{ padding:8px 12px; gap:6px; }
     .chip{ padding:6px 10px; font-size:0.76rem; }
@@ -1327,7 +1345,6 @@
     #monthSelect{ font-size:0.72rem; padding:4px 8px; }
     #exitMonthLockBtn{ font-size:0.72rem; padding:4px 10px; }
     #dateLabel{ font-size:0.8rem; }
-    .stepBtn{ width:30px; height:30px; font-size:0.9rem; }
     #dateSlider::-webkit-slider-thumb{ width:26px; height:26px; }
     #dateSlider::-moz-range-thumb{ width:26px; height:26px; }
     #todayMarker{ width:12px; height:12px; }
@@ -2826,14 +2843,15 @@ function popupHtml(spot){
 //   - top-left: the search box (#searchWrap, top:12px + its own ~41px
 //     height)
 //   - bottom-right: whichever is taller/wider of the bottom-left control
-//     stack (zoom + Reset view + My location together, measured ~146px
-//     tall from the map's bottom edge to the top of the stack - My
-//     location is the topmost since controls stack upward in the order
-//     they're added) and the bottom-right layer switcher (measured
-//     ~60px wide) - Leaflet only takes one padding value per corner
-//     pair, not one per actual control, so this has to cover the
-//     largest of them; a small buffer is added on top of the measured
-//     values.
+//     stack (zoom + Reset view + My location together, remeasured at
+//     ~206px tall from the map's bottom edge to the top of the stack
+//     after bumping every control to a 44px touch target 25/07/2026 -
+//     was ~146px at the old 30-36px sizes - My location is the topmost
+//     since controls stack upward in the order they're added) and the
+//     bottom-right layer switcher (remeasured at ~64px wide, was ~60px)
+//     - Leaflet only takes one padding value per corner pair, not one
+//     per actual control, so this has to cover the largest of them; a
+//     small buffer is added on top of the measured values.
 // maxHeight caps how tall a popup's content can grow before it scrolls
 // internally instead — a spot with a long description and several
 // galleries could otherwise grow tall enough that no amount of autoPan
@@ -2844,7 +2862,7 @@ function popupHtml(spot){
 // pushing its edges past where auto-pan can still guarantee clearance.
 const POPUP_AUTOPAN_PADDING = {
   autoPanPaddingTopLeft: L.point(20, 70),
-  autoPanPaddingBottomRight: L.point(75, 165),
+  autoPanPaddingBottomRight: L.point(80, 225),
   maxHeight: 320
 };
 

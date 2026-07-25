@@ -512,11 +512,6 @@
   @media (max-width:480px){
     .two-col{ grid-template-columns:1fr; }
 
-    /* Zoom control - shrunk on mobile the same way as the public map,
-       staying consistent between both pages. */
-    .leaflet-control-zoom{ border-radius:15px !important; }
-    .leaflet-control-zoom a{ width:30px !important; height:30px !important; line-height:30px !important; font-size:1rem; }
-    .leaflet-control-layers-toggle{ width:30px !important; height:30px !important; }
   }
 
   /* Location search — jumps the map to a postcode/place before pin-dropping */
@@ -638,14 +633,14 @@
   .leaflet-control-zoom{
     border:none !important;
     background:var(--asphalt-light) !important;
-    border-radius:17px !important;
+    border-radius:22px !important;
     overflow:hidden;
     box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
   }
   .leaflet-control-zoom a{
-    width:34px !important;
-    height:34px !important;
-    line-height:34px !important;
+    width:44px !important;
+    height:44px !important;
+    line-height:44px !important;
     background:none !important;
     color:var(--hi-vis) !important;
     border:none !important;
@@ -666,8 +661,8 @@
   }
   .leaflet-control-layers-toggle{
     background-color:var(--asphalt-light) !important;
-    width:34px !important;
-    height:34px !important;
+    width:44px !important;
+    height:44px !important;
     border-radius:50% !important;
   }
   /* Overrides text-transform/font-weight, not just size/color - #mapWrap
