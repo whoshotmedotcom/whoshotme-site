@@ -256,18 +256,21 @@ close when it shouldn't, closes via every path a user would expect.
        text (5.23-11.94:1), and the themed empty-state popup
        (8.32-11.94:1). All comfortably clear the 4.5:1 AA threshold for
        normal text - no regressions.
-[PARTIAL] Touch target sizes on mobile (25/07/2026) - measured exactly,
-       and the result is worse than "close": EVERY interactive map
-       control is under the 44x44px guideline, not just the ones
-       flagged as "close": locate/zoom in/zoom out/layer switcher are
-       30x30px, prevDay/nextDay steppers 30x30px, recenter/list-view
-       toggle/list-view close/today buttons are only 24-30px tall,
-       filter chips ~28px tall. This is a consistent, sitewide design
-       choice (compact chrome to maximise map viewport), not an
-       isolated oversight - NOT fixed, since resizing every control to
-       44px would be a real visual redesign of the map UI with real risk
-       of breaking the current dense layout, not a targeted bug fix.
-       Flagging for a deliberate decision rather than auto-changing it.
+[DONE] Touch target sizes on mobile (25/07/2026) - originally measured
+       every interactive map control well under the 44x44px guideline
+       (24-30px), a consistent sitewide choice rather than an isolated
+       oversight. Discussed with the site owner, who chose a genuine
+       resize over an invisible-hit-area approach. Fixed: locate/zoom/
+       layer switcher/date steppers now a real 44x44px circle, and
+       recenter/today/list-view toggle/list-view close/filter chips all
+       have a min-height:44px floor, on every viewport (mobile no longer
+       shrinks these below desktop size, which it previously did).
+       Mirrored the zoom/layer-switcher sizing to add-shoot.html for
+       consistency. Recalculated POPUP_AUTOPAN_PADDING's bottom-right
+       reserve to match the now-taller control stack (~146px -> ~206px)
+       and verified a real popup still correctly clears it. Full
+       device-tests.py suite (64/64) and a visual screenshot check both
+       confirmed no layout breakage.
 
 =============================================================================
 6. SITE-SPECIFIC DATA EDGE CASES
