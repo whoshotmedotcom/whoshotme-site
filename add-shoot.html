@@ -1539,17 +1539,20 @@ layerRadioInputs.forEach(input => {
   keepLayerInputsEnabledObserver.observe(input, { attributes: true, attributeFilter: ['disabled'] });
 });
 
-// Switching TO OS Road clamps panning to the UK (its only real coverage),
-// zooms back up to its floor if the photographer had zoomed out further
-// on a worldwide layer, and snaps the view back in if they'd panned off
-// it too. See index.html for the full reasoning.
+// Switching TO OS Road clamps panning to the UK (its only real coverage).
+// Checked against the tight UK_BOUNDS (not the generous MAP_PAN_BOUNDS
+// also set below) - resets to a full UK overview if the current view is
+// nowhere near the real UK, or just corrects zoom if it's already a
+// legitimate UK view that's simply zoomed out further than OS Road
+// allows. See index.html for the full reasoning.
 function applyBoundsForLayer(layer){
   if (layer === osRoadLayer){
     map.setMaxBounds(MAP_PAN_BOUNDS);
-    if (map.getZoom() < osRoadLayer.options.minZoom){
+    if (!UK_BOUNDS.contains(map.getCenter())){
+      map.fitBounds(UK_BOUNDS, { animate: true });
+    } else if (map.getZoom() < osRoadLayer.options.minZoom){
       map.setZoom(osRoadLayer.options.minZoom);
     }
-    map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
   } else {
     map.setMaxBounds(null);
   }

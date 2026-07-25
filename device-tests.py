@@ -138,11 +138,11 @@ def test_index(p, device_name, engine):
     # under mobile WebKit emulation, so taps rather than scroll - real
     # zoomend-burst behaviour either way.)
     zoom_out_btn = page.query_selector(".leaflet-control-zoom-out")
-    for _ in range(20):
+    for _ in range(30):
         if page.evaluate("() => map.getZoom()") <= 0:
             break  # the button correctly disables at the true floor - stop before tapping a disabled button
         zoom_out_btn.tap()
-        page.wait_for_timeout(150)
+        page.wait_for_timeout(250)  # Leaflet's own zoom animation is ~250ms - faster taps can get dropped
     world_zoom = page.evaluate("() => map.getZoom()")
     check("OpenStreetMap can zoom out to a true world view", world_zoom == 0, str(world_zoom))
 

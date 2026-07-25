@@ -1707,6 +1707,13 @@ const map = L.map('map', { zoomControl: false, attributionControl: false, tap: f
 // total east-west pan room matches total north-south pan room exactly
 // (see the commit this landed in for the full calculation).
 const MAP_PAN_BOUNDS = L.latLngBounds([46.575, -17.48], [64.125, 14.04]);
+// A second, much tighter box - the real UK coastline, not the generous
+// pan-resistance area above - matching add-shoot.html's UK_BOUNDS (used
+// there to validate a shoot's coordinates at save time; used here to
+// decide whether the current view is actually near OS Road's real
+// coverage before switching to it, see applyBoundsForLayer below). Keep
+// in sync with add-shoot.html's copy if this ever changes.
+const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
 // Only actually applied while OS Road is the active basemap (see
 // applyBoundsForLayer below, called from baselayerchange) - OS Data Hub's
 // coverage is UK-only, so panning off it just hits blank grey tiles, but
@@ -1879,22 +1886,31 @@ layerRadioInputs.forEach(input => {
 // than leaving them staring at blank grey tiles until they correct it
 // themselves. Two separate corrections, since OSM/Aerial can now go
 // further out on both axes than OS Road ever could:
-//   - zoom: OSM/Aerial can zoom out to a full world view (minZoom:0);
-//     OS Road has a hard floor at its own minZoom (see the big comment
-//     above osRoadLayer's definition) - so zoom back up to that floor
-//     first if the current zoom is below it.
-//   - pan: OS Road only has real coverage over the UK - panInsideBounds
-//     nudges the view back in with the minimum necessary movement if
-//     it's currently outside that box, a no-op if it's already inside.
+//   - pan: checked against the TIGHT UK_BOUNDS, not the generous
+//     MAP_PAN_BOUNDS also set below - a view centred somewhere on OSM/
+//     Aerial that's technically still inside the wide pan-resistance box
+//     (which reaches into mainland Europe, mid-Atlantic, etc.) but nowhere
+//     near the real UK would otherwise read as "already fine" and never
+//     move, leaving OS Road showing nothing. Outside UK_BOUNDS, reset to
+//     a full UK overview (fitBounds) rather than a minimal nudge back to
+//     just barely on-box - a nudge could still land zoomed in tight on
+//     some corner with no real coverage nearby.
+//   - zoom: only relevant if already inside UK_BOUNDS (fitBounds above
+//     already picks a sensible zoom on its own) - OSM/Aerial can zoom out
+//     to a full world view (minZoom:0), OS Road has a hard floor at its
+//     own minZoom (see the big comment above osRoadLayer's definition),
+//     so correct up to that floor if a legitimately-UK view is just
+//     zoomed out further than OS Road allows.
 // Switching to either worldwide layer lifts the clamp entirely (and
-// never touches zoom - they're free to go as far out as they're able).
+// never touches position/zoom - they're free to go as far as they're able).
 function applyBoundsForLayer(layer){
   if (layer === osRoadLayer){
     map.setMaxBounds(MAP_PAN_BOUNDS);
-    if (map.getZoom() < osRoadLayer.options.minZoom){
+    if (!UK_BOUNDS.contains(map.getCenter())){
+      map.fitBounds(UK_BOUNDS, { animate: true });
+    } else if (map.getZoom() < osRoadLayer.options.minZoom){
       map.setZoom(osRoadLayer.options.minZoom);
     }
-    map.panInsideBounds(MAP_PAN_BOUNDS, { animate: true });
   } else {
     map.setMaxBounds(null);
   }
