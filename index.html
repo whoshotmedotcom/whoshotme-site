@@ -1291,6 +1291,13 @@
     .chip{ padding:6px 10px; font-size:0.76rem; }
     .chipDot{ width:8px; height:8px; }
     .count-pill{ font-size:0.7rem; }
+    /* Matched to .chip's own mobile size just above - without this,
+       these two stayed at full desktop size (13.12px/33px tall) while
+       every pill button next to them shrank, making them visibly bulkier
+       than the row they sit in. */
+    #listViewToggleBtn{ padding:6px 10px; font-size:0.76rem; }
+    #listViewCloseBtn{ padding:5px 12px; font-size:0.76rem; }
+    #listViewHeader h2{ font-size:0.92rem; }
     #lastUpdated{ font-size:0.7rem; }
 
     #dateBar{ padding:8px 12px 10px; gap:6px; }
