@@ -386,6 +386,51 @@ def test_empty_state_no_drift(p, device_name, engine):
     browser.close()
 
 
+EMOJI_NAME_CSV = (
+    "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
+    "🏍️ Emoji Photog,,,Test Spot,,53.1,-1.6,2026-07-25 00:00,2026-07-25 23:59,S1,emojiphotog\r\n"
+)
+
+
+def route_emoji_name_csv(ctx):
+    def handler(route):
+        url = route.request.url
+        if "gid=1737338184" in url:
+            route.fulfill(status=200, content_type="text/csv; charset=utf-8", body=EMOJI_NAME_CSV)
+        elif "gid=1842250391" in url:
+            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
+        else:
+            route.continue_()
+    ctx.route("**/docs.google.com/**", handler)
+
+
+def test_emoji_name_no_crash(p, device_name, engine):
+    # Regression test for a confirmed bug: a photographer name starting
+    # with an emoji (stored as a UTF-16 surrogate pair) crashed the ENTIRE
+    # public map for every visitor, not just that one row. getInitials()
+    # used w[0], which grabs the first UTF-16 code UNIT rather than the
+    # first code POINT, splitting the surrogate pair in half; that lone
+    # surrogate then hit avatarFor()'s encodeURIComponent() and threw
+    # "URI malformed" inside buildSpots()'s per-row .map(), so the
+    # exception propagated all the way up and killed the whole data load.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_emoji_name_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- emoji-name no-crash on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    check(
+        "map loads successfully with an emoji-first photographer name (doesn't crash the whole page)",
+        page.eval_on_selector("#dataStateOverlay", "el => el.classList.contains('hidden')"),
+    )
+    ctx.close()
+    browser.close()
+
+
 def main():
     httpd = start_server_if_needed()
     try:
@@ -394,6 +439,7 @@ def main():
                 test_index(p, device_name, engine)
                 test_add_shoot(p, device_name, engine)
                 test_empty_state_no_drift(p, device_name, engine)
+                test_emoji_name_no_crash(p, device_name, engine)
     finally:
         if httpd:
             httpd.shutdown()

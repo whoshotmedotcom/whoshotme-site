@@ -1495,8 +1495,16 @@ function getInitials(name){
     .replace(/['’]/g, '')            // "Pete's" -> "Petes", so the apostrophe doesn't split it
     .split(/[\s\-_/]+/)
     .filter(w => w.length && !INITIAL_STOPWORDS.has(w.toLowerCase()));
-  const initials = words.slice(0, 3).map(w => w[0].toUpperCase()).join('');
-  return initials || String(name).trim().slice(0, 2).toUpperCase() || '?';
+  // [...w][0] (not w[0]) - a name starting with an emoji or other character
+  // outside the Basic Multilingual Plane is stored as a UTF-16 surrogate
+  // pair, and w[0] grabs only the first code UNIT, i.e. half of it. That
+  // lone surrogate survives into avatarFor()'s encodeURIComponent() call
+  // and throws "URI malformed" there - which, since this runs inside
+  // buildSpots()'s per-row map(), was taking down the ENTIRE public map
+  // for every visitor over a single photographer's name, not just failing
+  // to render that one row. Spreading a string iterates by code point.
+  const initials = words.slice(0, 3).map(w => [...w][0].toUpperCase()).join('');
+  return initials || [...String(name).trim()].slice(0, 2).join('').toUpperCase() || '?';
 }
 
 function avatarFor(name){

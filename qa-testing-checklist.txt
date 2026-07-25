@@ -117,8 +117,24 @@ close when it shouldn't, closes via every path a user would expect.
        fit rather than overflowing), but was silently ignoring its own
        240px maxWidth to do so; added min-width:0 + overflow-wrap so it
        genuinely wraps within the intended width instead.
-[ ]    Special characters / emoji in user-submitted text - render safely
-       everywhere they can appear
+[DONE] Special characters / emoji (25/07/2026). Found and fixed a
+       SEVERE bug: a photographer name starting with an emoji or any
+       other character outside the Basic Multilingual Plane (stored as
+       a UTF-16 surrogate pair) crashed the ENTIRE public map for EVERY
+       visitor, not just that one row. Root cause: getInitials()'s
+       `w[0]` grabbed the first UTF-16 code UNIT of a word rather than
+       the first code POINT, splitting the surrogate pair in half. That
+       lone surrogate then hit avatarFor()'s encodeURIComponent() call
+       and threw "URI malformed" - and because this runs inside
+       buildSpots()'s per-row .map() (after validateSpot() had already
+       accepted the row as valid - a name existing is fine), the
+       exception propagated all the way up and killed the whole data
+       load, so the page showed "Couldn't load the map" for everyone.
+       Fixed by spreading the string ([...w][0]) to iterate by code
+       point instead of code unit. Verified: emoji, accented characters,
+       &/<>/quotes, and em-dashes all render exactly as submitted (no
+       double-escaping) in popups, list view, and search results, and
+       accented-character search ("Café") works correctly.
 [DONE] HTML/script injection audit (25/07/2026) - checked every single
        innerHTML/.setContent() call site across all three pages (~20
        locations). Every user-submitted field (name, location,
