@@ -572,11 +572,20 @@
   // =========================================================================
   const signupSection = document.getElementById('signupSection');
   const resendSection = document.getElementById('resendSection');
+  // A leftover error from a previous, unrelated attempt on the OTHER form
+  // shouldn't still be showing next time someone switches back to it - easy
+  // to mistake for something that just went wrong with the current attempt.
+  function clearStaleFormErrors(){
+    document.getElementById('formError').classList.add('hidden');
+    document.getElementById('resendError').classList.add('hidden');
+  }
   document.getElementById('showResendBtn').addEventListener('click', () => {
+    clearStaleFormErrors();
     signupSection.classList.add('hidden');
     resendSection.classList.remove('hidden');
   });
   document.getElementById('showSignupBtn').addEventListener('click', () => {
+    clearStaleFormErrors();
     resendSection.classList.add('hidden');
     signupSection.classList.remove('hidden');
   });

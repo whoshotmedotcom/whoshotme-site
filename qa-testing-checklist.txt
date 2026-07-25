@@ -53,12 +53,31 @@ close when it shouldn't, closes via every path a user would expect.
        one-shot handler), and handles a permission denial gracefully -
        re-enables the button, restores its label, shows a clear error
        toast rather than failing silently. No bugs found.
-[ ]    add-shoot.html: gallery add/edit/delete UI (buttons exist, double-
-       submit protection confirmed via code pattern, but the actual
-       add/edit/delete UI flow itself not click-tested)
-[ ]    add-shoot.html: "Copy" button on the personal share link
-[ ]    become-photographer.html: "lost your link" / resend toggle - does
-       switching between signup and resend forms clear the right fields?
+[DONE] add-shoot.html: gallery add/edit/delete UI (25/07/2026) - full
+       click-tested flow against a stateful mock backend: add (with
+       empty-field validation blocking submit), edit (fields pre-filled
+       correctly, no duplicate row created), cancel (discards unsaved
+       changes), delete (removes the item, reverts to "No galleries
+       yet"), and dismissing the delete confirm dialog correctly leaves
+       the gallery untouched. Zero console errors throughout. No bugs
+       found.
+[DONE] add-shoot.html: "Copy" button on the personal share link
+       (25/07/2026) - verified with a real clipboard permission grant:
+       copies the exact link value, shows "Copied ✓" feedback, reverts
+       to "Copy" after the timeout, and works repeatably on a second
+       click. No bugs found.
+[DONE] become-photographer.html: "lost your link" / resend toggle
+       (25/07/2026). Found and fixed a real bug: switching between the
+       signup and resend sections only toggled visibility, never cleared
+       either form's error message - a failed attempt on one side left
+       its error banner visible indefinitely, reappearing next time you
+       switched back to it even with no new attempt made, easily
+       mistaken for a fresh failure. Fixed by clearing both error
+       banners on every toggle click. Also verified as correct/expected
+       (no bug): partially-typed field values are preserved across a
+       toggle (data isn't lost), and a successful signup's confirmation
+       panel correctly stays shown (not reverting to a blank form) after
+       toggling away and back.
 [ ]    Proximity/conflict warning banner in add-shoot.html (shows when a
        dropped pin is near another photographer's overlapping shoot) -
        not tested this session at all
