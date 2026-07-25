@@ -522,6 +522,17 @@
   .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
   .leaflet-control-layers-separator{ border-color:var(--line) !important; }
 
+  /* Bottom-right attribution box has no max-width by default - normally
+     fine (OpenStreetMap's short credit line fits on one line easily),
+     but Esri's longer Aerial attribution wraps to 2 lines that are each
+     nearly the full map width on a narrow mobile viewport, reaching all
+     the way over into the bottom-LEFT zoom control's own space despite
+     being anchored bottom-right - confirmed via testing. Capping the
+     width keeps it wrapping into more, narrower lines confined to the
+     right side instead, without touching the attribution wording
+     itself (not something to casually edit for licensing reasons). */
+  .leaflet-control-attribution{ max-width:60%; }
+
   /* ---- Map sits in the middle, takes remaining space ---- */
   #mapWrap{
     flex:1;
@@ -1991,18 +2002,24 @@ const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/ser
 // the same free keyless endpoint family as aerialLayer above (server.arcgisonline.com,
 // not the newer API-key-gated services.arcgisonline.com), so it carries the same
 // caveat: works today with zero signup, not guaranteed indefinitely.
+// No attribution option here - aerialLayer's own attribution already
+// covers "Esri" for the whole group (all three layers are Esri-sourced),
+// and Leaflet concatenates every active layer's attribution string
+// together, so all three previously stacked into one long line that
+// wrapped to 2 lines on a narrow mobile viewport and covered part of
+// the zoom control sitting above it - confirmed via testing. One
+// attribution for the group is both accurate and enough.
 const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 0,
-  attribution: 'Esri, DeLorme'
+  minZoom: 0
 });
 // Second reference overlay — Boundaries and Places has no road names, so
 // this adds Esri's "World Transportation" layer (roads, road names,
 // railways) on top of it. Same keyless endpoint family, same caveat.
+// No attribution option here either - see aerialLabelsLayer above.
 const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 0,
-  attribution: 'Esri'
+  minZoom: 0
 });
 // Grouped, roads on top, so the layer switcher's "Aerial" entry toggles all
 // three tile layers together as one basemap.

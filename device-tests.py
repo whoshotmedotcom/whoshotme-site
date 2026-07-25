@@ -506,14 +506,60 @@ def test_popup_clears_bottom_controls(p, device_name, engine):
     # Path 2: opening the same popup via a search result selection.
     page.fill("#searchInput", "Real")
     page.wait_for_timeout(500)
-    result = page.query_selector("#searchResults .resultItem")
-    result.tap()
+    page.tap("#searchResults .resultItem")
     page.wait_for_timeout(700)
     popup_box2 = page.eval_on_selector(".leaflet-popup-content-wrapper", "el => el.getBoundingClientRect()")
     check(
         "search-result popup doesn't overlap Reset view / My location",
         not rects_overlap(popup_box2, reset_box) and not rects_overlap(popup_box2, locate_box),
         f"popup={popup_box2}",
+    )
+    ctx.close()
+    browser.close()
+
+
+def test_aerial_attribution_no_overlap(p, device_name, engine):
+    # Regression test for a confirmed bug: Aerial's basemap is really 3
+    # stacked layers (imagery + 2 label/road overlays), each of which had
+    # its own attribution string - Leaflet concatenates every active
+    # layer's attribution together, so switching to Aerial produced one
+    # very long line that wrapped to 2 lines wide enough to reach over
+    # into the bottom-left zoom control on a narrow mobile viewport,
+    # despite the attribution box being anchored bottom-right. Fixed by
+    # only attributing the group once (on the base imagery layer) and
+    # capping the attribution box's width so it wraps into more, narrower
+    # lines confined to the right side instead of growing wide enough to
+    # reach the other corner.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    page = ctx.new_page()
+    print(f"\n--- Aerial attribution doesn't overlap zoom control on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    if page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')"):
+        page.tap("#dismissLocationPromptBtn")
+        page.wait_for_timeout(300)
+    page.evaluate(
+        "() => { const labels = document.querySelectorAll('.leaflet-control-layers-list label'); "
+        "for (const l of labels) { if (l.textContent.includes('Aerial')) { l.querySelector('input').click(); break; } } }"
+    )
+    page.wait_for_timeout(500)
+    attribution_box = page.eval_on_selector(".leaflet-control-attribution", "el => el.getBoundingClientRect()")
+    zoomout_box = page.eval_on_selector(".leaflet-control-zoom-out", "el => el.getBoundingClientRect()")
+
+    def rects_overlap(a, b):
+        return not (
+            a["x"] + a["width"] < b["x"] or a["x"] > b["x"] + b["width"]
+            or a["y"] + a["height"] < b["y"] or a["y"] > b["y"] + b["height"]
+        )
+
+    check(
+        "Aerial's attribution doesn't overlap the zoom-out button",
+        not rects_overlap(attribution_box, zoomout_box),
+        f"attribution={attribution_box} zoomout={zoomout_box}",
     )
     ctx.close()
     browser.close()
@@ -529,6 +575,7 @@ def main():
                 test_empty_state_no_drift(p, device_name, engine)
                 test_emoji_name_no_crash(p, device_name, engine)
                 test_popup_clears_bottom_controls(p, device_name, engine)
+                test_aerial_attribution_no_overlap(p, device_name, engine)
     finally:
         if httpd:
             httpd.shutdown()

@@ -680,6 +680,12 @@
   .leaflet-control-layers-selector{ accent-color:var(--hi-vis); }
   .leaflet-control-layers-separator{ border-color:var(--line) !important; }
 
+  /* See index.html for the full reasoning - Esri's longer Aerial
+     attribution wraps wide enough on a narrow mobile viewport to reach
+     over into the bottom-left zoom control despite being anchored
+     bottom-right. Capping the width keeps it confined to the right. */
+  .leaflet-control-attribution{ max-width:60%; }
+
   #useCurrentLocationBtn{ margin-bottom:10px; }
 
   .form-actions{ display:flex; gap:10px; margin-top:6px; }
@@ -1496,15 +1502,19 @@ const aerialLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/ser
 // Hybrid reference overlays — same as index.html's Aerial basemap: place
 // names/boundaries plus road names, drawn on top of the imagery. Same
 // keyless server.arcgisonline.com endpoint family as aerialLayer above.
+// Neither overlay below sets its own attribution - aerialLayer's already
+// covers "Esri" for the whole group, and Leaflet concatenates every
+// active layer's attribution together, which used to stack all three
+// into one long line that wrapped to 2 lines on a narrow mobile
+// viewport and covered part of the zoom control above it (confirmed via
+// testing on index.html, same shared layer setup here).
 const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 0,
-  attribution: 'Esri, DeLorme'
+  minZoom: 0
 });
 const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
-  minZoom: 0,
-  attribution: 'Esri'
+  minZoom: 0
 });
 const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
 streetsLayer.addTo(map); // OpenStreetMap is the default basemap, matching index.html
