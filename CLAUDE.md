@@ -16,8 +16,13 @@ photographers shooting them on the road. Three pages:
   below — upgraded from manual-review to fully automatic same day it
   was built).
 
-No build step. Plain HTML/CSS/JS, single `<script>` blocks per page, no
-framework, no bundler. Edit the files directly and refresh the browser.
+No build step for local development. Plain HTML/CSS/JS, single `<script>`
+blocks per page, no framework, no bundler. Edit the files directly and
+refresh the browser — that convention is unchanged. As of 26/07/2026
+there IS a deploy-time build step (see Hosting below): a GitHub Actions
+workflow minifies the three main HTML pages on the way to GitHub Pages,
+but it never touches the committed source, so nothing about local
+editing changed.
 
 ## Tech stack / external services
 
@@ -55,7 +60,23 @@ framework, no bundler. Edit the files directly and refresh the browser.
     isn't anymore. Don't remove those checks.
 - **Hosting**: GitHub Pages (migrated from Netlify on 16/07/2026 after
   running out of free-tier build credits — see `whoshotmedotcom/whoshotme-site`
-  on GitHub, public repo, no build step so a push is the whole deploy).
+  on GitHub, public repo). A push to `master` is still the whole deploy
+  trigger, but as of 26/07/2026 it runs through
+  `.github/workflows/deploy.yml` rather than publishing the branch
+  content directly (Pages' source setting was switched from "deploy
+  from a branch" to "GitHub Actions" to enable this —
+  `gh api repos/.../pages` shows `build_type`). The workflow assembles
+  the exact git-tracked file set and minifies just the three main HTML
+  pages (`index.html`, `add-shoot.html`, `become-photographer.html`) via
+  `html-minifier-terser` before publishing — see `lighthousetodo.txt`
+  for the numbers that motivated this (a ~65%/47%/34% cut in each
+  page's gzip'd size, since this codebase's extensive inline comments
+  turned out to still dominate the payload even after compression). The
+  committed HTML files are completely unaffected — still the real,
+  fully-commented source; editing them and refreshing a locally-served
+  copy works exactly as before. Only the published output differs from
+  the source now, which matters if you're ever comparing view-source on
+  the live site against the repo and wondering where the comments went.
 - **Map**: Leaflet 1.9.4 + Leaflet.markercluster.
 - **Basemaps**: OpenStreetMap (default, as of 25/07/2026), "OS Roads (UK)"
   (OS Maps API via OS Data Hub's free OpenData plan — labelled with "(UK)"
