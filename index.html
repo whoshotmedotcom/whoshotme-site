@@ -1166,6 +1166,21 @@
     margin-left:auto;
     font-size:0.78rem;
     color:var(--muted-grey);
+    /* CONFIRMED BUG (26/07/2026, Lighthouse): this and #lastUpdated both
+       start EMPTY in the markup and only get their real text once the
+       data fetch resolves - on a narrow viewport, that added width was
+       sometimes enough to push #filters from one flex-wrap line to two,
+       growing #bottomPanel and shifting the map boundary (the actual
+       measured CLS contributor here, not #dateLabel as first assumed -
+       confirmed by inspecting the PerformanceObserver layout-shift
+       entries directly rather than guessing). Reserving width up front
+       for a typical populated value keeps the row's total width (and
+       therefore its wrap point) stable across the empty-to-populated
+       transition. Not exact for every possible count/time string, just
+       close enough that the common case doesn't newly cross the wrap
+       threshold the way an empty string reliably did. */
+    min-width:9em;
+    display:inline-block;
   }
   #dateLabelRow{
     display:flex;
@@ -1232,6 +1247,17 @@
        instead guarantees the full message is always readable; the date
        bar's own height already isn't fixed, so it grows to fit. */
     overflow-wrap:break-word;
+    /* CONFIRMED BUG (26/07/2026, Lighthouse): this starts EMPTY in the
+       markup (setDateLabel() only fills it in once the data fetch
+       resolves), so #dateLabelRow's height went from "just #monthSelect"
+       to "one line of text" the moment data arrived - a real, measured
+       layout shift (CLS ~0.09, just over the "good" <0.1 threshold).
+       1.2em reserves one line's worth of height up front (using `em` so
+       it tracks this rule's own font-size automatically, including the
+       smaller mobile override below - no separate number to keep in
+       sync there) so the row's height is already correct before any
+       text ever lands in it. */
+    min-height:1.2em;
   }
   #dateSliderWrap{
     position:relative;
@@ -1334,7 +1360,9 @@
     #todayBtn:hover{ border-color:var(--hi-vis); }
   }
 
-  #lastUpdated{ white-space:nowrap; color:var(--muted-grey); font-size:0.78rem; }
+  /* min-width reserves space for its typical populated text ("Updated
+     00:00") - same CLS reasoning as .count-pill just above. */
+  #lastUpdated{ white-space:nowrap; color:var(--muted-grey); font-size:0.78rem; min-width:6em; display:inline-block; }
 
   /* Custom cluster icons — colored per status so a cluster's color always
      matches what's actually inside it, same as single-marker pins */
@@ -4430,6 +4458,25 @@ function scheduleBackgroundRefresh(){
 }
 
 init();
+
+// Caches Leaflet/markercluster/the Poppins font locally after the first
+// visit, so a returning visitor's later loads skip re-downloading them -
+// see sw.js's own header comment for exactly what is (and deliberately
+// isn't) cached. Registered after init() rather than at the top of the
+// script - registration itself is cheap and async, but there's no reason
+// to give it a head start over the actual data fetch/map setup above.
+// Feature-detected since older browsers (and some privacy-focused ones)
+// don't support service workers at all - the site works identically
+// either way, this is purely a repeat-visit speed optimisation.
+if ('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(err => {
+    // Quiet failure on purpose, same reasoning as the background-refresh
+    // catch above - a visitor already has a fully working site without
+    // this; there's nothing useful to show them about a failed cache
+    // optimisation.
+    console.warn('Service worker registration failed:', err);
+  });
+}
 </script>
 </body>
 </html>

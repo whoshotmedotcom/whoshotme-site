@@ -64,6 +64,25 @@ def stub_tiles(ctx):
     ctx.route("**/*", handler)
 
 
+# CONFIRMED BUG (26/07/2026): after index.html gained a service worker
+# (see sw.js), test_index started intermittently getting a wall of REAL
+# 400 responses from api.os.uk on WebKit specifically - the exact
+# tile-server-usage-policy risk this file's own docstring already warns
+# about, just triggered a new way. Root-caused to a genuine
+# Playwright/WebKit interaction: once an active service worker is
+# controlling the page, context.route() interception (which is what
+# stub_tiles() above relies on) can silently stop catching some
+# subresource requests - even ones the service worker's own fetch
+# handler doesn't touch at all (os.uk isn't in sw.js's cacheable-origins
+# allowlist). Confirmed by reproducing with and without
+# service_workers="block" on an otherwise-identical context - blocked,
+# zero real network hits; allowed, dozens. Every context in this file
+# passes service_workers="block" for exactly this reason - this suite is
+# about interaction correctness, not exercising the service worker
+# itself (that's covered separately, see the scratch verification used
+# when sw.js was built), so there's no downside to blocking it here.
+
+
 def check(label, condition, detail=""):
     ok = bool(condition)
     results.append((ok, label, detail))
@@ -97,6 +116,7 @@ def test_index(p, device_name, engine):
         **device,
         geolocation={"latitude": 52.9548, "longitude": -1.1581},
         permissions=["geolocation"],
+        service_workers="block",
     )
     stub_tiles(ctx)
     page = ctx.new_page()
@@ -306,7 +326,7 @@ def test_index(p, device_name, engine):
 def test_add_shoot(p, device_name, engine):
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     page = ctx.new_page()
     print(f"\n--- add-shoot.html on {device_name} ({engine}) ---")
@@ -360,7 +380,7 @@ def test_empty_state_no_drift(p, device_name, engine):
     # listed on the day this happens to run.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_empty_csv(ctx)
     page = ctx.new_page()
@@ -424,7 +444,7 @@ def test_emoji_name_no_crash(p, device_name, engine):
     # exception propagated all the way up and killed the whole data load.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_emoji_name_csv(ctx)
     page = ctx.new_page()
@@ -481,7 +501,7 @@ def test_popup_clears_bottom_controls(p, device_name, engine):
     # either, wherever it currently lives.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_real_spot_csv(ctx)
     page = ctx.new_page()
@@ -550,7 +570,7 @@ def test_popup_clears_search_bar_during_banner(p, device_name, engine):
     # this one".
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_real_spot_csv(ctx)
     page = ctx.new_page()
@@ -610,7 +630,7 @@ def test_locate_button_top_right(p, device_name, engine):
     # .locateBtnWrap while a banner is active.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_real_spot_csv(ctx)
     page = ctx.new_page()
@@ -668,7 +688,7 @@ def test_aerial_attribution_no_overlap(p, device_name, engine):
     # reach the other corner.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     page = ctx.new_page()
     print(f"\n--- Aerial attribution doesn't overlap zoom control on {device_name} ({engine}) ---")
@@ -718,7 +738,7 @@ def test_no_stuck_hover_or_tap_highlight(p, device_name, engine):
     # of the sitewide rule.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
-    ctx = browser.new_context(**device)
+    ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
     route_real_spot_csv(ctx)
     page = ctx.new_page()
