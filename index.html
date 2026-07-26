@@ -515,16 +515,31 @@
   }
 
   /* Basemap switcher (Map / Aerial) — matches the zoom control's look.
-     The collapsed toggle is a circle (same treatment as the zoom
-     buttons); the expanded panel uses the app's standard panel radius
-     (12px, matching the popup/modal convention) rather than the tighter
-     6px it had before, which read as noticeably squarer than everything
-     else. */
+     The expanded panel uses the app's standard panel radius (12px,
+     matching the popup/modal convention) rather than the tighter 6px it
+     had before, which read as noticeably squarer than everything else.
+     Collapsed, it should read as a plain circle exactly like the
+     crosshair button next to it - but Leaflet's own container always
+     carries its own padding/background/radius regardless of collapsed
+     state, so left alone it rendered as a rounded-square box wrapped
+     around the circular toggle rather than a clean circle. The rule
+     below strips the container's own chrome while collapsed (the toggle
+     itself already supplies the circle, sizing and colour - see
+     .leaflet-control-layers-toggle); the panel look only applies once
+     .leaflet-control-layers-expanded is added. */
   .leaflet-control-layers{
     border:none !important;
+    color:var(--paper) !important;
+  }
+  .leaflet-control-layers:not(.leaflet-control-layers-expanded){
+    background:transparent !important;
+    box-shadow:none !important;
+    border-radius:50% !important;
+    padding:0 !important;
+  }
+  .leaflet-control-layers-expanded{
     box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
     background:var(--asphalt-light) !important;
-    color:var(--paper) !important;
     border-radius:12px !important;
     padding:6px 10px !important;
   }
@@ -2088,15 +2103,23 @@ const aerialLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/re
 });
 // Second reference overlay — Boundaries and Places has no road names, so
 // this adds Esri's "World Transportation" layer (roads, road names,
-// railways) on top of it. Same keyless endpoint family, same caveat.
+// railways). Same keyless endpoint family, same caveat.
 // No attribution option here either - see aerialLabelsLayer above.
+// CONFIRMED BUG (26/07/2026): this used to render ON TOP of
+// aerialLabelsLayer, so road lines and road-name text visibly covered
+// city/place-name labels underneath. Fixed by drawing roads BELOW the
+// labels layer (see the layerGroup order below) and giving the labels
+// layer a touch of transparency (opacity 0.92) so road lines are still
+// visible through it where the two overlap, instead of the roads layer
+// disappearing under an opaque labels layer.
 const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
   maxZoom: 19,
   minZoom: 0
 });
-// Grouped, roads on top, so the layer switcher's "Aerial" entry toggles all
-// three tile layers together as one basemap.
-const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
+aerialLabelsLayer.setOpacity(0.92);
+// Grouped, roads below labels (see comment above), so the layer switcher's
+// "Aerial" entry toggles all three tile layers together as one basemap.
+const aerialWithLabels = L.layerGroup([aerialLayer, aerialRoadsLayer, aerialLabelsLayer]);
 streetsLayer.addTo(map); // OpenStreetMap is the default basemap
 const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
@@ -2105,6 +2128,18 @@ const layersControl = L.control.layers({
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels
 }, null, { position: 'bottomright' }).addTo(map);
+// Leaflet's default collapsed layer control auto-expands on mouseenter for
+// any non-Android pointer (a built-in Leaflet convenience, not a bug), but
+// every other control on this map (crosshair, zoom, reset) is click-only -
+// the inconsistency read as the layers icon "opening itself" unexpectedly.
+// Removing these two listeners (same fn/context Leaflet itself bound them
+// with, so L.DomEvent.off's fn+context match correctly unbinds exactly
+// these) makes it click-to-open/click-to-close like everything else,
+// without touching Leaflet's own source.
+L.DomEvent.off(layersControl.getContainer(), {
+  mouseenter: layersControl._expandSafely,
+  mouseleave: layersControl.collapse
+}, layersControl);
 // Leaflet automatically greys out (disables) any base layer whose own
 // minZoom/maxZoom doesn't cover the current zoom - sensible in general,
 // but actively wrong here now that OS Roads (UK) deliberately has a

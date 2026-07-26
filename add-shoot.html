@@ -664,12 +664,24 @@
   .leaflet-control-zoom a:last-child{ border-bottom:none !important; }
   @media (hover: hover){ .leaflet-control-zoom a:hover{ background:var(--asphalt) !important; } }
 
-  /* Basemap switcher (Map / Aerial) — matches the zoom control's look */
+  /* Basemap switcher (Map / Aerial) — matches the zoom control's look.
+     See index.html for the full reasoning - collapsed, this should read
+     as a plain circle (the toggle below already supplies that), not a
+     rounded-square box around it, so the container's own chrome is
+     stripped while collapsed and only applied once expanded. */
   .leaflet-control-layers{
     border:none !important;
+    color:var(--paper) !important;
+  }
+  .leaflet-control-layers:not(.leaflet-control-layers-expanded){
+    background:transparent !important;
+    box-shadow:none !important;
+    border-radius:50% !important;
+    padding:0 !important;
+  }
+  .leaflet-control-layers-expanded{
     box-shadow:0 1px 5px rgba(0,0,0,0.4) !important;
     background:var(--asphalt-light) !important;
-    color:var(--paper) !important;
     border-radius:12px !important;
     padding:6px 10px !important;
   }
@@ -1538,7 +1550,11 @@ const aerialRoadsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/res
   maxZoom: 19,
   minZoom: 0
 });
-const aerialWithLabels = L.layerGroup([aerialLayer, aerialLabelsLayer, aerialRoadsLayer]);
+// See index.html for the full reasoning - roads drawn on top of labels
+// covered place names, so roads go underneath and labels get a touch of
+// transparency (0.92) so road lines still show through where they overlap.
+aerialLabelsLayer.setOpacity(0.92);
+const aerialWithLabels = L.layerGroup([aerialLayer, aerialRoadsLayer, aerialLabelsLayer]);
 streetsLayer.addTo(map); // OpenStreetMap is the default basemap, matching index.html
 const layersControl = L.control.layers({
   // 'OS Light': osLightLayer,   — temporarily disabled, see definition above
@@ -1547,6 +1563,13 @@ const layersControl = L.control.layers({
   'OpenStreetMap': streetsLayer,
   'Aerial': aerialWithLabels
 }, null, { position: 'topright' }).addTo(map);
+// See index.html for the full reasoning - Leaflet's default collapsed
+// layer control auto-expands on mouseenter, but every other control here
+// is click-only, so unbind the same listeners Leaflet bound to match.
+L.DomEvent.off(layersControl.getContainer(), {
+  mouseenter: layersControl._expandSafely,
+  mouseleave: layersControl.collapse
+}, layersControl);
 // Leaflet auto-disables base layers whose zoom range doesn't cover the
 // current zoom - wrong here now that OS Roads (UK) has a tighter minZoom
 // than OSM/Aerial. Overriding _checkDisabledLayers doesn't work (Leaflet
