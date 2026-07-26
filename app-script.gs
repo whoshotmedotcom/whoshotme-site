@@ -437,7 +437,21 @@ function doPost(e) {
       return jsonOut({ error: 'Not authorized' });
     }
 
-    if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website, body.logo));
+    // Wrapped in withSpotsCacheRefresh (below) - Photographer Name/Logo
+    // URL/Website URL all appear in getPublicSpots()'s own `photographers`
+    // array (see that function's comment), so a profile save changes what
+    // the public spots cache should contain exactly the same way a shoot/
+    // gallery write does. CONFIRMED MISSING 26/07/2026: this wrapper was
+    // never added when updateProfile was first written, so a name/website/
+    // logo change updated the live sheet correctly but never refreshed the
+    // public cache - found by checking the cache after a real profile save
+    // (a new logo) and seeing it still served the old stale photographer
+    // details, only the sheet itself (read via getMyShoots) had the
+    // correct new value. Relied on an unrelated shoot/gallery write or the
+    // 15-minute safety-net trigger to eventually catch up, which is
+    // exactly the kind of silent staleness this whole cache mechanism was
+    // built to avoid.
+    if (action === 'updateProfile') return jsonOut(withSpotsCacheRefresh(updateProfile(body.p, body.name, body.website, body.logo)));
     if (action === 'requestEmailChange') return jsonOut(requestEmailChange(body.p, body.newEmail));
     // Wrapped in withSpotsCacheRefresh (below) - these six are exactly
     // the actions that change what getPublicSpots()/the spots cache file
@@ -1494,8 +1508,13 @@ function getPublicSpots() {
 // Regenerated:
 //   1. Synchronously, as part of the SAME request, immediately after any
 //      write that changes it succeeds - see withSpotsCacheRefresh,
-//      wrapping the six shoot/gallery-mutating actions in doPost. A
-//      deliberate choice over decoupling this into a delayed trigger:
+//      wrapping the six shoot/gallery-mutating actions plus updateProfile
+//      (Name/Logo/Website all appear in getPublicSpots()'s own output
+//      too, and updateProfile was missing this wrapper entirely until a
+//      real profile save - see doPost's own comment - was confirmed
+//      leaving the public cache serving stale photographer details) in
+//      doPost. A deliberate choice over decoupling this into a delayed
+//      trigger:
 //      Apps Script's time-based triggers are a polling scheduler, not a
 //      real-time one - even a trigger requested "a few seconds from now"
 //      commonly doesn't actually fire for something like a minute. Given
