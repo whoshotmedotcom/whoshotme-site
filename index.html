@@ -174,15 +174,20 @@
      switcher and commonly picked, so its tile server gets an early
      connection too - same reasoning as the other two preconnects above. -->
 <link rel="preconnect" href="https://api.os.uk">
-<!-- Preload (not preconnect) for the two scripts themselves - starts the
-     actual download in parallel with the rest of the page parsing,
-     without changing WHEN they execute (still only runs from the
-     script tag just before first use, near the bottom of body - see the
-     comment above). Lighthouse measured ~2s combined otherwise spent
-     purely on network round-trip discovery once the browser finally
-     reaches that script tag. -->
+<!-- Preload (not preconnect) for Leaflet itself - starts the actual
+     download in parallel with the rest of the page parsing, without
+     changing WHEN it executes (still only runs from the script tag just
+     before first use, near the bottom of body - see the comment above).
+     Lighthouse measured ~2s otherwise spent purely on network round-trip
+     discovery once the browser finally reaches that script tag.
+     leaflet.markercluster.min.js used to be preloaded/loaded here too,
+     unconditionally - CHANGED 26/07/2026: it's now only fetched at all
+     once the initial data load shows enough markers to actually need
+     clustering (see loadMarkerClusterScript() / CLUSTERING_MARKER_THRESHOLD
+     near the clustering code below), since most page loads currently have
+     far fewer shoots live than that. Nothing to preload here anymore for
+     a script that might not load at all. -->
 <link rel="preload" as="script" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
-<link rel="preload" as="script" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js">
 <style>
   :root{
     --asphalt:#1c1e22;
@@ -1583,7 +1588,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 
 <script>
 // =========================================================================
@@ -2706,7 +2710,60 @@ document.head.appendChild(styleTag);
 // single pin's color does. Without this, a cluster of two past shoots
 // could end up colored live-green just because that happened to be
 // this group's fixed color, which is misleading.
+//
+// CHANGED 26/07/2026: leaflet.markercluster.min.js used to load
+// unconditionally on every visit, just to be ready in case clustering was
+// needed - but it's a real, separate ~25KB-ish (gzip'd) dependency (see
+// lighthousetodo.txt) that most page loads never actually needed,
+// because most page loads currently have far fewer live shoots than
+// would ever genuinely overlap. It's now only fetched once the initial
+// data load shows enough spots to plausibly need it - see
+// setUpMarkerGroups() below, called from init() once the first fetch's
+// spot count is known. Below the threshold, `clusterGroups` holds plain
+// L.layerGroup()s instead: individual markers already carry their own
+// `pane` option (see render()), which is what actually controls their
+// live/soon/past stacking order - clusterPane below only matters for the
+// cluster ICON itself, which a plain layer group never creates - so
+// swapping the group type doesn't touch anything else that reads
+// clusterGroups (addLayer/clearLayers/eachLayer exist on both).
+// Decided ONCE from the first fetch's raw spot count and kept for the
+// rest of the session rather than re-evaluated on every background
+// refresh - if a session starts small and later crosses the threshold
+// (a photographer adds enough shoots while a visitor's tab is already
+// open), the worst case is a few overlapping unclustered pins, not a
+// correctness bug, and not worth swapping cluster group types on the
+// fly for.
 // =========================================================================
+const CLUSTERING_MARKER_THRESHOLD = 15;
+
+function loadMarkerClusterScript(){
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Failed to load leaflet.markercluster.min.js'));
+    document.head.appendChild(script);
+  });
+}
+
+// Populates the module-level `clusterGroups` (declared below, still
+// referenced the same way everywhere else in this file) and adds them to
+// the map. Called once from init(), after the first fetch resolves and
+// before the first render() call.
+async function setUpMarkerGroups(spotCount){
+  if (spotCount >= CLUSTERING_MARKER_THRESHOLD){
+    await loadMarkerClusterScript();
+    clusterGroups = {
+      live: makeClusterGroup('cluster-live', 'pane-live'),
+      soon: makeClusterGroup('cluster-soon', 'pane-soon'),
+      past: makeClusterGroup('cluster-past', 'pane-past')
+    };
+  } else {
+    clusterGroups = { live: L.layerGroup(), soon: L.layerGroup(), past: L.layerGroup() };
+  }
+  Object.values(clusterGroups).forEach(group => map.addLayer(group));
+}
+
 function makeClusterGroup(statusClass, pane){
   return L.markerClusterGroup({
     maxClusterRadius: 28, // only group markers that are genuinely on top of each other
@@ -2744,12 +2801,10 @@ function makeClusterGroup(statusClass, pane){
   });
 }
 
-const clusterGroups = {
-  live: makeClusterGroup('cluster-live', 'pane-live'),
-  soon: makeClusterGroup('cluster-soon', 'pane-soon'),
-  past: makeClusterGroup('cluster-past', 'pane-past')
-};
-Object.values(clusterGroups).forEach(group => map.addLayer(group));
+// Populated by setUpMarkerGroups() in init(), once the first fetch's spot
+// count is known - see the CLUSTERING comment above for why this can't
+// just be created synchronously up front the way it used to be.
+let clusterGroups;
 
 // =========================================================================
 // DATE AXIS — lets riders scrub back through past shoots (where they'll
@@ -4228,6 +4283,7 @@ async function init(){
   try {
     const result = await loadSpotsInitial();
     spots = result.spots;
+    await setUpMarkerGroups(spots.length);
     updateLastUpdated();
     const wentToSharedShoot = applySharedShootFromUrl();
     if (!wentToSharedShoot) {
