@@ -893,6 +893,29 @@
     box-shadow:0 0 0 2px var(--hi-vis);
   }
   #searchInput::placeholder{ color:var(--muted-grey); }
+  /* REPORTED 26/07/2026: a grey box appears while typing in the search
+     field, disappearing once a result is picked or Enter is pressed -
+     the browser's own autofill highlight, which paints an opaque
+     background directly over the input (autocomplete="off" doesn't stop
+     this in every browser) and can't be overridden with a normal
+     background rule - only masked with this box-shadow trick. Especially
+     visible here since #searchInput itself is deliberately transparent
+     (see above) so its parent #searchBox's own background shows through
+     normally - the browser's autofill paint sits on TOP of that,
+     breaking the illusion. var(--asphalt) is a solid stand-in for
+     #searchBox's rgba(28,30,34,0.95) - close enough to be invisible
+     against it, and box-shadow can't use an alpha-blended colour the way
+     background can since there's nothing behind it to blend with in the
+     same way. Same fix as add-shoot.html/become-photographer.html's
+     .field inputs - see either's comment for the fuller mechanism. */
+  #searchInput:-webkit-autofill,
+  #searchInput:-webkit-autofill:hover,
+  #searchInput:-webkit-autofill:focus{
+    -webkit-text-fill-color: var(--paper);
+    -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
+  }
   #searchClear{
     background:transparent;
     border:none;

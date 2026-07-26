@@ -267,6 +267,19 @@
     outline:none;
     border-color:var(--hi-vis);
   }
+  /* Same autofill-theming fix as add-shoot.html's matching rule - see its
+     comment for the full reasoning. Even more likely to trigger here
+     than there: nameInput/emailInput/websiteInput below all set explicit
+     autocomplete="name"/"email"/"url" hints, which makes a browser MORE
+     confident about autofilling and highlighting them, not less. */
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus{
+    -webkit-text-fill-color: var(--paper);
+    -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
+  }
   .field small{
     display:block;
     color:var(--muted-grey);

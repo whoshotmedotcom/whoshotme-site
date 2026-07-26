@@ -517,6 +517,30 @@
     outline:none;
     border-color:var(--hi-vis);
   }
+  /* CONFIRMED 26/07/2026: Location Name, Name/page name, Website, and
+     Logo link all reported as "not themed" - not actually a CSS bug in
+     the rule above (verified via screenshot: correct dark background,
+     no saved data). The real cause is the browser's own autofill
+     highlighting - Chrome/Edge/Safari paint an opaque background over an
+     autofilled input directly, which normal background-color can't
+     override at all, only mask via this box-shadow trick. Exactly
+     explains the specific fields reported: plain text inputs that look
+     like a name/URL/address to the browser's autofill heuristics, while
+     Description (a textarea) and the datetime fields, which aren't
+     autofill targets, were never mentioned as broken. inset box-shadow
+     large enough to fully cover the input paints over the browser's own
+     fill colour with this theme's background instead; the very long
+     transition delays that from visibly flashing pale before it does.
+     -webkit-text-fill-color is needed too - autofill also overrides
+     plain text color, which a normal `color` rule can't touch either. */
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus{
+    -webkit-text-fill-color: var(--paper);
+    -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
+  }
   .field textarea{ resize:vertical; min-height:60px; }
   .two-col{
     display:grid;
@@ -568,6 +592,20 @@
     font-family:inherit;
   }
   #locationSearchInput::placeholder{ color:#7c8088; }
+  /* Same grey-box-while-typing autofill fix as index.html's #searchInput
+     - see its comment for the full mechanism. Identical situation here:
+     a deliberately transparent input sitting inside an opaquely-themed
+     container (#locationSearchRow, solid var(--asphalt) this time, not
+     an rgba mix), so the browser's own autofill paint is exactly as
+     visible against it. */
+  #locationSearchInput:-webkit-autofill,
+  #locationSearchInput:-webkit-autofill:hover,
+  #locationSearchInput:-webkit-autofill:focus{
+    -webkit-text-fill-color: var(--paper);
+    -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
+  }
   #locationSearchClear{
     background:transparent;
     border:none;
