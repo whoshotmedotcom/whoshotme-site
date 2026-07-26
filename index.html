@@ -407,14 +407,6 @@
      the moment a manual pan/zoom makes it actually actionable, so it
      visually "wakes up" right when it becomes useful instead of sitting
      unnoticed the whole time. */
-  /* Reset view + My location's shared row - see the comment on
-     RecenterControl in the JS for why these two share one control
-     instead of stacking as separate ones. */
-  .bottomleft-controls-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
   .recenter-btn{
     padding:6px 12px;
     /* min-height:44px (+ flex centering) rather than relying on padding
@@ -461,13 +453,12 @@
     height:44px;
     border-radius:50%;
     background:var(--asphalt-light);
+    color:var(--hi-vis);
     border:2px solid rgba(0,0,0,0.2);
     box-shadow:0 1px 5px rgba(0,0,0,0.4);
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:1rem;
-    line-height:1;
     padding:0;
     cursor:pointer;
     transition:background 0.2s ease;
@@ -675,6 +666,17 @@
   /* Set via JS (setBannerActive()) to the shown banner's real measured
      height, so this works whether the message wraps to one line or two. */
   #mapWrap.bannerActive #searchWrap{ top:calc(var(--bannerHeight, 40px) + 12px); }
+  /* CONFIRMED BUG (26/07/2026): the location-consent/photographer-filter
+     banners push #searchWrap down (above) but never touched the "My
+     location" button's own top-right position, since that's a native
+     Leaflet control (positioned via Leaflet's own top:0/right:0 corner
+     container, not #searchWrap) - and the banner's z-index (900) is
+     LOWER than Leaflet's controls (1000), so the button rendered
+     visually on top of the banner's own buttons, physically blocking
+     taps on "Yes, use it"/dismiss. Same fix as #searchWrap above, just
+     as an added margin since Leaflet controls are positioned via
+     margin within their corner container rather than top/left. */
+  #mapWrap.bannerActive .locateBtnWrap{ margin-top:calc(var(--bannerHeight, 40px) + 2px); }
   #clearPhotographerFilterBtn, #dismissDefaultModeBtn, #useMyLocationBtn, #dismissLocationPromptBtn{
     background:var(--asphalt);
     color:var(--hi-vis);
@@ -1351,7 +1353,12 @@
     header p{ font-size:0.74rem; }
     #aboutLink{ font-size:0.78rem; }
 
-    #searchWrap{ max-width:none; left:8px; right:8px; top:8px; }
+    /* right:64px (not the usual 8px) leaves room for the "My location"
+       button sitting at top-right (44px + Leaflet's own ~10px control
+       margin) - on desktop #searchWrap's max-width already stops well
+       short of the right edge so this isn't needed there, but on mobile
+       it otherwise stretches edge-to-edge and would sit underneath it. */
+    #searchWrap{ max-width:none; left:8px; right:64px; top:8px; }
     /* Was 3px/7px (37px tall total) - trimmed down to match the other
        compact mobile controls' visual scale. Independent of the map
        control buttons' own min-height:44px touch-target floor below -
@@ -2187,21 +2194,36 @@ map.on('movestart zoomstart', () => {
   if (!suppressInteractionTracking) setUserHasMovedMap(true);
 });
 
-// Reset view and My location share a single control (one row, laid out
-// side by side) rather than two separate stacked controls - each one
-// used to add its own ~44px + 10px-margin row to the bottom-left corner
-// stack, and on a short mobile map viewport that stack (plus the zoom
-// control above it) left barely any real height for a popup to open in
-// without autoPan's reserved padding eating almost the entire map area.
-// Combining them into one row cuts a full row + margin back out of that
-// stack - see getPopupAutoPanOptions()'s comment for the full picture.
+// A plain crosshair (ring + centre dot + 4 tick marks) - Leaflet core
+// ships no locate/geolocation control or icon at all (zoom and the
+// layers switcher are the only built-in ones); the crosshair convention
+// is from the third-party leaflet.locatecontrol plugin, not something
+// bundled here to reuse. stroke="currentColor" so it follows whatever
+// color the button itself is styled with, same as every other icon on
+// the site being theme-colored rather than a fixed asset.
+const CROSSHAIR_ICON_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+  <circle cx="12" cy="12" r="6"></circle>
+  <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"></circle>
+  <line x1="12" y1="1" x2="12" y2="5"></line>
+  <line x1="12" y1="19" x2="12" y2="23"></line>
+  <line x1="1" y1="12" x2="5" y2="12"></line>
+  <line x1="19" y1="12" x2="23" y2="12"></line>
+</svg>`;
+
+// Reset view and My location briefly shared a single bottom-left row
+// (25/07/2026) purely to keep that corner's stack short enough for
+// popups to have somewhere to open without autoPan's reserved padding
+// eating almost the entire map area on a short mobile viewport. My
+// location has since moved to its own control at top-right instead (see
+// LocateControl below) - by the site owner's request, after finding its
+// old bottom-left spot awkward - which achieves the same height saving
+// a different way (removing a row from that corner entirely, rather
+// than sharing one), so Reset view is back to being the only thing here.
 const RecenterControl = L.Control.extend({
   options: { position: 'bottomleft' },
   onAdd: function(){
-    const wrap = L.DomUtil.create('div', 'bottomleft-controls-row');
-    L.DomEvent.disableClickPropagation(wrap);
-
-    const btn = L.DomUtil.create('button', 'recenter-btn', wrap);
+    const btn = L.DomUtil.create('button', 'recenter-btn');
+    L.DomEvent.disableClickPropagation(btn);
     // Text label rather than an icon: a crosshair reads as "my location"
     // and corner-brackets reads as "fullscreen" — neither actually says
     // "show all current results", so a plain label is the clearest option.
@@ -2215,16 +2237,32 @@ const RecenterControl = L.Control.extend({
       render();
     });
     recenterBtnEl = btn;
-
-    const locateBtn = L.DomUtil.create('button', 'locate-btn', wrap);
-    locateBtn.textContent = '🧭';
-    locateBtn.title = "Center the map on your current location (your browser will ask permission first)";
-    locateBtn.addEventListener('click', () => findMyLocation(locateBtn));
-
-    return wrap;
+    return btn;
   }
 });
 map.addControl(new RecenterControl());
+
+// My location - top-right (25/07/2026, moved from bottom-left by
+// request). Sits in the same top strip as the search box rather than
+// Leaflet's default top:10px/right:10px corner margin, so it lines up
+// visually instead of floating just above it with a gap - see
+// #locateBtnWrap below. A crosshair reads as "locate me" without a text
+// label; Leaflet itself has no built-in locate control/icon at all
+// (that's conventionally a third-party plugin, not core Leaflet) so
+// this is a plain inline SVG rather than borrowing a bundled asset.
+const LocateControl = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd: function(){
+    const wrap = L.DomUtil.create('div', 'locateBtnWrap');
+    L.DomEvent.disableClickPropagation(wrap);
+    const btn = L.DomUtil.create('button', 'locate-btn', wrap);
+    btn.innerHTML = CROSSHAIR_ICON_SVG;
+    btn.title = "Center the map on your current location (your browser will ask permission first)";
+    btn.addEventListener('click', () => findMyLocation(btn));
+    return wrap;
+  }
+});
+map.addControl(new LocateControl());
 
 // =========================================================================
 // "MY LOCATION" — one-shot browser geolocation lookup, entirely
@@ -2277,11 +2315,6 @@ function findMyLocation(btn){
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
   );
 }
-
-// "My location" (circular icon-only button matching the layer switcher's
-// visual language - a compass glyph reads as "locate me" on its own
-// without needing a text label) now lives inside RecenterControl above,
-// sharing one row with "Reset view" instead of its own separate control.
 
 // Automatic on-load offer to center the map on the visitor's location -
 // same underlying browser permission dialog, same one-shot

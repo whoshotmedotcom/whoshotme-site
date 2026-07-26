@@ -317,6 +317,26 @@ close when it shouldn't, closes via every path a user would expect.
        viewport testing confirmed no remaining overlap or layout
        breakage. See git log 25/07/2026 for full detail on each.
 
+       Follow-up (26/07/2026): site owner disliked "My location" sharing
+       the bottom-left row with Reset view and asked for it to move to
+       top-right instead, plus a crosshair icon in place of the compass
+       emoji (Leaflet core has no built-in locate control/icon at all -
+       that convention is from the third-party leaflet.locatecontrol
+       plugin, not something bundled here - so this is a plain inline
+       SVG). Moved it to its own control at top-right, which achieves
+       the same bottom-left height saving a different way (removing the
+       row entirely rather than sharing one). This surfaced ANOTHER real
+       bug immediately: the location-consent/photographer-filter banners
+       push #searchWrap down but never touched a native Leaflet control's
+       position, and the banner's z-index (900) is lower than Leaflet's
+       controls (1000) - so the new button rendered on top of the
+       banner's own "Yes, use it"/dismiss buttons, physically blocking
+       taps on them. Fixed with a matching push on the button while a
+       banner is active. Also wrapped device-tests.py's own hardcoded
+       CSV dates in a today-relative helper after this exact staleness
+       (a date aging into the past mid-session) caused a confusing false
+       trail while investigating. Full suite now 86/86.
+
 =============================================================================
 6. SITE-SPECIFIC DATA EDGE CASES
 =============================================================================

@@ -26,6 +26,7 @@ Starts its own local static server on port 8802 if one isn't already
 running there. Exits non-zero if anything failed, so it's usable as a
 gate as well as a manual check.
 """
+import datetime
 import http.server
 import re
 import socket
@@ -386,9 +387,17 @@ def test_empty_state_no_drift(p, device_name, engine):
     browser.close()
 
 
+# Relative to "today" (not a hardcoded date) - a stale past date here
+# would make the default "Upcoming" view show zero results, potentially
+# triggering an unrelated banner (e.g. defaultModeBanner) that changes
+# what these tests actually observe. Confirmed the hard way: a
+# previously-hardcoded date here caused exactly that confusion once it
+# aged into the past.
+_TODAY = datetime.date.today().isoformat()
+
 EMOJI_NAME_CSV = (
     "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
-    "🏍️ Emoji Photog,,,Test Spot,,53.1,-1.6,2026-07-25 00:00,2026-07-25 23:59,S1,emojiphotog\r\n"
+    f"🏍️ Emoji Photog,,,Test Spot,,53.1,-1.6,{_TODAY} 00:00,{_TODAY} 23:59,S1,emojiphotog\r\n"
 )
 
 
@@ -433,7 +442,7 @@ def test_emoji_name_no_crash(p, device_name, engine):
 
 REAL_SPOT_CSV = (
     "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
-    "Real Photog,,https://example.com,Winnats Pass - top of the climb,Shooting bikes coming up the hill all afternoon - wave if you see me!,53.1,-1.6,2026-07-25 00:00,2026-07-25 23:59,S1,realphotog\r\n"
+    f"Real Photog,,https://example.com,Winnats Pass - top of the climb,Shooting bikes coming up the hill all afternoon - wave if you see me!,53.1,-1.6,{_TODAY} 00:00,{_TODAY} 23:59,S1,realphotog\r\n"
 )
 
 
@@ -454,17 +463,22 @@ def test_popup_clears_bottom_controls(p, device_name, engine):
     # viewport (~372px of actual map height on an iPhone 14, once the
     # header/search/filters/date bar above it are accounted for), a
     # popup with real content (logo, description, directions buttons)
-    # rendered underneath the bottom-left "Reset view"/"My location"
-    # controls - both when opening a marker's popup directly and when
-    # selecting a search result. Two compounding root causes, both fixed:
-    # (1) Leaflet's cached map size was stale (measured before the page's
-    # real layout had settled, ~50px taller than the map's true height),
-    # feeding wrong numbers into every size-dependent calculation
-    # including autoPan - fixed with an explicit map.invalidateSize()
-    # once initial load settles; (2) the bottom-left control stack itself
-    # was tall enough (3 stacked rows) that even correct autoPan math
-    # left barely any room for a popup on a short viewport - fixed by
-    # combining Reset view + My location into one row instead of two.
+    # rendered underneath the bottom-left "Reset view" control - both
+    # when opening a marker's popup directly and when selecting a search
+    # result. Two compounding root causes, both fixed: (1) Leaflet's
+    # cached map size was stale (measured before the page's real layout
+    # had settled, ~50px taller than the map's true height), feeding
+    # wrong numbers into every size-dependent calculation including
+    # autoPan - fixed with an explicit map.invalidateSize() once initial
+    # load settles; (2) the bottom-left control stack itself was tall
+    # enough that even correct autoPan math left barely any room for a
+    # popup on a short viewport - fixed at the time by combining Reset
+    # view + My location into one row (My location has since moved to
+    # its own control at top-right instead, 26/07/2026, by request - see
+    # test_locate_button_top_right below - which achieves the same
+    # height saving a different way). .locate-btn is still checked here
+    # too since nothing about ITS position should ever overlap a popup
+    # either, wherever it currently lives.
     device = p.devices[device_name]
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device)
@@ -584,6 +598,62 @@ def test_popup_clears_search_bar_during_banner(p, device_name, engine):
     browser.close()
 
 
+def test_locate_button_top_right(p, device_name, engine):
+    # Regression test for a confirmed bug found while moving "My location"
+    # from the bottom-left row to its own control at top-right (26/07/2026,
+    # by request): the location-consent/photographer-filter banners push
+    # #searchWrap down (via --bannerHeight) but never touched a native
+    # Leaflet control's position, and the banner's z-index (900) is LOWER
+    # than Leaflet's controls (1000) - so the button rendered visually on
+    # top of the banner's own "Yes, use it"/dismiss buttons, physically
+    # blocking taps on them. Fixed with a matching margin-top push on
+    # .locateBtnWrap while a banner is active.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_real_spot_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- locate button top-right on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+
+    def rects_overlap(a, b):
+        return not (
+            a["x"] + a["width"] < b["x"] or a["x"] > b["x"] + b["width"]
+            or a["y"] + a["height"] < b["y"] or a["y"] > b["y"] + b["height"]
+        )
+
+    banner_showing = page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')")
+    check("location banner is showing for this test", banner_showing)
+    banner_box = page.eval_on_selector("#locationPromptBanner", "el => el.getBoundingClientRect()")
+    locate_box_during_banner = page.eval_on_selector(".locate-btn", "el => el.getBoundingClientRect()")
+    check(
+        "locate button doesn't overlap the banner's own buttons while it's showing",
+        not rects_overlap(banner_box, locate_box_during_banner),
+        f"banner={banner_box} locate={locate_box_during_banner}",
+    )
+    check("locate button is a real 44x44px touch target", locate_box_during_banner["width"] >= 44 and locate_box_during_banner["height"] >= 44)
+
+    page.tap("#dismissLocationPromptBtn")
+    page.wait_for_timeout(300)
+    locate_box = page.eval_on_selector(".locate-btn", "el => el.getBoundingClientRect()")
+    search_box = page.eval_on_selector("#searchWrap", "el => el.getBoundingClientRect()")
+    check(
+        "locate button moves back up once the banner is dismissed",
+        locate_box["top"] < locate_box_during_banner["top"],
+        f"during={locate_box_during_banner['top']} after={locate_box['top']}",
+    )
+    check(
+        "locate button doesn't overlap the search bar",
+        not rects_overlap(locate_box, search_box),
+        f"locate={locate_box} search={search_box}",
+    )
+    ctx.close()
+    browser.close()
+
+
 def test_aerial_attribution_no_overlap(p, device_name, engine):
     # Regression test for a confirmed bug: Aerial's basemap is really 3
     # stacked layers (imagery + 2 label/road overlays), each of which had
@@ -642,6 +712,7 @@ def main():
                 test_emoji_name_no_crash(p, device_name, engine)
                 test_popup_clears_bottom_controls(p, device_name, engine)
                 test_popup_clears_search_bar_during_banner(p, device_name, engine)
+                test_locate_button_top_right(p, device_name, engine)
                 test_aerial_attribution_no_overlap(p, device_name, engine)
     finally:
         if httpd:
