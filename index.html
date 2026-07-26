@@ -140,10 +140,32 @@
   also how the map itself gets its shoot/gallery data (see
   loadSpotsFromSheet() and the LIVE DATA comment above). No longer
   optional the way it once was for stats-only use - the map can't load
-  without it.
+  without it (PUBLIC_SPOTS_JSON_URL below is tried first, but this is
+  still the fallback if that fails, so it's still required either way).
 ===================================================================== -->
 <script>
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
+</script>
+
+<!-- ====================================================================
+  ADDED 26/07/2026 (see the LIVE DATA comment above): a live Lighthouse
+  comparison after the switch to APPS_SCRIPT_URL above showed every page
+  load spinning up a real Apps Script execution cost several seconds of
+  load time (LCP settled around 6.3-6.8s, versus as low as 5.2s under
+  the old CSV export). This is a plain static JSON file in Google Drive
+  that app-script.gs keeps up to date (see regenerateSpotsCache/
+  installSpotsCacheTrigger there) - fetching it costs no Apps Script
+  execution at all, so it's tried FIRST; APPS_SCRIPT_URL above is only
+  used as a fallback if this fetch fails for any reason (network error,
+  the file not existing yet, a stale/corrupt cache - see
+  loadSpotsFromSheet() below for the actual fallback logic).
+  Get this URL by running installSpotsCacheTrigger() once in the Apps
+  Script editor (see app-script.gs's SETUP notes) and copying the URL it
+  logs. Leave the placeholder in place to skip straight to the live
+  endpoint every time (functionally fine, just without the speed win).
+===================================================================== -->
+<script>
+  const PUBLIC_SPOTS_JSON_URL = 'PASTE_YOUR_SPOTS_CACHE_URL_HERE';
 </script>
 
 <!-- Leaflet + markercluster CSS, inlined rather than three separate
@@ -4082,11 +4104,35 @@ function hideLoadingState(){
 // worth retrying rather than trusting blindly either way. See
 // loadSpotsInitial() and scheduleBackgroundRefresh() below for how that
 // distinction gets used.
-async function loadSpotsFromSheet(){
-  const res = await fetch(`${APPS_SCRIPT_URL}?action=spots`, { cache: 'no-store' });
+// Fetch + basic validity checks shared by both the cache-file attempt and
+// the live-endpoint fallback in loadSpotsFromSheet() below - a thrown
+// error here (network failure, non-2xx, unparseable JSON, or an explicit
+// {error:...} body) is exactly what tells loadSpotsFromSheet() to give up
+// on this URL and move on to the next one.
+async function fetchSpotsJson(url){
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function loadSpotsFromSheet(){
+  let data;
+  try {
+    if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
+      throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
+    }
+    data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+  } catch (err) {
+    // Quiet on purpose (console.warn, not .error) - falling back to the
+    // live endpoint is the expected, designed-for behaviour whenever the
+    // cache file is unset, stale, or briefly unreachable, not a real
+    // problem worth alarming anyone about. See the PUBLIC_SPOTS_JSON_URL
+    // comment near the top of this file for the full reasoning.
+    console.warn('Public spots cache unavailable, falling back to the live endpoint:', err);
+    data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+  }
   // getPublicSpots() (app-script.gs) sends combinedCount/galleriesCount
   // alongside the arrays themselves, computed from the same loop that
   // built them - a mismatch here can only mean something corrupted the

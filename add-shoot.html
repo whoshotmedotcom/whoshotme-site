@@ -1116,12 +1116,15 @@
   function senderEmailDisplay(){
     return ['whoshotmedotcom', '@', 'gmail.com'].join('');
   }
-  // Reads from the same APPS_SCRIPT_URL above (action=spots) — used here
-  // only for the nearby-photographer awareness on the map and the
-  // proximity warning (see PROXIMITY CHECK below), never written to from
-  // this page. CHANGED 26/07/2026: used to be its own separate CSV feed
-  // (COMBINED_CSV_URL) - see index.html's LIVE DATA comment for why that
-  // moved to the same Apps Script endpoint index.html now reads from.
+  // Reads from PUBLIC_SPOTS_JSON_URL below first, falling back to
+  // APPS_SCRIPT_URL above (action=spots) - used here only for the
+  // nearby-photographer awareness on the map and the proximity warning
+  // (see PROXIMITY CHECK below), never written to from this page.
+  // CHANGED 26/07/2026: used to be its own separate CSV feed
+  // (COMBINED_CSV_URL) - see index.html's LIVE DATA comment for that
+  // history and PUBLIC_SPOTS_JSON_URL's own comment for the cache-file
+  // reasoning.
+  const PUBLIC_SPOTS_JSON_URL = 'PASTE_YOUR_SPOTS_CACHE_URL_HERE';
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -1341,13 +1344,29 @@ function haversineMeters(lat1, lng1, lat2, lng2){
 // abort the whole batch and silently wipe out every other photographer.
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 
+// Same cache-first-with-fallback pattern as index.html's loadSpotsFromSheet()
+// - see PUBLIC_SPOTS_JSON_URL's comment above for the full reasoning.
+async function fetchSpotsJson(url){
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 let otherPhotographersShoots = [];
 async function loadOtherPhotographersShoots(){
   try {
-    const res = await fetch(`${APPS_SCRIPT_URL}?action=spots`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    let data;
+    try {
+      if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
+        throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
+      }
+      data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+    } catch (err) {
+      console.warn('Public spots cache unavailable, falling back to the live endpoint:', err);
+      data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+    }
     const rows = data.combined || [];
     const photographers = data.photographers || [];
     // Same integrity checks as index.html's loadSpotsFromSheet() - see

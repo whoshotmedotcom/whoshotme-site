@@ -1,7 +1,7 @@
 /**
  * WHO SHOT ME — backend script for the Google Sheet.
  *
- * Does six jobs:
+ * Does seven jobs:
  *   1. Auto-stamps a permanent Shoot ID onto any row a photographer edits
  *      directly in the sheet (same as before).
  *   2. Runs as a Web App so add-shoot.html can create/edit/delete shoots,
@@ -34,6 +34,14 @@
  *      add-shoot.html both read from this now instead of the CSV feeds -
  *      see getPublicSpots()'s own comment for exactly what it returns
  *      and why.
+ *   7. Caches that same public data as a JSON file in Google Drive (see
+ *      regenerateSpotsCache, installSpotsCacheTrigger) — added 26/07/2026
+ *      after a live Lighthouse comparison showed every page load
+ *      spinning up a real Apps Script execution (job 6 above) cost
+ *      several seconds of load time versus a plain static file fetch.
+ *      Regenerated on every write and via a 15-minute safety-net
+ *      trigger; the live endpoint from job 6 stays in place as the
+ *      client's fallback if the cache file is ever unreachable.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -108,6 +116,12 @@
  *    (see the migration guide), set PHOTOGRAPHERS_SPREADSHEET_ID below to
  *    that spreadsheet's ID. Leave it blank if Photographers still lives in
  *    this same spreadsheet.
+ * 7. Select installSpotsCacheTrigger from the function dropdown next to
+ *    "Run", and run it once - see its own comment for what it does.
+ *    Grant permissions if asked (this now includes Google Drive access).
+ *    Check View > Executions (or Logs) afterwards for the cache file's
+ *    public URL, and paste that into PUBLIC_SPOTS_JSON_URL in both
+ *    index.html and add-shoot.html.
  *
  * ADDING A NEW PHOTOGRAPHER:
  * Fully self-service via become-photographer.html now, no action needed
@@ -402,12 +416,16 @@ function doPost(e) {
 
     if (action === 'updateProfile') return jsonOut(updateProfile(body.p, body.name, body.website, body.logo));
     if (action === 'requestEmailChange') return jsonOut(requestEmailChange(body.p, body.newEmail));
-    if (action === 'createShoot') return jsonOut(createShoot(body.p, body.shoot));
-    if (action === 'updateShoot') return jsonOut(updateShoot(body.p, body.shootId, body.shoot));
-    if (action === 'deleteShoot') return jsonOut(deleteShoot(body.p, body.shootId));
-    if (action === 'addGallery') return jsonOut(addGallery(body.p, body.shootId, body.label, body.url));
-    if (action === 'updateGallery') return jsonOut(updateGallery(body.p, body.shootId, body.row, body.label, body.url));
-    if (action === 'deleteGallery') return jsonOut(deleteGallery(body.p, body.shootId, body.row));
+    // Wrapped in withSpotsCacheRefresh (below) - these six are exactly
+    // the actions that change what getPublicSpots()/the spots cache file
+    // contains. See withSpotsCacheRefresh's own comment for why this is
+    // done centrally here instead of inside each function individually.
+    if (action === 'createShoot') return jsonOut(withSpotsCacheRefresh(createShoot(body.p, body.shoot)));
+    if (action === 'updateShoot') return jsonOut(withSpotsCacheRefresh(updateShoot(body.p, body.shootId, body.shoot)));
+    if (action === 'deleteShoot') return jsonOut(withSpotsCacheRefresh(deleteShoot(body.p, body.shootId)));
+    if (action === 'addGallery') return jsonOut(withSpotsCacheRefresh(addGallery(body.p, body.shootId, body.label, body.url)));
+    if (action === 'updateGallery') return jsonOut(withSpotsCacheRefresh(updateGallery(body.p, body.shootId, body.row, body.label, body.url)));
+    if (action === 'deleteGallery') return jsonOut(withSpotsCacheRefresh(deleteGallery(body.p, body.shootId, body.row)));
 
     return jsonOut({ error: 'Unknown action' });
   } catch (err) {
@@ -1392,6 +1410,114 @@ function getPublicSpots() {
     photographersCount: photographers.length,
     galleriesCount: galleries.length
   };
+}
+
+// ---- public spots cache (Google Drive JSON file) -------------------------
+//
+// getPublicSpots() above executes live against the sheet on every call -
+// correct, but means every single public page load spins up a real Apps
+// Script execution (cold-start latency and all). Confirmed via a live
+// Lighthouse comparison after action=spots first went live (26/07/2026):
+// LCP settled consistently around 6.3-6.8s, versus as low as 5.2s under
+// the old CSV export it replaced - a real, measured cost of correctness
+// over raw speed.
+//
+// This caches getPublicSpots()'s own output as a JSON file in Google
+// Drive, shared "anyone with the link can view", so PUBLIC reads
+// (index.html/add-shoot.html) can fetch a plain static file instead of
+// triggering a script execution at all - zero Apps Script quota cost per
+// visitor, no cold-start latency in the read path. Regenerated:
+//   1. Immediately after any write that changes it succeeds - see
+//      withSpotsCacheRefresh, wrapping the six shoot/gallery-mutating
+//      actions in doPost. This is the real freshness mechanism.
+//   2. Every 15 minutes via a time-based trigger (see
+//      installSpotsCacheTrigger below) - a safety net only, in case a
+//      write-triggered regeneration above ever silently fails (e.g. a
+//      transient Drive API error). NOT the main freshness path, so a
+//      longer interval than "instant" is fine, and deliberately not
+//      shorter than it needs to be - see installSpotsCacheTrigger's own
+//      comment for the quota reasoning behind 15 minutes specifically.
+// The client falls back to the live action=spots endpoint if the Drive
+// file fetch fails for any reason - see loadSpotsFromSheet() in
+// index.html for that fallback logic.
+var SPOTS_CACHE_FILE_PROPERTY = 'SPOTS_CACHE_FILE_ID';
+var SPOTS_CACHE_FILE_NAME = 'whoshotme-spots-cache.json';
+
+// Regeneration failures are swallowed here (see regenerateSpotsCache
+// below) rather than surfaced as a write error - a Drive hiccup should
+// never fail the actual write the photographer is waiting on, since the
+// client already has a live-endpoint fallback for a stale/unreachable
+// cache file regardless.
+function withSpotsCacheRefresh(result) {
+  if (result && !result.error) regenerateSpotsCache();
+  return result;
+}
+
+// The stored file ID is reused across calls so regeneration always
+// updates the SAME file (same URL, forever) rather than creating a new
+// one each time - the frontend's PUBLIC_SPOTS_JSON_URL only needs to be
+// set once, at initial setup.
+function getOrCreateSpotsCacheFile() {
+  var props = PropertiesService.getScriptProperties();
+  var fileId = props.getProperty(SPOTS_CACHE_FILE_PROPERTY);
+  if (fileId) {
+    try {
+      return DriveApp.getFileById(fileId);
+    } catch (err) {
+      // Stored ID no longer resolves to a real file (deleted by hand,
+      // etc.) - fall through and create a fresh one rather than failing.
+    }
+  }
+  var file = DriveApp.createFile(SPOTS_CACHE_FILE_NAME, '{}', MimeType.PLAIN_TEXT);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  props.setProperty(SPOTS_CACHE_FILE_PROPERTY, file.getId());
+  return file;
+}
+
+// Best-effort on purpose - called both from a write's own request
+// (withSpotsCacheRefresh above) and the time-based safety-net trigger
+// (scheduledRegenerateSpotsCache below). Neither caller should ever fail
+// because Drive had a hiccup - see withSpotsCacheRefresh's comment.
+function regenerateSpotsCache() {
+  try {
+    var file = getOrCreateSpotsCacheFile();
+    file.setContent(JSON.stringify(getPublicSpots()));
+  } catch (err) {
+    console.error('Failed to regenerate the public spots cache file:', err);
+  }
+}
+
+// ONE-TIME SETUP - run this once directly in the Apps Script editor
+// (select it from the function dropdown next to "Run", click Run) after
+// pasting this file in. Installs the 15-minute safety-net trigger
+// (removing any earlier one first, so re-running this after a future
+// edit doesn't stack up duplicate triggers) and generates the cache file
+// immediately rather than waiting up to 15 minutes for the first
+// automatic run. 15 minutes (not, say, 5) because this trigger is only a
+// safety net - the real freshness mechanism is withSpotsCacheRefresh
+// firing on every actual write - and Apps Script consumer accounts have
+// a 90-minutes/day total TRIGGER RUNTIME quota; a 5-minute interval
+// would still fit comfortably, but there's no reason to spend more of
+// that budget than a safety net needs. Logs the file's public URL after
+// - copy that into PUBLIC_SPOTS_JSON_URL in both index.html and
+// add-shoot.html (View > Logs, or Executions, to see it after running).
+function installSpotsCacheTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'scheduledRegenerateSpotsCache') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('scheduledRegenerateSpotsCache').timeBased().everyMinutes(15).create();
+  regenerateSpotsCache();
+  var file = getOrCreateSpotsCacheFile();
+  Logger.log('Public spots cache URL - put this in PUBLIC_SPOTS_JSON_URL (index.html AND add-shoot.html): https://drive.google.com/uc?export=download&id=' + file.getId());
+}
+
+// The safety-net trigger's own target - see installSpotsCacheTrigger
+// above. A separate named function (rather than pointing the trigger
+// directly at regenerateSpotsCache) so the trigger is easy to find and
+// remove by handler name later without touching the function every other
+// caller uses.
+function scheduledRegenerateSpotsCache() {
+  regenerateSpotsCache();
 }
 
 // ---- galleries ------------------------------------------------------------
