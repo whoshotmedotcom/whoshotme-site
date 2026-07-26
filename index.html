@@ -167,7 +167,15 @@
      static markup paints immediately, and only the map itself waits on
      the library. Functionally identical either way; just faster to
      first paint. -->
-<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<!-- crossorigin: matches the crossorigin="anonymous" now on both the
+     leaflet.min.js preload and <script> tag below - without it, this
+     preconnect's own connection doesn't count as a match for the actual
+     (CORS-mode) fetch, which DebugBear's resource-hints check flagged
+     as "connection created by this hint is not used." Doesn't cause a
+     real double-download on its own (preconnect just opens a TCP/TLS
+     connection ahead of time, unlike the preload/script mismatch this
+     was found alongside) but there's no reason to leave the mismatch. -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin="anonymous">
 <link rel="preconnect" href="https://tile.openstreetmap.org">
 <!-- OpenStreetMap (tile.openstreetmap.org, preconnected above) is the
      default basemap, but OS Roads (UK) is one tap away in the layer
