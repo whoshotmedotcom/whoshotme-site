@@ -766,6 +766,50 @@ def test_aerial_attribution_no_overlap(p, device_name, engine):
         not rects_overlap(attribution_box, zoomout_box),
         f"attribution={attribution_box} zoomout={zoomout_box}",
     )
+
+    # Regression test for a second, deeper bug found the same day: the
+    # attribution control and the layers-switcher toggle stack in the same
+    # bottom-right Leaflet corner, so any change in the attribution's
+    # rendered HEIGHT (switching basemap from OpenStreetMap's 1-line
+    # credit to a longer one) pushed the toggle button above it up or
+    # down - confirmed by measuring its screen position across basemaps.
+    # Fixed with a fixed min-height (not the previously-used percentage
+    # width, which turned out to silently resolve against an unsized
+    # shrink-to-fit ancestor rather than the map, at any viewport size).
+    # Checks the toggle's Y position is identical across all three real
+    # basemaps, and that the attribution box never overlaps "Reset view"
+    # (the specific overlap a previous, narrower fix attempt reintroduced
+    # on small phones).
+    def switch_basemap(layer_label):
+        page.evaluate(
+            "(label) => { const labels = document.querySelectorAll('.leaflet-control-layers-list label'); "
+            "for (const l of labels) { if (l.textContent.includes(label)) { l.querySelector('input').click(); break; } } }",
+            layer_label,
+        )
+        page.wait_for_timeout(400)
+
+    reset_view_box = page.evaluate(
+        "() => { const btn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Reset view'); "
+        "return btn ? btn.getBoundingClientRect() : null; }"
+    )
+    toggle_ys = []
+    reset_overlaps = []
+    for label in ["OpenStreetMap", "Aerial", "OS Roads"]:
+        switch_basemap(label)
+        toggle_box = page.eval_on_selector(".leaflet-control-layers-toggle", "el => el.getBoundingClientRect()")
+        attr_box = page.eval_on_selector(".leaflet-control-attribution", "el => el.getBoundingClientRect()")
+        toggle_ys.append(round(toggle_box["y"], 1))
+        reset_overlaps.append(rects_overlap(attr_box, reset_view_box) if reset_view_box else False)
+    check(
+        "layers toggle doesn't shift position when switching basemaps",
+        len(set(toggle_ys)) == 1,
+        f"toggle Y positions across basemaps: {toggle_ys}",
+    )
+    check(
+        "attribution never overlaps the Reset view button",
+        not any(reset_overlaps),
+        f"overlap per basemap: {list(zip(['OpenStreetMap', 'Aerial', 'OS Roads'], reset_overlaps))}",
+    )
     ctx.close()
     browser.close()
 

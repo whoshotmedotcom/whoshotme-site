@@ -662,8 +662,41 @@
      being anchored bottom-right - confirmed via testing. Capping the
      width keeps it wrapping into more, narrower lines confined to the
      right side instead, without touching the attribution wording
-     itself (not something to casually edit for licensing reasons). */
-  .leaflet-control-attribution{ max-width:60%; }
+     itself (not something to casually edit for licensing reasons).
+     CHANGED 26/07/2026, two real bugs found and fixed together:
+     1. The attribution control and the layers-switcher toggle sit
+        stacked in the same bottom-right Leaflet corner, so any change in
+        the attribution's rendered HEIGHT (e.g. switching basemap from
+        OpenStreetMap's 1-line credit to Esri's longer one) pushes the
+        toggle button above it up or down - confirmed directly by
+        measuring the toggle's screen position across basemaps (it moved
+        by exactly one attribution line-height each time). Fixed with
+        min-height below: OpenStreetMap's shorter credit now reserves the
+        same vertical space as Esri/OS Roads (UK)'s longer ones, so the
+        toggle stacked above it never changes position regardless of
+        which basemap is active.
+     2. The "60%" here turned out to never have worked as its own comment
+        assumed, at ANY viewport width - percentages resolve against the
+        containing block's width, and this control's actual parent (the
+        ".leaflet-bottom.leaflet-right" corner div Leaflet generates) is
+        itself an unsized, shrink-to-fit box, not the full map. Confirmed
+        directly: the rendered box measured ~104px wide whether the map
+        itself was 375px or 1200px wide - the percentage was silently
+        resolving against that small auto-sized ancestor the whole time,
+        not the map. Switched to a fixed pixel value instead, which
+        resolves predictably regardless of the parent's own sizing.
+        Measured the minimum that keeps every real attribution string
+        (OpenStreetMap, Esri/Aerial, OS Roads (UK)) to 2 lines or fewer at
+        this control's normal (non-mobile) font-size - 260px, with a
+        small safety margin. See the 480px-and-under override below for
+        the narrower/smaller-font version needed to also avoid reaching
+        the "Reset view" button on small phones. */
+  .leaflet-control-attribution{
+    max-width:260px;
+    min-height:33.6px;
+    display:flex;
+    align-items:flex-end;
+  }
 
   /* ---- Map sits in the middle, takes remaining space ---- */
   #mapWrap{
@@ -1572,6 +1605,36 @@
 
     .popup-logo{ width:34px; height:34px; }
     .popup-name{ font-size:0.92rem; }
+
+    /* ADDED 26/07/2026: fixes the attribution box pushing the layers
+       toggle stacked above it up/down when switching basemaps - see the
+       main .leaflet-control-attribution comment above for the full
+       mechanism. Two parts, verified together against every current
+       attribution string (OpenStreetMap, Esri/Aerial, OS Roads (UK)) at
+       viewports from 320px to 480px:
+       1. 210px + font-size:10px - measured the smallest width/font-size
+          combination that keeps every one of those strings to 2 lines or
+          fewer even at 320px (the narrowest realistic phone width)
+          without the box's left edge reaching the "Reset view" button's
+          right edge (confirmed no overlap down to 320px). A fixed pixel
+          value on purpose, not a percentage - see the base rule's own
+          comment above for why a "%" here silently doesn't resolve
+          against the map's real width at all.
+       2. min-height:28px (exactly 2 lines at this font-size/line-height)
+          - so a 1-line basemap (OpenStreetMap) still reserves the same
+          vertical space as a 2-line one (Esri, OS Roads), meaning the
+          layers toggle above it sits at one fixed position no matter
+          which basemap is active. align-items:flex-end keeps short
+          1-line text sitting on the box's own bottom edge (matching
+          Leaflet's normal baseline) instead of floating awkwardly
+          centred in the extra height. */
+    .leaflet-control-attribution{
+      max-width:210px;
+      font-size:10px;
+      min-height:28px;
+      display:flex;
+      align-items:flex-end;
+    }
   }
 </style>
 </head>

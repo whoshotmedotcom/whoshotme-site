@@ -526,6 +526,20 @@
   @media (max-width:480px){
     .two-col{ grid-template-columns:1fr; }
 
+    /* Same fix as index.html's matching mobile override - see its
+       comment for the full reasoning and the measurements behind these
+       numbers. Keeps every real attribution string (OpenStreetMap,
+       Esri/Aerial, OS Roads (UK)) to 2 lines or fewer without reaching
+       the "Reset view" button, and the fixed min-height means the layers
+       toggle stacked above this box never shifts position when the
+       active basemap's attribution text changes length. */
+    .leaflet-control-attribution{
+      max-width:210px;
+      font-size:10px;
+      min-height:28px;
+      display:flex;
+      align-items:flex-end;
+    }
   }
 
   /* Location search — jumps the map to a postcode/place before pin-dropping */
@@ -717,8 +731,27 @@
   /* See index.html for the full reasoning - Esri's longer Aerial
      attribution wraps wide enough on a narrow mobile viewport to reach
      over into the bottom-left zoom control despite being anchored
-     bottom-right. Capping the width keeps it confined to the right. */
-  .leaflet-control-attribution{ max-width:60%; }
+     bottom-right. Capping the width keeps it confined to the right.
+     CHANGED 26/07/2026, two real bugs found and fixed together (see
+     index.html's matching comment for the full detail on both):
+     1. This control and the layers-switcher toggle stack in the same
+        bottom-right Leaflet corner, so any change in the attribution's
+        rendered height (e.g. switching basemap) pushes the toggle button
+        above it. min-height fixes that by reserving the same 2-line
+        space regardless of which basemap's (shorter or longer) credit is
+        showing, so the toggle above it never moves.
+     2. "60%" here never actually resolved against the map's real width -
+        this control's real parent is an unsized, shrink-to-fit corner
+        div Leaflet generates, so the percentage was silently resolving
+        against that small auto-sized box instead, confirmed identical
+        (~104px) whether the map was narrow or wide. Switched to a fixed
+        pixel value, which doesn't have that problem. */
+  .leaflet-control-attribution{
+    max-width:260px;
+    min-height:33.6px;
+    display:flex;
+    align-items:flex-end;
+  }
 
   #useCurrentLocationBtn{ margin-bottom:10px; }
 
