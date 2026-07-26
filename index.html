@@ -3425,12 +3425,27 @@ function render(){
     const [y, m] = selectedMonthKey.split('-').map(Number);
     const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     const selected = lockedDates[selectedIndex];
+    // Same fix as the "no shoots scheduled" case below - fmtDateLabel()'s
+    // own "Today - " prefix stacking with another suffix here too if the
+    // locked month happens to include today.
+    const isSelectedToday = selected && ukDateKey(selected) === ukDateKey(now);
     setDateLabel(selected
-      ? `${fmtDateLabel(selected)} - filtered to ${monthLabel}`
+      ? `${isSelectedToday ? 'Today' : fmtDateLabel(selected)} - filtered to ${monthLabel}`
       : `${monthLabel} - no shoots that month`);
   } else if (shootDates[selectedIndex]) {
     if (visible.length === 0) {
-      setDateLabel(`${fmtDateLabel(shootDates[selectedIndex])} - no shoots scheduled`);
+      // CONFIRMED BUG (26/07/2026): fmtDateLabel() already prefixes
+      // "Today - " onto the full weekday/date for today specifically -
+      // stacking " - no shoots scheduled" on top of THAT produced "Today
+      // - Sun, 26th July - no shoots scheduled", redundant (both "Today"
+      // and the full date say the same thing) and long enough to wrap
+      // onto 2 lines on mobile, visibly growing the whole date bar and
+      // eating into the map. "Today" alone already tells you which day
+      // this is - the full weekday/date is only actually needed for a
+      // day that ISN'T today, where there's no short form available.
+      const selected = shootDates[selectedIndex];
+      const isToday = ukDateKey(selected) === ukDateKey(now);
+      setDateLabel(`${isToday ? 'Today' : fmtDateLabel(selected)} - no shoots scheduled`);
     } else {
       setDateLabel(fmtDateLabel(shootDates[selectedIndex]));
     }
