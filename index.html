@@ -4095,15 +4095,27 @@ async function loadSpotsFromSheet(){
   // way any other one is) rather than silently trusting whatever length
   // the array happens to have.
   const combined = data.combined || [];
+  const photographers = data.photographers || [];
   const galleries = data.galleries || [];
   if (typeof data.combinedCount === 'number' && combined.length !== data.combinedCount){
     throw new Error(`Spots feed length mismatch: got ${combined.length} rows, expected ${data.combinedCount}`);
   }
+  if (typeof data.photographersCount === 'number' && photographers.length !== data.photographersCount){
+    throw new Error(`Photographers feed length mismatch: got ${photographers.length} rows, expected ${data.photographersCount}`);
+  }
   if (typeof data.galleriesCount === 'number' && galleries.length !== data.galleriesCount){
     throw new Error(`Galleries feed length mismatch: got ${galleries.length} rows, expected ${data.galleriesCount}`);
   }
+  // CHANGED 26/07/2026: getPublicSpots() (app-script.gs) no longer
+  // repeats a photographer's Name/Logo/Website on every one of their
+  // shoot rows - they're sent once each here instead, joined back onto
+  // each shoot by Shoot Tab Name before combinedRowToRawSpot() ever sees
+  // it, so that function's own expected shape (a single flat row with
+  // both shoot AND photographer fields) didn't need to change at all.
+  const photographersByTab = {};
+  photographers.forEach(p => { photographersByTab[p['Shoot Tab Name']] = p; });
   const galleriesByShootId = groupGalleriesByShootId(galleries);
-  const rawSpotData = combined.map(combinedRowToRawSpot);
+  const rawSpotData = combined.map(row => combinedRowToRawSpot({ ...photographersByTab[row['Shoot Tab Name']], ...row }));
   return { spots: buildSpots(rawSpotData, galleriesByShootId), rawCount: combined.length };
 }
 

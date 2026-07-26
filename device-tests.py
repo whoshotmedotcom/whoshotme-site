@@ -362,19 +362,33 @@ def test_add_shoot(p, device_name, engine):
 # CHANGED 26/07/2026: index.html/add-shoot.html no longer read the public
 # data from two Google Sheets CSV exports - both now call the same Apps
 # Script endpoint (action=spots) that index.html's own writes already
-# went through, returning JSON shaped {combined: [...], galleries: [...]}
-# instead of two separate CSVs. This helper mocks that one endpoint;
-# `combined`/`galleries` are lists of plain dicts using the exact same
-# column names as object keys that the old CSV rows had, since
-# combinedRowToRawSpot()/groupGalleriesByShootId() in index.html expect
-# those same keys either way - only what fetches them changed.
+# went through, returning JSON shaped {combined, photographers, galleries}
+# instead of two separate CSVs. `combined` no longer carries a
+# photographer's Name/Logo/Website directly (see getPublicSpots()'s own
+# comment in app-script.gs) - callers here still define each spot as one
+# flat dict for readability, and this helper splits it into the real
+# wire shape: shoot-only fields in `combined`, photographer fields
+# deduped by Shoot Tab Name into their own `photographers` list, exactly
+# like the real endpoint does.
+_PHOTOGRAPHER_KEYS = ("Photographer Name", "Logo URL", "Website URL")
+
+
 def route_spots_json(ctx, combined, galleries=None):
     galleries = galleries or []
-    # combinedCount/galleriesCount match getPublicSpots()'s real response
-    # shape - see loadSpotsFromSheet()'s integrity check in index.html.
+    shoots = []
+    photographers = {}
+    for row in combined:
+        tab = row.get("Shoot Tab Name")
+        if tab not in photographers:
+            photographers[tab] = {"Shoot Tab Name": tab, **{k: row.get(k, "") for k in _PHOTOGRAPHER_KEYS}}
+        shoots.append({k: v for k, v in row.items() if k not in _PHOTOGRAPHER_KEYS})
+    photographers = list(photographers.values())
+    # combinedCount/photographersCount/galleriesCount match
+    # getPublicSpots()'s real response shape - see loadSpotsFromSheet()'s
+    # integrity check in index.html.
     body = json.dumps({
-        "combined": combined, "galleries": galleries,
-        "combinedCount": len(combined), "galleriesCount": len(galleries),
+        "combined": shoots, "photographers": photographers, "galleries": galleries,
+        "combinedCount": len(shoots), "photographersCount": len(photographers), "galleriesCount": len(galleries),
     })
 
     def handler(route):

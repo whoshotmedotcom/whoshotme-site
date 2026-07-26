@@ -1349,22 +1349,33 @@ async function loadOtherPhotographersShoots(){
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     const rows = data.combined || [];
-    // Same integrity check as index.html's loadSpotsFromSheet() - see
+    const photographers = data.photographers || [];
+    // Same integrity checks as index.html's loadSpotsFromSheet() - see
     // its comment for the full reasoning.
     if (typeof data.combinedCount === 'number' && rows.length !== data.combinedCount){
       throw new Error(`Spots feed length mismatch: got ${rows.length} rows, expected ${data.combinedCount}`);
     }
+    if (typeof data.photographersCount === 'number' && photographers.length !== data.photographersCount){
+      throw new Error(`Photographers feed length mismatch: got ${photographers.length} rows, expected ${data.photographersCount}`);
+    }
+    // Same photographer-details join as index.html's loadSpotsFromSheet()
+    // - see its comment for why this isn't embedded in each row anymore.
+    const photographersByTab = {};
+    photographers.forEach(ph => { photographersByTab[ph['Shoot Tab Name']] = ph; });
     otherPhotographersShoots = rows
       .filter(row => DATETIME_RE.test(row['Start'] || '') && DATETIME_RE.test(row['End'] || ''))
-      .map(row => ({
-        name: row['Photographer Name'] || '',
-        shootTabName: row['Shoot Tab Name'] || '',
-        lat: Number(row['Lat']),
-        lng: Number(row['Lng']),
-        start: parseUKDateTime(row['Start']),
-        end: parseUKDateTime(row['End']),
-        link: row['Website URL'] || ''
-      }))
+      .map(row => {
+        const photographer = photographersByTab[row['Shoot Tab Name']] || {};
+        return {
+          name: photographer['Photographer Name'] || '',
+          shootTabName: row['Shoot Tab Name'] || '',
+          lat: Number(row['Lat']),
+          lng: Number(row['Lng']),
+          start: parseUKDateTime(row['Start']),
+          end: parseUKDateTime(row['End']),
+          link: photographer['Website URL'] || ''
+        };
+      })
       // Exclude this photographer's own shoots (nothing to warn them
       // about relative to themselves) and anything with unusable
       // coordinates.

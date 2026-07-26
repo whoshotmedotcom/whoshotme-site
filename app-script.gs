@@ -1303,12 +1303,22 @@ function findRowByShootId(sheet, shootId) {
 // here (Photographer Name/Logo URL/Website URL/Shoot Tab Name) via
 // requireColumnIndexes, the same pattern findPhotographerRow uses —
 // Contact Email and Secret Key must never appear in this response.
+//
+// CHANGED 26/07/2026: `combined` rows no longer carry the photographer's
+// Name/Logo/Website directly - those are repeated verbatim on every one
+// of that photographer's shoots otherwise (the exact same flat-join
+// shape the old CSV "Combined" tab had), which only gets more wasteful
+// as a prolific photographer accumulates more shoots. Photographers are
+// now returned once each, in their own `photographers` list, and each
+// shoot in `combined` carries only its Shoot Tab Name (already needed
+// there anyway) to join against. index.html/add-shoot.html do that join
+// client-side - see loadSpotsFromSheet()'s comment there.
 function getPublicSpots() {
   var shootsSheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
   var galleriesSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
   var photographersSheet = getPhotographersSheet();
 
-  var photographersByTab = {};
+  var photographers = [];
   if (photographersSheet) {
     var pData = photographersSheet.getDataRange().getValues();
     var pCols = requireColumnIndexes(pData[0], ['Photographer Name', 'Logo URL', 'Website URL', 'Shoot Tab Name']);
@@ -1316,11 +1326,12 @@ function getPublicSpots() {
       var pRow = pData[pi];
       var tab = pRow[pCols['Shoot Tab Name']];
       if (!tab) continue;
-      photographersByTab[tab] = {
-        name: pRow[pCols['Photographer Name']] || '',
-        logo: pRow[pCols['Logo URL']] || '',
-        website: pRow[pCols['Website URL']] || ''
-      };
+      photographers.push({
+        'Shoot Tab Name': tab,
+        'Photographer Name': pRow[pCols['Photographer Name']] || '',
+        'Logo URL': pRow[pCols['Logo URL']] || '',
+        'Website URL': pRow[pCols['Website URL']] || ''
+      });
     }
   }
 
@@ -1331,11 +1342,7 @@ function getPublicSpots() {
       var sRow = sData[si];
       var shootId = sRow[0], location = sRow[1], tabName = sRow[7];
       if (!location) continue;
-      var photographer = photographersByTab[tabName] || { name: '', logo: '', website: '' };
       combined.push({
-        'Photographer Name': photographer.name,
-        'Logo URL': photographer.logo,
-        'Website URL': photographer.website,
         'Location Name': location,
         'Description': sRow[2] || '',
         'Lat': sRow[3],
@@ -1377,7 +1384,14 @@ function getPublicSpots() {
   // corrupted the response in transit after this function returned, or a
   // bug here - either way, worth surfacing as a real error rather than
   // silently trusting whatever array length showed up.
-  return { combined: combined, galleries: galleries, combinedCount: combined.length, galleriesCount: galleries.length };
+  return {
+    combined: combined,
+    photographers: photographers,
+    galleries: galleries,
+    combinedCount: combined.length,
+    photographersCount: photographers.length,
+    galleriesCount: galleries.length
+  };
 }
 
 // ---- galleries ------------------------------------------------------------
