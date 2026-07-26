@@ -31,9 +31,11 @@ import datetime
 import http.server
 import json
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -880,8 +882,156 @@ def test_no_stuck_hover_or_tap_highlight(p, device_name, engine):
     browser.close()
 
 
+# CONFIRMED BUG (26/07/2026): every check above this point runs against
+# the raw, unminified source tree - useful for interaction/logic testing,
+# but it means this whole suite could pass 97/97 while the actual
+# deployed site was silently broken, which is exactly what happened.
+# deploy.yml's html-minifier-terser step (--remove-redundant-attributes)
+# stripped type="text" from every plain-text <input> - a valid, harmless
+# simplification from a pure-HTML standpoint (browsers still treat a
+# type-less <input> as text), but every themed input across add-shoot.html
+# and become-photographer.html relies on CSS attribute selectors like
+# `.field input[type="text"]`, which need that literal attribute PRESENT
+# in the DOM to match - the browser doesn't reinstate it just because it
+# applies the default type="text" BEHAVIOUR. Every plain-text input on
+# the live site silently fell back to totally unstyled browser-default
+# rendering (~20-character intrinsic width, no theme colours) while this
+# entire suite kept passing, because it never once touched the actual
+# build artifact. Found only from a real user's screenshot months later.
+#
+# test_minified_build below closes that gap generically, not just for
+# this one flag: it runs the EXACT SAME minifier command as deploy.yml
+# (keep the two in sync if either ever changes) against real copies of
+# all three pages, serves that output from a second local server, and
+# checks that the specific inputs this incident broke still resolve to
+# their real themed background colour - not "does this specific flag
+# exist", which would only catch a regression of this one exact bug, but
+# "does the actual rendered result look right", which would also catch a
+# different future minifier option, or a version bump, breaking the same
+# thing a new way.
+# rgb() form of --asphalt (#1c1e22) - what every themed .field input's
+# background-color actually resolves to. A type-less/unstyled input falls
+# back to the browser's own default (white, or a very different rgb()),
+# so comparing against this exact value is a direct, unambiguous signal
+# that the real CSS rule matched and applied - not just a proxy like
+# width, which could coincidentally match for unrelated reasons.
+THEMED_INPUT_BG = "rgb(28, 30, 34)"
+
+
+def build_minified_site():
+    """Mirrors deploy.yml's build step: copy exactly the git-tracked
+    files, then minify the three main pages with the identical
+    html-minifier-terser invocation. Returns the temp directory path;
+    caller is responsible for cleaning it up."""
+    site_dir = Path(tempfile.mkdtemp(prefix="whoshotme-minified-"))
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    for rel_path in tracked:
+        src = ROOT / rel_path
+        dst = site_dir / rel_path
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    for page in ["index.html", "add-shoot.html", "become-photographer.html"]:
+        subprocess.run(
+            [
+                "npx", "--yes", "html-minifier-terser@7",
+                "--collapse-whitespace", "--remove-comments",
+                "--minify-css", "true", "--minify-js", "true",
+                "--remove-script-type-attributes",
+                "--remove-style-link-type-attributes",
+                "-o", str(site_dir / page), str(site_dir / page),
+            ],
+            check=True, shell=(sys.platform == "win32"),
+        )
+    return site_dir
+
+
+def start_minified_server(site_dir):
+    # CONFIRMED BUG (26/07/2026): a hardcoded port here once let a stray
+    # server process from an earlier interrupted run keep listening in the
+    # background - every later run's requests silently landed on THAT old
+    # process (serving its own, long-since-deleted temp directory's stale
+    # content) instead of the freshly-built one this run just made,
+    # because nothing here ever checked whose server was actually
+    # answering. Every check kept passing regardless of real bugs
+    # introduced afterward, since the input actually being tested was
+    # never the one just built. port=0 asks the OS for a free ephemeral
+    # port instead, so this can never collide with a leftover process from
+    # a previous run - there's no shared, guessable address for one to
+    # collide with. server_port below reports back whatever the OS chose.
+    handler = lambda *a, **kw: http.server.SimpleHTTPRequestHandler(*a, directory=str(site_dir), **kw)
+    httpd = http.server.ThreadingHTTPServer(("localhost", 0), handler)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    return httpd
+
+
+def test_minified_build(p, minified_base):
+    browser = p.chromium.launch()
+
+    # index.html: no type="text" inputs exist (only #searchInput, selected
+    # by id not attribute, and #dateSlider, type="range") - this bug class
+    # couldn't hit it, but still worth a real load/console-error check
+    # since minify-js/minify-css could break something else entirely.
+    ctx = browser.new_context(service_workers="block")
+    stub_tiles(ctx)
+    route_empty_spots(ctx)
+    errors = []
+    page = ctx.new_page()
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    print("\n--- minified index.html loads cleanly ---")
+    page.goto(f"{minified_base}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    check("minified index.html has no page errors", errors == [], str(errors))
+    ctx.close()
+
+    # add-shoot.html: exactly the fields this incident broke.
+    ctx = browser.new_context(service_workers="block")
+    stub_tiles(ctx)
+    route_empty_spots(ctx)
+    errors = []
+    page = ctx.new_page()
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    print("--- minified add-shoot.html inputs are themed ---")
+    page.goto(f"{minified_base}/add-shoot.html?p=TommyBoyphotography&key=dummy", timeout=30000)
+    page.wait_for_timeout(1000)
+    page.evaluate("() => { authGate.classList.add('hidden'); dashboard.classList.remove('hidden'); }")
+    page.wait_for_timeout(300)
+    page.click("[data-tab='profile']")
+    page.wait_for_timeout(200)
+    page.evaluate("() => document.getElementById('galleryModal').classList.remove('hidden')")
+    for selector in [
+        "#locationName", "#profileNameInput", "#profileWebsiteInput",
+        "#profileLogoInput", "#galleryLabel", "#galleryUrl",
+    ]:
+        bg = page.eval_on_selector(selector, "el => getComputedStyle(el).backgroundColor")
+        check(f"minified add-shoot.html {selector} keeps its themed background", bg == THEMED_INPUT_BG, bg)
+    check("minified add-shoot.html has no page errors", errors == [], str(errors))
+    ctx.close()
+
+    # become-photographer.html: same class of field, separate stylesheet.
+    ctx = browser.new_context(service_workers="block")
+    errors = []
+    page = ctx.new_page()
+    page.on("pageerror", lambda exc: errors.append(str(exc)))
+    print("--- minified become-photographer.html inputs are themed ---")
+    page.goto(f"{minified_base}/become-photographer.html", timeout=30000)
+    page.wait_for_timeout(500)
+    for selector in ["#nameInput", "#emailInput", "#websiteInput"]:
+        bg = page.eval_on_selector(selector, "el => getComputedStyle(el).backgroundColor")
+        check(f"minified become-photographer.html {selector} keeps its themed background", bg == THEMED_INPUT_BG, bg)
+    check("minified become-photographer.html has no page errors", errors == [], str(errors))
+    ctx.close()
+
+    browser.close()
+
+
 def main():
     httpd = start_server_if_needed()
+    minified_dir = None
+    minified_httpd = None
     try:
         with sync_playwright() as p:
             for device_name, engine in [("iPhone 14", "webkit"), ("Pixel 7", "chromium")]:
@@ -894,9 +1044,23 @@ def main():
                 test_locate_button_top_right(p, device_name, engine)
                 test_aerial_attribution_no_overlap(p, device_name, engine)
                 test_no_stuck_hover_or_tap_highlight(p, device_name, engine)
+
+            # Runs once (desktop Chromium only, not per-device) - this is
+            # checking the build pipeline's output is correct, not
+            # cross-device interaction, so there's nothing extra to learn
+            # from repeating it per emulated device.
+            print("\n--- building minified site (mirrors deploy.yml) ---")
+            minified_dir = build_minified_site()
+            minified_httpd = start_minified_server(minified_dir)
+            minified_base = f"http://localhost:{minified_httpd.server_port}"
+            test_minified_build(p, minified_base)
     finally:
         if httpd:
             httpd.shutdown()
+        if minified_httpd:
+            minified_httpd.shutdown()
+        if minified_dir:
+            shutil.rmtree(minified_dir, ignore_errors=True)
 
     failed = [r for r in results if not r[0]]
     print(f"\n{len(results) - len(failed)}/{len(results)} passed")
