@@ -777,7 +777,7 @@
     margin-top:10px;
   }
 
-  #emailHint{ font-size:0.78rem; color:var(--muted-grey); margin:0 0 14px; line-height:1.5; }
+  #emailHint, .subtle-hint{ font-size:0.78rem; color:var(--muted-grey); margin:0 0 14px; line-height:1.5; }
   /* Same "worth a look, not broken" callout as #proximityWarning - shown
      while a requested email change is still awaiting its confirmation
      click, so it doesn't just silently vanish from view. */
@@ -995,6 +995,15 @@
           <button id="cancelFormBtn" class="ghost-btn">Cancel</button>
         </div>
         <p id="formError" class="error-text hidden" role="alert"></p>
+        <!-- ADDED 26/07/2026: the public map's data comes from a cache
+             file, not a live read (see PUBLIC_SPOTS_JSON_URL/
+             GITHUB_API_SPOTS_CACHE_URL above) - most saves show up
+             within well under a minute, but a real end-to-end test
+             found a worst case of a few minutes when that cache's
+             fastest source is unavailable. Set expectations upfront
+             rather than leave a photographer wondering why their new
+             shoot isn't on the public map the instant they save it. -->
+        <p class="subtle-hint">It can take a few minutes for a new or changed shoot to appear on the public map.</p>
       </section>
     </div>
 
@@ -1116,15 +1125,24 @@
   function senderEmailDisplay(){
     return ['whoshotmedotcom', '@', 'gmail.com'].join('');
   }
-  // Reads from PUBLIC_SPOTS_JSON_URL below first, falling back to
-  // APPS_SCRIPT_URL above (action=spots) - used here only for the
-  // nearby-photographer awareness on the map and the proximity warning
-  // (see PROXIMITY CHECK below), never written to from this page.
-  // CHANGED 26/07/2026: used to be its own separate CSV feed
+  // Reads from GITHUB_API_SPOTS_CACHE_URL first, then PUBLIC_SPOTS_JSON_URL
+  // below, falling back to APPS_SCRIPT_URL above (action=spots) - used
+  // here only for the nearby-photographer awareness on the map and the
+  // proximity warning (see PROXIMITY CHECK below), never written to from
+  // this page. CHANGED 26/07/2026: used to be its own separate CSV feed
   // (COMBINED_CSV_URL) - see index.html's LIVE DATA comment for that
   // history and PUBLIC_SPOTS_JSON_URL's own comment for the cache-file
   // reasoning.
   const PUBLIC_SPOTS_JSON_URL = 'https://raw.githubusercontent.com/whoshotmedotcom/whoshotme-site/spots-cache/spots-cache.json';
+  // ADDED 26/07/2026: measured via a real end-to-end write test that
+  // PUBLIC_SPOTS_JSON_URL above can serve up to 5 minutes stale (its CDN
+  // caches for max-age=300 and ignores query strings, so no cache-busting
+  // trick can shorten that). GitHub's own Contents API measured fresh
+  // within under 90 seconds of a real commit (max-age=60), so it's tried
+  // first - see index.html's matching comment for the full reasoning,
+  // including why it's not the ONLY tier (a real but narrow rate-limit
+  // risk on shared/NAT'd connections).
+  const GITHUB_API_SPOTS_CACHE_URL = 'https://api.github.com/repos/whoshotmedotcom/whoshotme-site/contents/spots-cache.json?ref=spots-cache';
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -1354,18 +1372,37 @@ async function fetchSpotsJson(url){
   return data;
 }
 
+// Same GitHub Contents API tier as index.html's fetchSpotsJsonViaGithubApi()
+// - see GITHUB_API_SPOTS_CACHE_URL's comment above for the full reasoning.
+async function fetchSpotsJsonViaGithubApi(url){
+  const res = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  const wrapper = await res.json();
+  if (!wrapper.content) throw new Error('Unexpected GitHub API response shape');
+  const binary = atob(wrapper.content.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+  const data = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 let otherPhotographersShoots = [];
 async function loadOtherPhotographersShoots(){
   try {
     let data;
     try {
-      if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
-        throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
-      }
-      data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+      data = await fetchSpotsJsonViaGithubApi(GITHUB_API_SPOTS_CACHE_URL);
     } catch (err) {
-      console.warn('Public spots cache unavailable, falling back to the live endpoint:', err);
-      data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+      console.warn('GitHub API spots cache unavailable, falling back to the raw CDN copy:', err);
+      try {
+        if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
+          throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
+        }
+        data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+      } catch (err2) {
+        console.warn('Public spots cache unavailable, falling back to the live endpoint:', err2);
+        data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+      }
     }
     const rows = data.combined || [];
     const photographers = data.photographers || [];

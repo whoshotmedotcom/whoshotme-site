@@ -161,16 +161,53 @@
   branch to raw-serve from, NOT the Pages-deployed whoshotme.com URL -
   that would route every regeneration through deploy.yml's full
   build+deploy pipeline (real delay, the opposite of the goal). Fetching
-  it costs no Apps Script execution at all, so it's tried FIRST;
-  APPS_SCRIPT_URL above is only used as a fallback if this fetch fails
-  for any reason (network error, the cache not existing yet, a stale/
-  corrupt file - see loadSpotsFromSheet() below for the actual fallback
-  logic). The URL below is deterministic (owner/repo/branch/path, no
-  random ID to look up) - only needs changing if GITHUB_OWNER/REPO/
-  GITHUB_CACHE_BRANCH/PATH in app-script.gs ever do.
+  it costs no Apps Script execution at all, so it's tried after
+  GITHUB_API_SPOTS_CACHE_URL below fails; APPS_SCRIPT_URL above is only
+  used as a last-resort fallback if that also fails for any reason
+  (network error, the cache not existing yet, a stale/corrupt file - see
+  loadSpotsFromSheet() below for the actual fallback logic). The URL
+  below is deterministic (owner/repo/branch/path, no random ID to look
+  up) - only needs changing if GITHUB_OWNER/REPO/GITHUB_CACHE_BRANCH/
+  PATH in app-script.gs ever do.
+
+  CHANGED 26/07/2026: measured directly (see GITHUB_API_SPOTS_CACHE_URL
+  below) that raw.githubusercontent.com's CDN can serve content up to 5
+  minutes stale after a real write - its Cache-Control is max-age=300,
+  and its cache key ignores query strings entirely, so no client-side
+  cache-busting trick can shorten that. It's kept as the SECOND tier
+  (not removed) because it has no meaningful rate limit for public
+  traffic, unlike the API tier tried first.
 ===================================================================== -->
 <script>
   const PUBLIC_SPOTS_JSON_URL = 'https://raw.githubusercontent.com/whoshotmedotcom/whoshotme-site/spots-cache/spots-cache.json';
+</script>
+
+<!-- ====================================================================
+  ADDED 26/07/2026: a real end-to-end test (create/delete a throwaway
+  shoot against a live photographer account, watching the spots-cache
+  branch's commit history) found PUBLIC_SPOTS_JSON_URL above genuinely
+  serving stale data for several minutes after a real write, confirmed
+  by curl (Cache-Control: max-age=300, and re-checking with a fresh
+  cache-busting query string still returned X-Cache: HIT - GitHub's raw
+  CDN keys purely on path, ignoring the query string, so no client-side
+  trick can shorten that 5-minute ceiling).
+
+  GitHub's own Contents API (api.github.com, NOT the raw CDN) was
+  measured serving the same file with Cache-Control: max-age=60 and was
+  confirmed fresh within under 90 seconds of a real commit, when the raw
+  CDN copy was still stale - a real, verified improvement over the
+  5-minute worst case. It's tried FIRST for that reason. It's not used
+  as the ONLY source, though: unlike the raw CDN, api.github.com has a
+  real rate limit for unauthenticated requests (60/hour, shared by IP
+  address across ALL of that IP's GitHub API usage, not just this site).
+  On a shared/NAT'd connection that limit could plausibly be hit by
+  unrelated traffic. If it 403s (or fails for any other reason) this
+  just falls straight through to PUBLIC_SPOTS_JSON_URL above with no
+  visible impact beyond losing the freshness improvement for that one
+  visitor - see fetchSpotsJsonViaGithubApi()/loadSpotsFromSheet() below.
+===================================================================== -->
+<script>
+  const GITHUB_API_SPOTS_CACHE_URL = 'https://api.github.com/repos/whoshotmedotcom/whoshotme-site/contents/spots-cache.json?ref=spots-cache';
 </script>
 
 <!-- Leaflet + markercluster CSS, inlined rather than three separate
@@ -4122,21 +4159,45 @@ async function fetchSpotsJson(url){
   return data;
 }
 
+// GitHub's Contents API wraps the file in a JSON envelope with the real
+// content base64-encoded (and line-wrapped every 60 chars) in `.content`.
+// Decoded via TextDecoder rather than a plain atob()/JSON.parse() so
+// multi-byte characters already present in real shoot descriptions (e.g.
+// emoji) survive correctly - atob() alone only handles Latin1 bytes.
+// See the GITHUB_API_SPOTS_CACHE_URL comment near the top of this file
+// for why this tier exists.
+async function fetchSpotsJsonViaGithubApi(url){
+  const res = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  const wrapper = await res.json();
+  if (!wrapper.content) throw new Error('Unexpected GitHub API response shape');
+  const binary = atob(wrapper.content.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+  const data = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 async function loadSpotsFromSheet(){
   let data;
   try {
-    if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
-      throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
-    }
-    data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+    data = await fetchSpotsJsonViaGithubApi(GITHUB_API_SPOTS_CACHE_URL);
   } catch (err) {
-    // Quiet on purpose (console.warn, not .error) - falling back to the
-    // live endpoint is the expected, designed-for behaviour whenever the
-    // cache file is unset, stale, or briefly unreachable, not a real
-    // problem worth alarming anyone about. See the PUBLIC_SPOTS_JSON_URL
-    // comment near the top of this file for the full reasoning.
-    console.warn('Public spots cache unavailable, falling back to the live endpoint:', err);
-    data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+    // Quiet on purpose (console.warn, not .error) - falling back is the
+    // expected, designed-for behaviour whenever the API tier rate-limits,
+    // fails, or is briefly unreachable, not a real problem worth alarming
+    // anyone about. See the GITHUB_API_SPOTS_CACHE_URL comment near the
+    // top of this file for the full reasoning.
+    console.warn('GitHub API spots cache unavailable, falling back to the raw CDN copy:', err);
+    try {
+      if (!PUBLIC_SPOTS_JSON_URL || PUBLIC_SPOTS_JSON_URL.indexOf('PASTE_YOUR') === 0){
+        throw new Error('PUBLIC_SPOTS_JSON_URL not configured yet');
+      }
+      data = await fetchSpotsJson(PUBLIC_SPOTS_JSON_URL);
+    } catch (err2) {
+      console.warn('Public spots cache unavailable, falling back to the live endpoint:', err2);
+      data = await fetchSpotsJson(`${APPS_SCRIPT_URL}?action=spots`);
+    }
   }
   // getPublicSpots() (app-script.gs) sends combinedCount/galleriesCount
   // alongside the arrays themselves, computed from the same loop that

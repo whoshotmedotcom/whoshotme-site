@@ -26,6 +26,7 @@ Starts its own local static server on port 8802 if one isn't already
 running there. Exits non-zero if anything failed, so it's usable as a
 gate as well as a manual check.
 """
+import base64
 import datetime
 import http.server
 import json
@@ -372,14 +373,15 @@ def test_add_shoot(p, device_name, engine):
 # photographer fields deduped by Shoot Tab Name into their own
 # `photographers` list, exactly like the real endpoint does.
 #
-# Mocks BOTH the cache URL and the live endpoint with the same payload -
-# without this, the cache attempt would hit the REAL raw.githubusercontent.com
-# over the actual network (a real 404 until the live spots-cache branch
-# exists), which the app's own fallback handles fine functionally, but
-# the browser's own "Failed to load resource" console entry for that
-# real failed request trips any test checking for zero console errors.
-# Same reasoning as stub_tiles() above - don't hit live external
-# services from this suite if avoidable.
+# Mocks the live endpoint AND both cache tiers with the same payload -
+# without this, the cache attempts would hit the REAL api.github.com/
+# raw.githubusercontent.com over the actual network: at best a real 404
+# (which the app's own fallback handles fine functionally, but the
+# browser's own "Failed to load resource" console entry trips any test
+# checking for zero console errors), at worst api.github.com actually
+# succeeding and returning real production data instead of this test's
+# fixture. Same reasoning as stub_tiles() above - don't hit live
+# external services from this suite if avoidable.
 _PHOTOGRAPHER_KEYS = ("Photographer Name", "Logo URL", "Website URL")
 
 
@@ -400,6 +402,11 @@ def route_spots_json(ctx, combined, galleries=None):
         "combined": shoots, "photographers": photographers, "galleries": galleries,
         "combinedCount": len(shoots), "photographersCount": len(photographers), "galleriesCount": len(galleries),
     })
+    # The GitHub Contents API tier (tried first, see GITHUB_API_SPOTS_CACHE_URL)
+    # wraps the real file content in a base64-encoded envelope - matches
+    # the real response shape closely enough for fetchSpotsJsonViaGithubApi()'s
+    # decode step to exercise the same code path a real response would.
+    github_api_body = json.dumps({"content": base64.b64encode(body.encode("utf-8")).decode("ascii")})
 
     def handler(route):
         if route.request.method == "GET" and "action=spots" in route.request.url:
@@ -409,6 +416,8 @@ def route_spots_json(ctx, combined, galleries=None):
     ctx.route("**/script.google.com/**", handler)
     ctx.route("**raw.githubusercontent.com/whoshotmedotcom/whoshotme-site/spots-cache/spots-cache.json",
                lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    ctx.route("**api.github.com/repos/whoshotmedotcom/whoshotme-site/contents/spots-cache.json**",
+               lambda route: route.fulfill(status=200, content_type="application/json", body=github_api_body))
 
 
 def route_empty_spots(ctx):
