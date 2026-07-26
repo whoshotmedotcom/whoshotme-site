@@ -1,0 +1,88 @@
+name: Build and deploy to GitHub Pages
+
+# Publishes the site via GitHub Actions instead of GitHub Pages' old
+# "deploy straight from the branch" mode, specifically so the three main
+# HTML pages can be minified on the way out without touching the
+# committed source - see lighthousetodo.txt (26/07/2026) for the numbers
+# that motivated this: minifying index.html cut its gzip'd payload from
+# ~71KB to ~25KB (65%), add-shoot.html from ~34KB to ~18KB (47%). The
+# committed *.html files are the real, editable, fully-commented source -
+# this workflow's output is a disposable build artifact, never written
+# back to the repo.
+#
+# Deliberately builds an explicit `_site` directory from exactly the
+# tracked files (`git ls-files`) rather than uploading the whole checkout
+# root - the checkout also contains .git internals that must never be
+# published, and this way the deployed file set is guaranteed to match
+# git's own idea of what belongs in the repo, not whatever happens to be
+# sitting in the runner's working directory.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; a newer push should win rather
+# than queuing behind an older one still in flight.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Assemble _site from tracked files
+        run: |
+          mkdir _site
+          git ls-files -z | xargs -0 -I{} cp --parents {} _site/
+
+      - name: Minify the three main HTML pages
+        run: |
+          npx --yes html-minifier-terser@7 \
+            --collapse-whitespace --remove-comments \
+            --minify-css true --minify-js true \
+            --remove-redundant-attributes \
+            --remove-script-type-attributes \
+            --remove-style-link-type-attributes \
+            -o _site/index.html _site/index.html
+          npx --yes html-minifier-terser@7 \
+            --collapse-whitespace --remove-comments \
+            --minify-css true --minify-js true \
+            --remove-redundant-attributes \
+            --remove-script-type-attributes \
+            --remove-style-link-type-attributes \
+            -o _site/add-shoot.html _site/add-shoot.html
+          npx --yes html-minifier-terser@7 \
+            --collapse-whitespace --remove-comments \
+            --minify-css true --minify-js true \
+            --remove-redundant-attributes \
+            --remove-script-type-attributes \
+            --remove-style-link-type-attributes \
+            -o _site/become-photographer.html _site/become-photographer.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
