@@ -1766,7 +1766,16 @@
   </div>
 </main>
 
-<div id="bottomPanel">
+<!-- ADDED 26/07/2026: a WCAG audit (axe-core, "region" rule) flagged this
+     as page content not contained by any landmark - #mapWrap above is a
+     <main>, but this sits after it as a plain, landmark-less <div>, so a
+     screen reader user navigating by region would miss the filter chips
+     and date controls entirely. <section> + aria-label makes this its own
+     named landmark without touching the flex layout body/mapWrap/
+     bottomPanel already share (a div with an ARIA role would have worked
+     just as well - <section> is simply the more semantically direct way
+     to say the same thing given nothing here needed changing either way). -->
+<section id="bottomPanel" aria-label="Filters and date navigation">
   <div id="filters">
     <button class="chip" data-filter="past"><span class="chipDot" style="background:var(--past-grey);border:2px dashed var(--muted-grey);"></span>Past</button>
     <button class="chip" data-filter="live"><span class="chipDot" style="background:var(--hi-vis);"></span>Live now</button>
@@ -1791,7 +1800,7 @@
     <button class="stepBtn" id="nextDay" aria-label="Next day">›</button>
     <button id="todayBtn">Today</button>
   </div>
-</div>
+</section>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
 

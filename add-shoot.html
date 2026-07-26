@@ -606,7 +606,16 @@
     padding:9px 4px;
     font-family:inherit;
   }
-  #locationSearchInput::placeholder{ color:#7c8088; }
+  /* FIXED 26/07/2026: was a hardcoded #7c8088, which measures 4.21:1
+     against this input's effective background (--asphalt) - just under
+     WCAG AA's 4.5:1 minimum for normal-size text, caught by an axe-core
+     audit. var(--muted-grey) is the same "secondary/meta text" colour
+     already used everywhere else on this site (including index.html's
+     own matching #searchInput::placeholder), confirmed 6.32:1 here -
+     comfortably passes, and this brings the one inconsistent spot back
+     in line with the rest of the site instead of introducing a third
+     grey just for this. */
+  #locationSearchInput::placeholder{ color:var(--muted-grey); }
   /* Same grey-box-while-typing autofill fix as index.html's #searchInput
      - see its comment for the full mechanism. Identical situation here:
      a deliberately transparent input sitting inside an opaquely-themed
