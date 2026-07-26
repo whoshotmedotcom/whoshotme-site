@@ -1,7 +1,7 @@
 /**
  * WHO SHOT ME — backend script for the Google Sheet.
  *
- * Does seven jobs:
+ * Does eight jobs:
  *   1. Auto-stamps a permanent Shoot ID onto any row a photographer edits
  *      directly in the sheet (same as before).
  *   2. Runs as a Web App so add-shoot.html can create/edit/delete shoots,
@@ -48,6 +48,17 @@
  *      for why not decoupled) and via a 15-minute safety-net trigger;
  *      the live endpoint from job 6 stays in place as the client's
  *      fallback if the cache file is ever unreachable.
+ *   8. Fetches and permanently stores a photographer's logo/profile
+ *      picture (see fetchAndStoreLogo, called from updateProfile) —
+ *      added 26/07/2026 after a real photographer's linked Instagram
+ *      photo silently stopped showing once that link's own embedded
+ *      expiry passed (Instagram's CDN signs these with a lifetime of a
+ *      few days). Rather than trust an arbitrary external link to keep
+ *      working indefinitely, a new/changed Logo URL is fetched, resized,
+ *      and committed to the same GitHub branch as job 7 (path prefix
+ *      logos/) the moment it's saved, and it's that permanent copy's URL
+ *      that actually gets stored — no new setup step, reuses the same
+ *      GITHUB_TOKEN and branch job 7 already needs.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -966,11 +977,12 @@ function getMyShoots(p, key) {
 // Lets a photographer self-edit their own display name, website/social
 // link, and logo/profile picture link - settable once at signup (or not
 // at all, for logo) with no way back in afterwards until this existed.
-// Logo URL is just a link they host themselves (same free model as
-// Website URL) - the site resizes/crops it down for display via
-// images.weserv.nl rather than trusting whatever size the source image
-// actually is, see resizedLogoUrl() in index.html/add-shoot.html for the
-// display-side half of this. Contact Email deliberately excluded from
+// CHANGED 26/07/2026: Logo URL used to be saved as whatever external link
+// was submitted, resized on the fly per-visitor via images.weserv.nl (see
+// resizedLogoUrl() in index.html/add-shoot.html) - now a genuinely NEW or
+// CHANGED link is fetched and stored as our own permanent copy first (see
+// fetchAndStoreLogo above), and it's THAT copy's URL that actually gets
+// saved here, not the original. Contact Email deliberately excluded from
 // this function specifically - it's the lookup key resendLink depends
 // on, so it gets its own confirm-the-new-address flow instead of a plain
 // text field a typo could lock someone out with; see
@@ -981,18 +993,45 @@ function updateProfile(p, name, website, logo) {
   logo = String(logo || '').trim();
   if (!name) return { error: 'Your name / page name is required' };
 
+  var photographer = findPhotographerRow(p);
+  if (!photographer) return { error: 'Not found' };
+  var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Logo URL']);
+  var cleanWebsite = website ? normalizeGalleryUrl(website) : '';
+  var cleanLogoInput = logo ? normalizeGalleryUrl(logo) : '';
+  var currentLogo = photographer.row[cols['Logo URL']] || '';
+
+  // Fetching + committing a logo is slow (an external image fetch plus a
+  // GitHub API round-trip) and deliberately happens BEFORE the lock below
+  // is acquired - LockService.getScriptLock() is shared across every
+  // photographer's writes, and holding it for that long would serialise
+  // everyone else's saves behind one slow image fetch. Only re-fetch/
+  // re-commit when the submitted link is actually new or changed - the
+  // form re-populates this field with whatever's already stored (which,
+  // after a first successful save, IS this function's own hosted copy),
+  // so re-submitting an untouched value (e.g. just fixing a name typo)
+  // must not trigger a pointless re-fetch of our own stored image.
+  var finalLogo = '';
+  if (cleanLogoInput && cleanLogoInput !== currentLogo) {
+    var stored = fetchAndStoreLogo(p, cleanLogoInput);
+    if (stored.error) return { error: stored.error };
+    finalLogo = stored.url;
+  } else if (cleanLogoInput) {
+    finalLogo = currentLogo;
+  }
+
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    var photographer = findPhotographerRow(p);
-    if (!photographer) return { error: 'Not found' };
-
-    var cols = requireColumnIndexes(photographer.headers, ['Photographer Name', 'Website URL', 'Logo URL']);
-    var cleanWebsite = website ? normalizeGalleryUrl(website) : '';
-    var cleanLogo = logo ? normalizeGalleryUrl(logo) : '';
-    photographer.sheet.getRange(photographer.rowIndex, cols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
-    photographer.sheet.getRange(photographer.rowIndex, cols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
-    photographer.sheet.getRange(photographer.rowIndex, cols['Logo URL'] + 1).setValue(cleanLogo ? sanitizeForCell(cleanLogo) : '');
+    // Re-look-up rather than reusing `photographer` from above - the slow
+    // fetch/store step just ran outside the lock, so re-check the row is
+    // still where we think it is rather than trusting a potentially
+    // stale rowIndex.
+    var fresh = findPhotographerRow(p);
+    if (!fresh) return { error: 'Not found' };
+    var freshCols = requireColumnIndexes(fresh.headers, ['Photographer Name', 'Website URL', 'Logo URL']);
+    fresh.sheet.getRange(fresh.rowIndex, freshCols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
+    fresh.sheet.getRange(fresh.rowIndex, freshCols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
+    fresh.sheet.getRange(fresh.rowIndex, freshCols['Logo URL'] + 1).setValue(finalLogo ? sanitizeForCell(finalLogo) : '');
     return { ok: true };
   } finally {
     lock.releaseLock();
@@ -1613,6 +1652,73 @@ function installSpotsCacheTrigger() {
 // caller uses.
 function scheduledRegenerateSpotsCache() {
   regenerateSpotsCache();
+}
+
+// ---- profile logo storage --------------------------------------------------
+//
+// ADDED 26/07/2026. Photographers used to link their logo/profile picture
+// directly (e.g. an Instagram CDN URL) - the client just resized it
+// on-the-fly via images.weserv.nl on every visitor's page load (see
+// resizedLogoUrl() in index.html/add-shoot.html). That's fragile: a real
+// photographer's linked Instagram photo silently stopped showing once its
+// URL's own embedded expiry passed (confirmed live - Instagram's CDN
+// signs these links with a few days' lifetime), correctly falling back to
+// the initials avatar with no errors anywhere, which is by design, but
+// means the photo just quietly disappears days or weeks later with
+// nothing prompting the photographer to notice or fix it.
+//
+// updateProfile() below now fetches whatever URL is submitted ONCE, at
+// save time, resizes it the same way the client used to (still via
+// images.weserv.nl, but as a single server-side call here instead of
+// once per visitor), and commits that copy into this repo - so what's
+// actually served afterwards is a copy we control, immune to the
+// original link changing or expiring later. Reuses the same
+// GITHUB_OWNER/REPO/CACHE_BRANCH/githubApiRequest/
+// ensureSpotsCacheBranchExists machinery as the spots cache above (same
+// "automated, non-curated content" branch, just a different path prefix)
+// rather than setting up a second one.
+var GITHUB_LOGOS_PREFIX = 'logos/';
+
+// sourceUrl should already be through normalizeGalleryUrl() by the
+// caller. 192x192 matches resizedLogoUrl(...,96)'s old client-side
+// request (96px on-screen * 2 for retina) - keeping the same size means
+// nothing about how a logo actually looks changes, only where it's
+// hosted from. output=jpg forces a predictable, always-decodable format
+// regardless of the source (PNG, WebP, HEIC from a phone camera, etc.),
+// so the stored file's extension can just always be .jpg.
+function fetchAndStoreLogo(shootTabName, sourceUrl) {
+  var resizeUrl = 'https://images.weserv.nl/?url=' + encodeURIComponent(sourceUrl) + '&w=192&h=192&fit=cover&output=jpg';
+  try {
+    var imgRes = UrlFetchApp.fetch(resizeUrl, { muteHttpExceptions: true });
+    if (imgRes.getResponseCode() !== 200) {
+      return { error: "Couldn't fetch an image from that link - double-check it's a direct link to an image, not a page containing one." };
+    }
+    var blob = imgRes.getBlob();
+    if (blob.getContentType().indexOf('image/') !== 0) {
+      return { error: "That link doesn't seem to point directly at an image." };
+    }
+
+    ensureSpotsCacheBranchExists();
+    var path = GITHUB_LOGOS_PREFIX + shootTabName + '.jpg';
+    var getRes = githubApiRequest('GET', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + path + '?ref=' + GITHUB_CACHE_BRANCH);
+    var existingSha = getRes.getResponseCode() === 200 ? JSON.parse(getRes.getContentText()).sha : null;
+
+    var body = {
+      message: 'Update logo for ' + shootTabName,
+      content: Utilities.base64Encode(blob.getBytes()),
+      branch: GITHUB_CACHE_BRANCH
+    };
+    if (existingSha) body.sha = existingSha;
+
+    var putRes = githubApiRequest('PUT', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + path, body);
+    if (putRes.getResponseCode() >= 300) {
+      throw new Error('GitHub commit failed (' + putRes.getResponseCode() + '): ' + putRes.getContentText());
+    }
+    return { url: 'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_CACHE_BRANCH + '/' + path };
+  } catch (err) {
+    console.error('Failed to store logo for ' + shootTabName + ':', err);
+    return { error: "Couldn't save that image right now - try again in a moment." };
+  }
 }
 
 // ---- galleries ------------------------------------------------------------

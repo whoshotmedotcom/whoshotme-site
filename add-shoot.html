@@ -783,6 +783,7 @@
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
 
   #logoHint{ font-size:0.78rem; color:var(--muted-grey); margin:6px 0 0; line-height:1.5; }
+  #noLogoHint{ font-size:0.78rem; color:var(--muted-grey); margin:6px 0 0; line-height:1.5; font-style:italic; }
   #logoPreviewImg{
     display:block;
     width:64px;
@@ -1068,7 +1069,8 @@
         <div class="field">
           <label for="profileLogoInput">Logo / profile picture link <span style="color:var(--muted-grey); text-transform:none; font-weight:400;">(optional)</span></label>
           <input type="text" id="profileLogoInput" maxlength="300" placeholder="https://... a link to your own logo or photo">
-          <p id="logoHint">Shown on your map pin and popup - link any size image (ideally roughly square), it's resized automatically so nobody downloads a full photo just to see a small icon. JPG, PNG, WebP, GIF, and SVG all work.</p>
+          <p id="logoHint">Shown on your map pin and popup - link any size image (ideally roughly square). JPG, PNG, WebP, GIF, and SVG all work. When you save, we fetch and permanently host a small copy of it ourselves, so it keeps showing correctly even if the original link later changes, moves, or expires (this has happened with Instagram photo links specifically, which stop working after a few days).</p>
+          <p id="noLogoHint">Don't have one to hand? Leave this blank and we'll show your initials instead - the first letter of up to the first 3 words of your name/page name above (short words like "the" and "and" are skipped). For example, "TommyBoy Photography" becomes "TP".</p>
           <img id="logoPreviewImg" class="hidden" alt="Logo preview" />
           <p id="logoPreviewError" class="hidden">Couldn't load an image from that link - double-check it's a direct link to an image, not a page containing one.</p>
         </div>
@@ -2407,6 +2409,7 @@ const profileWebsiteInput = document.getElementById('profileWebsiteInput');
 const profileLogoInput = document.getElementById('profileLogoInput');
 const logoPreviewImg = document.getElementById('logoPreviewImg');
 const logoPreviewError = document.getElementById('logoPreviewError');
+const noLogoHint = document.getElementById('noLogoHint');
 const saveProfileBtn = document.getElementById('saveProfileBtn');
 const profileError = document.getElementById('profileError');
 
@@ -2430,6 +2433,10 @@ let logoPreviewDebounce = null;
 function updateLogoPreview(){
   clearTimeout(logoPreviewDebounce);
   const raw = profileLogoInput.value.trim();
+  // Only worth explaining the initials fallback while there's actually no
+  // logo set - once one is, it's not relevant, and showing it anyway
+  // would read as though something's wrong.
+  noLogoHint.classList.toggle('hidden', !!raw);
   if (!raw){
     logoPreviewImg.classList.add('hidden');
     logoPreviewError.classList.add('hidden');
@@ -2464,6 +2471,11 @@ saveProfileBtn.addEventListener('click', async () => {
 
   saveProfileBtn.disabled = true;
   saveProfileBtn.textContent = 'Saving…';
+  // A new/changed logo link now means fetching it and committing a
+  // permanent copy server-side (see fetchAndStoreLogo in app-script.gs) -
+  // slower than a plain sheet write, same reasoning as the busy overlay
+  // on shoot/gallery saves elsewhere in this file.
+  showBusy('Saving your profile, please wait…');
   try {
     const result = await apiPost({ action: 'updateProfile', name, website, logo });
     if (result.error) {
@@ -2477,6 +2489,7 @@ saveProfileBtn.addEventListener('click', async () => {
     profileError.textContent = "Couldn't save - check your connection.";
     profileError.classList.remove('hidden');
   } finally {
+    hideBusy();
     saveProfileBtn.disabled = false;
     saveProfileBtn.textContent = 'Save profile';
   }
