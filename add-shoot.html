@@ -451,6 +451,8 @@
   }
   @media (hover: hover){ .chip-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); } }
   @media (hover: hover){ .chip-btn.danger:hover{ border-color:var(--rust); color:var(--rust); } }
+  #removeLogoBtn{ display:block; margin-top:8px; }
+  #removeLogoBtn.hidden{ display:none; }
 
   #emptyState{ color:var(--muted-grey); font-size:0.85rem; text-align:center; padding:20px; }
 
@@ -1126,6 +1128,10 @@
           <p id="logoHint">Shown on your map pin and popup - link any size image (ideally roughly square). JPG, PNG, WebP, GIF, and SVG all work. When you save, we fetch and permanently host a small copy of it ourselves, so it keeps showing correctly even if the original link later changes, moves, or expires (this has happened with Instagram photo links specifically, which stop working after a few days).</p>
           <p id="noLogoHint">Don't have one to hand? Leave this blank and we'll show your initials instead - the first letter of up to the first 3 words of your name/page name above (short words like "the" and "and" are skipped). For example, "TommyBoy Photography" becomes "TP".</p>
           <img id="logoPreviewImg" class="hidden" alt="Logo preview" />
+          <!-- Only shown once a logo is actually set and the field above is
+               blank (i.e. showing the CURRENT logo, not a preview of
+               something new being typed) - see updateLogoPreview(). -->
+          <button type="button" id="removeLogoBtn" class="chip-btn danger hidden">Remove logo</button>
           <p id="logoPreviewError" class="hidden">Couldn't load an image from that link - double-check it's a direct link to an image, not a page containing one.</p>
         </div>
         <button id="saveProfileBtn" class="pill-btn">Save profile</button>
@@ -2464,8 +2470,15 @@ const profileLogoInput = document.getElementById('profileLogoInput');
 const logoPreviewImg = document.getElementById('logoPreviewImg');
 const logoPreviewError = document.getElementById('logoPreviewError');
 const noLogoHint = document.getElementById('noLogoHint');
+const removeLogoBtn = document.getElementById('removeLogoBtn');
 const saveProfileBtn = document.getElementById('saveProfileBtn');
 const profileError = document.getElementById('profileError');
+
+// ADDED 26/07/2026: the field itself no longer shows the actual stored
+// value once a logo's set - see updateLogoPreview()'s comment just below
+// for why. This tracks what's really saved, independently of whatever
+// (if anything) is currently typed in the visible input.
+let currentLogoUrl = '';
 
 function updateProfileFieldStyles(){
   profileNameInput.classList.toggle('needs-input', !profileNameInput.value.trim());
@@ -2484,16 +2497,33 @@ function resizedLogoUrl(rawUrl, sizePx){
 }
 
 let logoPreviewDebounce = null;
+// CHANGED 26/07/2026: the input used to be pre-filled with whatever was
+// actually stored, which after a first successful save meant showing the
+// photographer their OWN internal raw.githubusercontent.com storage URL
+// back at them - a leaky implementation detail, not something they ever
+// typed or would recognise, and confusing to see. The field now always
+// starts blank; the real current value lives in currentLogoUrl instead,
+// and this function shows it as an actual photo preview (already a
+// small, permanently-hosted copy - no need to route it through the
+// resize proxy the way a freshly-typed external link below still needs
+// to be) rather than as a URL. removeLogoBtn is the only way to actually
+// clear it - see its own click handler.
 function updateLogoPreview(){
   clearTimeout(logoPreviewDebounce);
   const raw = profileLogoInput.value.trim();
   // Only worth explaining the initials fallback while there's actually no
-  // logo set - once one is, it's not relevant, and showing it anyway
-  // would read as though something's wrong.
-  noLogoHint.classList.toggle('hidden', !!raw);
+  // logo, current or newly-typed - once one exists, it's not relevant,
+  // and showing it anyway would read as though something's wrong.
+  noLogoHint.classList.toggle('hidden', !!raw || !!currentLogoUrl);
+  removeLogoBtn.classList.toggle('hidden', !!raw || !currentLogoUrl);
   if (!raw){
-    logoPreviewImg.classList.add('hidden');
     logoPreviewError.classList.add('hidden');
+    if (currentLogoUrl){
+      logoPreviewImg.src = currentLogoUrl;
+      logoPreviewImg.classList.remove('hidden');
+    } else {
+      logoPreviewImg.classList.add('hidden');
+    }
     return;
   }
   // Debounced so pasting/typing doesn't fire a proxy request per
@@ -2512,11 +2542,27 @@ function updateLogoPreview(){
 }
 profileLogoInput.addEventListener('input', updateLogoPreview);
 
+// The only deliberate way to clear an existing logo - see currentLogoUrl's
+// comment above for why a blank field alone can't mean "remove" (it now
+// means "no change" whenever a logo already exists, so the server-side
+// unchanged/removed distinction in updateProfile still works correctly -
+// see saveProfileBtn's click handler for the actual value sent).
+removeLogoBtn.addEventListener('click', () => {
+  currentLogoUrl = '';
+  profileLogoInput.value = '';
+  updateLogoPreview();
+});
+
 saveProfileBtn.addEventListener('click', async () => {
   profileError.classList.add('hidden');
   const name = profileNameInput.value.trim();
   const website = profileWebsiteInput.value.trim();
-  const logo = profileLogoInput.value.trim();
+  // A blank field means "no change" whenever a logo's already set (falls
+  // back to currentLogoUrl, the real stored value) - removeLogoBtn is the
+  // only thing that actually clears currentLogoUrl itself, so a genuine
+  // removal still sends '' through to the server. See currentLogoUrl's
+  // own comment above for the full reasoning.
+  const logo = profileLogoInput.value.trim() || currentLogoUrl;
   if (!name) {
     profileError.textContent = 'Your name / page name is required.';
     profileError.classList.remove('hidden');
@@ -2535,8 +2581,20 @@ saveProfileBtn.addEventListener('click', async () => {
     if (result.error) {
       profileError.textContent = result.error;
       profileError.classList.remove('hidden');
+    } else if (result.logoError) {
+      // Name/Website still saved even though the logo link didn't work -
+      // see updateProfile's comment in app-script.gs for why a bad logo
+      // link is non-fatal to the rest of the save. Surfaced here (not as
+      // a toast) since it needs to stay visible long enough to actually
+      // read, and shouldn't read as a full failure - your previous logo
+      // (if you had one) is still showing, nothing was lost.
+      profileError.textContent = `Name and website saved. ${result.logoError} Your previous logo (if any) is unchanged.`;
+      profileError.classList.remove('hidden');
+      showToast('Profile partly saved - see the note below');
+      await loadShoots(); // resync currentLogoUrl/fields from the server's actual state
     } else {
       showToast('Profile saved');
+      await loadShoots(); // picks up the real stored logo URL (if one was just fetched/stored) into currentLogoUrl
     }
   } catch (err) {
     console.error(err);
@@ -2622,7 +2680,11 @@ async function loadShoots(){
   if (result.profile){
     profileNameInput.value = result.profile.name || '';
     profileWebsiteInput.value = result.profile.website || '';
-    profileLogoInput.value = result.profile.logo || '';
+    // The input stays blank even when a logo's already set - see
+    // currentLogoUrl's own comment for why. updateLogoPreview() shows the
+    // actual current logo as a photo instead.
+    currentLogoUrl = result.profile.logo || '';
+    profileLogoInput.value = '';
     updateLogoPreview();
     updateProfileFieldStyles();
     profileEmailInput.value = result.profile.email || '';

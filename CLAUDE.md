@@ -151,6 +151,16 @@ editing changed.
   was reverting the default back to "OS Roads (UK)" (OS Data Hub is a
   dedicated, rate-limited-but-provisioned-for-this API, not a shared
   best-effort community service).
+- **Nominatim (the place-name search fallback, behind postcodes.io) has the
+  same risk profile as OSM tiles above** — a real usage policy
+  (operations.osmfoundation.org/policies/nominatim/) meant for light,
+  occasional use, not a shared best-effort service provisioned for this
+  site's traffic. Not an issue at current traffic, and search is only
+  called on demand (not on every page load the way tiles are), but if
+  place-name search ever starts failing broadly, this is the first thing
+  to check. No fallback currently built for this one specifically - worth
+  deciding on one (a different geocoder, or just degrading to "postcode
+  search only") if it's ever actually tripped.
 - **`map.invalidateSize()` must be called after anything that changes the
   map's on-screen size** — Leaflet caches container size at init and doesn't
   auto-detect layout reflows (e.g. a banner appearing above the map). Every

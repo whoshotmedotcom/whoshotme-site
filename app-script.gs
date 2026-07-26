@@ -1001,6 +1001,13 @@ function getMyShoots(p, key) {
 // on, so it gets its own confirm-the-new-address flow instead of a plain
 // text field a typo could lock someone out with; see
 // requestEmailChange/confirmEmailChange below.
+// CHANGED 26/07/2026 (again): a failed logo fetch used to abort the WHOLE
+// save, including Name/Website - so fixing an unrelated typo could get
+// blocked by a logo link that happened to have gone stale in the
+// meantime. A bad/dead logo link is now non-fatal: Name/Website still
+// save, the previous logo (if any) is left untouched rather than cleared,
+// and the response carries a separate `logoError` alongside `ok:true` so
+// the client can surface it without treating the whole save as failed.
 function updateProfile(p, name, website, logo) {
   name = String(name || '').trim();
   website = String(website || '').trim();
@@ -1024,13 +1031,17 @@ function updateProfile(p, name, website, logo) {
   // after a first successful save, IS this function's own hosted copy),
   // so re-submitting an untouched value (e.g. just fixing a name typo)
   // must not trigger a pointless re-fetch of our own stored image.
-  var finalLogo = '';
+  var finalLogo = currentLogo;
+  var logoError = '';
   if (cleanLogoInput && cleanLogoInput !== currentLogo) {
     var stored = fetchAndStoreLogo(p, cleanLogoInput);
-    if (stored.error) return { error: stored.error };
-    finalLogo = stored.url;
-  } else if (cleanLogoInput) {
-    finalLogo = currentLogo;
+    if (stored.error) {
+      logoError = stored.error; // keep finalLogo at currentLogo - don't clear a working logo over a failed replacement attempt
+    } else {
+      finalLogo = stored.url;
+    }
+  } else if (!cleanLogoInput) {
+    finalLogo = ''; // field was cleared - that's a deliberate removal, not a failure
   }
 
   var lock = LockService.getScriptLock();
@@ -1046,7 +1057,7 @@ function updateProfile(p, name, website, logo) {
     fresh.sheet.getRange(fresh.rowIndex, freshCols['Photographer Name'] + 1).setValue(sanitizeForCell(name));
     fresh.sheet.getRange(fresh.rowIndex, freshCols['Website URL'] + 1).setValue(cleanWebsite ? sanitizeForCell(cleanWebsite) : '');
     fresh.sheet.getRange(fresh.rowIndex, freshCols['Logo URL'] + 1).setValue(finalLogo ? sanitizeForCell(finalLogo) : '');
-    return { ok: true };
+    return logoError ? { ok: true, logoError: logoError } : { ok: true };
   } finally {
     lock.releaseLock();
   }
