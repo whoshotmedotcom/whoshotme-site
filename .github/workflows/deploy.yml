@@ -48,25 +48,46 @@ jobs:
           git ls-files -z | xargs -0 -I{} cp --parents {} _site/
 
       - name: Minify the three main HTML pages
+        # CONFIRMED BUG (26/07/2026): --remove-redundant-attributes used to
+        # be here too - it strips type="text" from <input> tags (the HTML
+        # spec's own default, so technically "redundant" from a pure-HTML
+        # standpoint). But every themed input across all three pages relies
+        # on CSS attribute selectors like `.field input[type="text"]`,
+        # which require that literal attribute to actually be present in
+        # the DOM - the browser does NOT reinstate a default type="text"
+        # attribute just because it applies the default type="text"
+        # BEHAVIOUR. The result: every plain-text input on the live
+        # (minified) site silently fell back to completely unstyled
+        # browser-default rendering (~20-character intrinsic width, no
+        # theme colours, default border) while the exact same page tested
+        # locally against the raw, unminified source looked completely
+        # normal - this flag only ever ran in this pipeline, never in local
+        # testing, which is exactly why it went unnoticed through several
+        # rounds of otherwise-thorough verification. Diagnosed from a real
+        # user screenshot showing one input a fraction of its neighbour's
+        # width, confirmed by diffing the live deployed HTML directly:
+        # every type="text" input was missing its type attribute; type=
+        # "email"/"datetime-local" (not "redundant", so untouched) were
+        # fine throughout. Removed the flag rather than reworking every
+        # affected CSS selector across three files - the few bytes it saved
+        # were never worth this. Script/style type attributes are still
+        # stripped via their own separate, unaffected flags below.
         run: |
           npx --yes html-minifier-terser@7 \
             --collapse-whitespace --remove-comments \
             --minify-css true --minify-js true \
-            --remove-redundant-attributes \
             --remove-script-type-attributes \
             --remove-style-link-type-attributes \
             -o _site/index.html _site/index.html
           npx --yes html-minifier-terser@7 \
             --collapse-whitespace --remove-comments \
             --minify-css true --minify-js true \
-            --remove-redundant-attributes \
             --remove-script-type-attributes \
             --remove-style-link-type-attributes \
             -o _site/add-shoot.html _site/add-shoot.html
           npx --yes html-minifier-terser@7 \
             --collapse-whitespace --remove-comments \
             --minify-css true --minify-js true \
-            --remove-redundant-attributes \
             --remove-script-type-attributes \
             --remove-style-link-type-attributes \
             -o _site/become-photographer.html _site/become-photographer.html
