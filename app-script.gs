@@ -34,14 +34,20 @@
  *      add-shoot.html both read from this now instead of the CSV feeds -
  *      see getPublicSpots()'s own comment for exactly what it returns
  *      and why.
- *   7. Caches that same public data as a JSON file in Google Drive (see
- *      regenerateSpotsCache, installSpotsCacheTrigger) — added 26/07/2026
- *      after a live Lighthouse comparison showed every page load
- *      spinning up a real Apps Script execution (job 6 above) cost
- *      several seconds of load time versus a plain static file fetch.
- *      Regenerated on every write and via a 15-minute safety-net
- *      trigger; the live endpoint from job 6 stays in place as the
- *      client's fallback if the cache file is ever unreachable.
+ *   7. Caches that same public data as a JSON file committed to a
+ *      dedicated GitHub branch, served via raw.githubusercontent.com
+ *      (see regenerateSpotsCache, installSpotsCacheTrigger) — added
+ *      26/07/2026 after a live Lighthouse comparison showed every page
+ *      load spinning up a real Apps Script execution (job 6 above) cost
+ *      several seconds of load time versus a plain static file fetch. A
+ *      Google Drive file was tried first but doesn't send CORS headers
+ *      a browser fetch() needs; GitHub's raw file serving does, and
+ *      needs no separate build/deploy step (unlike whoshotme.com
+ *      itself) so a commit is live immediately. Regenerated on every
+ *      write (synchronously - see withSpotsCacheRefresh's own comment
+ *      for why not decoupled) and via a 15-minute safety-net trigger;
+ *      the live endpoint from job 6 stays in place as the client's
+ *      fallback if the cache file is ever unreachable.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -116,12 +122,18 @@
  *    (see the migration guide), set PHOTOGRAPHERS_SPREADSHEET_ID below to
  *    that spreadsheet's ID. Leave it blank if Photographers still lives in
  *    this same spreadsheet.
- * 7. Select installSpotsCacheTrigger from the function dropdown next to
+ * 7. Create a fine-grained GitHub personal access token scoped to ONLY
+ *    this repo with ONLY "Contents: Read and write" permission. In the
+ *    Apps Script editor, click Project Settings (gear icon) > Script
+ *    Properties > Add script property: key GITHUB_TOKEN, value that
+ *    token. Never commit this token anywhere - see the comment above
+ *    GITHUB_OWNER below for why.
+ * 8. Select installSpotsCacheTrigger from the function dropdown next to
  *    "Run", and run it once - see its own comment for what it does.
- *    Grant permissions if asked (this now includes Google Drive access).
- *    Check View > Executions (or Logs) afterwards for the cache file's
- *    public URL, and paste that into PUBLIC_SPOTS_JSON_URL in both
- *    index.html and add-shoot.html.
+ *    Grant permissions if asked (this now includes making external HTTP
+ *    requests). PUBLIC_SPOTS_JSON_URL in index.html/add-shoot.html
+ *    already matches the deterministic URL this produces - nothing to
+ *    copy/paste unless GITHUB_OWNER/REPO/BRANCH/PATH below ever change.
  *
  * ADDING A NEW PHOTOGRAPHER:
  * Fully self-service via become-photographer.html now, no action needed
@@ -1412,7 +1424,7 @@ function getPublicSpots() {
   };
 }
 
-// ---- public spots cache (Google Drive JSON file) -------------------------
+// ---- public spots cache (committed to a GitHub branch as JSON) -----------
 //
 // getPublicSpots() above executes live against the sheet on every call -
 // correct, but means every single public page load spins up a real Apps
@@ -1422,29 +1434,64 @@ function getPublicSpots() {
 // the old CSV export it replaced - a real, measured cost of correctness
 // over raw speed.
 //
-// This caches getPublicSpots()'s own output as a JSON file in Google
-// Drive, shared "anyone with the link can view", so PUBLIC reads
-// (index.html/add-shoot.html) can fetch a plain static file instead of
-// triggering a script execution at all - zero Apps Script quota cost per
-// visitor, no cold-start latency in the read path. Regenerated:
-//   1. Immediately after any write that changes it succeeds - see
-//      withSpotsCacheRefresh, wrapping the six shoot/gallery-mutating
-//      actions in doPost. This is the real freshness mechanism.
+// This caches getPublicSpots()'s own output as a JSON file committed to
+// this repo's GITHUB_CACHE_BRANCH (not master - see below), fetched by
+// the client from raw.githubusercontent.com rather than whoshotme.com
+// itself - deliberately NOT the Pages-served URL, since that would route
+// through deploy.yml's full build+deploy pipeline on every regeneration
+// (real delay, the opposite of the goal here). raw.githubusercontent.com
+// serves a repo file's content directly, is CORS-enabled (confirmed
+// directly - not all of GitHub's/Google's file-serving endpoints are;
+// Google Drive's direct-download links, tried first, turned out NOT to
+// be, which is why this isn't a Drive file), and needs no separate
+// build/deploy step at all - a commit is live immediately.
+//
+// A DEDICATED branch (not master) so this doesn't spam the real commit
+// history - every regeneration is a commit, and master's history has
+// been genuinely deliberate throughout this project; raw.githubusercontent.com
+// serves equally well from any branch, so there's no reason to make
+// these commits jostle for space in the branch anyone actually reads.
+//
+// Regenerated:
+//   1. Synchronously, as part of the SAME request, immediately after any
+//      write that changes it succeeds - see withSpotsCacheRefresh,
+//      wrapping the six shoot/gallery-mutating actions in doPost. A
+//      deliberate choice over decoupling this into a delayed trigger:
+//      Apps Script's time-based triggers are a polling scheduler, not a
+//      real-time one - even a trigger requested "a few seconds from now"
+//      commonly doesn't actually fire for something like a minute. Given
+//      a shoot/gallery save already takes several seconds against Apps
+//      Script (see the busy-overlay comment in add-shoot.html) with the
+//      person already waiting, adding the GitHub commit's own latency to
+//      that same wait was judged the better tradeoff over the public
+//      cache staying meaningfully stale for up to a minute after a save.
 //   2. Every 15 minutes via a time-based trigger (see
-//      installSpotsCacheTrigger below) - a safety net only, in case a
+//      installSpotsCacheTrigger below) - a safety net only, in case the
 //      write-triggered regeneration above ever silently fails (e.g. a
-//      transient Drive API error). NOT the main freshness path, so a
+//      transient GitHub API error). NOT the main freshness path, so a
 //      longer interval than "instant" is fine, and deliberately not
 //      shorter than it needs to be - see installSpotsCacheTrigger's own
 //      comment for the quota reasoning behind 15 minutes specifically.
-// The client falls back to the live action=spots endpoint if the Drive
+// The client falls back to the live action=spots endpoint if the cache
 // file fetch fails for any reason - see loadSpotsFromSheet() in
 // index.html for that fallback logic.
-var SPOTS_CACHE_FILE_PROPERTY = 'SPOTS_CACHE_FILE_ID';
-var SPOTS_CACHE_FILE_NAME = 'whoshotme-spots-cache.json';
+//
+// GITHUB_TOKEN is NOT set here - this repo is public, and a token with
+// write access to it is a real credential (unlike, say, an API key
+// restricted to one read-only purpose - this one can push commits).
+// Set it directly in the live Apps Script deployment instead: Project
+// Settings (gear icon) > Script Properties > Add script property > key
+// GITHUB_TOKEN, value a fine-grained GitHub personal access token scoped
+// to ONLY this repo with ONLY "Contents: Read and write" permission.
+// Never paste it anywhere else. GITHUB_OWNER/GITHUB_REPO below aren't
+// sensitive (the repo's already public) so those are fine to commit.
+var GITHUB_OWNER = 'whoshotmedotcom';
+var GITHUB_REPO = 'whoshotme-site';
+var GITHUB_CACHE_BRANCH = 'spots-cache';
+var GITHUB_CACHE_PATH = 'spots-cache.json';
 
 // Regeneration failures are swallowed here (see regenerateSpotsCache
-// below) rather than surfaced as a write error - a Drive hiccup should
+// below) rather than surfaced as a write error - a GitHub hiccup should
 // never fail the actual write the photographer is waiting on, since the
 // client already has a live-endpoint fallback for a stale/unreachable
 // cache file regardless.
@@ -1453,43 +1500,89 @@ function withSpotsCacheRefresh(result) {
   return result;
 }
 
-// The stored file ID is reused across calls so regeneration always
-// updates the SAME file (same URL, forever) rather than creating a new
-// one each time - the frontend's PUBLIC_SPOTS_JSON_URL only needs to be
-// set once, at initial setup.
-function getOrCreateSpotsCacheFile() {
-  var props = PropertiesService.getScriptProperties();
-  var fileId = props.getProperty(SPOTS_CACHE_FILE_PROPERTY);
-  if (fileId) {
-    try {
-      return DriveApp.getFileById(fileId);
-    } catch (err) {
-      // Stored ID no longer resolves to a real file (deleted by hand,
-      // etc.) - fall through and create a fresh one rather than failing.
-    }
+// Thin wrapper around UrlFetchApp for the GitHub REST API - one place
+// for the auth header, base URL, and "don't throw on a 4xx/5xx, let the
+// caller inspect it" behaviour (muteHttpExceptions), rather than
+// repeating all three in every call site below.
+function githubApiRequest(method, path, payload) {
+  var options = {
+    method: method,
+    headers: {
+      Authorization: 'token ' + PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'),
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'whoshotme-apps-script'
+    },
+    muteHttpExceptions: true
+  };
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
   }
-  var file = DriveApp.createFile(SPOTS_CACHE_FILE_NAME, '{}', MimeType.PLAIN_TEXT);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  props.setProperty(SPOTS_CACHE_FILE_PROPERTY, file.getId());
-  return file;
+  return UrlFetchApp.fetch('https://api.github.com' + path, options);
+}
+
+// GITHUB_CACHE_BRANCH won't exist the first time this ever runs -
+// creates it (pointing at master's current commit) if needed. Cheap to
+// call every time (a single GET) since it's a no-op once the branch is
+// there, simpler than tracking "have I created this yet" separately.
+function ensureSpotsCacheBranchExists() {
+  var checkRes = githubApiRequest('GET', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/git/refs/heads/' + GITHUB_CACHE_BRANCH);
+  if (checkRes.getResponseCode() === 200) return;
+
+  var masterRes = githubApiRequest('GET', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/git/refs/heads/master');
+  if (masterRes.getResponseCode() !== 200) {
+    throw new Error('Could not read master branch ref (' + masterRes.getResponseCode() + '): ' + masterRes.getContentText());
+  }
+  var masterSha = JSON.parse(masterRes.getContentText()).object.sha;
+
+  var createRes = githubApiRequest('POST', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/git/refs', {
+    ref: 'refs/heads/' + GITHUB_CACHE_BRANCH,
+    sha: masterSha
+  });
+  if (createRes.getResponseCode() !== 201) {
+    throw new Error('Could not create ' + GITHUB_CACHE_BRANCH + ' branch (' + createRes.getResponseCode() + '): ' + createRes.getContentText());
+  }
 }
 
 // Best-effort on purpose - called both from a write's own request
 // (withSpotsCacheRefresh above) and the time-based safety-net trigger
 // (scheduledRegenerateSpotsCache below). Neither caller should ever fail
-// because Drive had a hiccup - see withSpotsCacheRefresh's comment.
+// because GitHub had a hiccup - see withSpotsCacheRefresh's comment.
+// GitHub's Contents API needs the CURRENT file's blob sha to update it
+// (a plain PUT with no sha creates a new file, and errors if one already
+// exists there) - fetched fresh each call rather than cached, since this
+// branch's content can also change from a source this script doesn't
+// track (e.g. someone force-pushing it by hand), and a stale cached sha
+// would make the PUT below fail with a conflict.
 function regenerateSpotsCache() {
   try {
-    var file = getOrCreateSpotsCacheFile();
-    file.setContent(JSON.stringify(getPublicSpots()));
+    ensureSpotsCacheBranchExists();
+
+    var getRes = githubApiRequest('GET', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + GITHUB_CACHE_PATH + '?ref=' + GITHUB_CACHE_BRANCH);
+    var existingSha = getRes.getResponseCode() === 200 ? JSON.parse(getRes.getContentText()).sha : null;
+
+    var content = JSON.stringify(getPublicSpots());
+    var body = {
+      message: 'Update spots cache',
+      content: Utilities.base64Encode(content, Utilities.Charset.UTF_8),
+      branch: GITHUB_CACHE_BRANCH
+    };
+    if (existingSha) body.sha = existingSha;
+
+    var putRes = githubApiRequest('PUT', '/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/contents/' + GITHUB_CACHE_PATH, body);
+    if (putRes.getResponseCode() >= 300) {
+      throw new Error('GitHub commit failed (' + putRes.getResponseCode() + '): ' + putRes.getContentText());
+    }
   } catch (err) {
     console.error('Failed to regenerate the public spots cache file:', err);
   }
 }
 
 // ONE-TIME SETUP - run this once directly in the Apps Script editor
-// (select it from the function dropdown next to "Run", click Run) after
-// pasting this file in. Installs the 15-minute safety-net trigger
+// (select it from the function dropdown next to "Run", click Run) AFTER
+// setting the GITHUB_TOKEN script property (see the comment above
+// GITHUB_OWNER). Grant permissions if asked - this now includes making
+// external HTTP requests. Installs the 15-minute safety-net trigger
 // (removing any earlier one first, so re-running this after a future
 // edit doesn't stack up duplicate triggers) and generates the cache file
 // immediately rather than waiting up to 15 minutes for the first
@@ -1498,17 +1591,19 @@ function regenerateSpotsCache() {
 // firing on every actual write - and Apps Script consumer accounts have
 // a 90-minutes/day total TRIGGER RUNTIME quota; a 5-minute interval
 // would still fit comfortably, but there's no reason to spend more of
-// that budget than a safety net needs. Logs the file's public URL after
-// - copy that into PUBLIC_SPOTS_JSON_URL in both index.html and
-// add-shoot.html (View > Logs, or Executions, to see it after running).
+// that budget than a safety net needs.
+// Unlike the Drive-based version this replaced, the cache's URL is
+// deterministic (raw.githubusercontent.com/OWNER/REPO/BRANCH/PATH, no
+// random file ID to look up) - PUBLIC_SPOTS_JSON_URL in index.html and
+// add-shoot.html can be set directly without needing to read anything
+// out of a log first, though this still logs it for a quick copy/paste.
 function installSpotsCacheTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'scheduledRegenerateSpotsCache') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('scheduledRegenerateSpotsCache').timeBased().everyMinutes(15).create();
   regenerateSpotsCache();
-  var file = getOrCreateSpotsCacheFile();
-  Logger.log('Public spots cache URL - put this in PUBLIC_SPOTS_JSON_URL (index.html AND add-shoot.html): https://drive.google.com/uc?export=download&id=' + file.getId());
+  Logger.log('Public spots cache URL - should already match PUBLIC_SPOTS_JSON_URL in index.html and add-shoot.html: https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_CACHE_BRANCH + '/' + GITHUB_CACHE_PATH);
 }
 
 // The safety-net trigger's own target - see installSpotsCacheTrigger

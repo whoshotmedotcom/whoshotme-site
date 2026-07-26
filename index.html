@@ -152,20 +152,25 @@
   comparison after the switch to APPS_SCRIPT_URL above showed every page
   load spinning up a real Apps Script execution cost several seconds of
   load time (LCP settled around 6.3-6.8s, versus as low as 5.2s under
-  the old CSV export). This is a plain static JSON file in Google Drive
-  that app-script.gs keeps up to date (see regenerateSpotsCache/
-  installSpotsCacheTrigger there) - fetching it costs no Apps Script
-  execution at all, so it's tried FIRST; APPS_SCRIPT_URL above is only
-  used as a fallback if this fetch fails for any reason (network error,
-  the file not existing yet, a stale/corrupt cache - see
-  loadSpotsFromSheet() below for the actual fallback logic).
-  Get this URL by running installSpotsCacheTrigger() once in the Apps
-  Script editor (see app-script.gs's SETUP notes) and copying the URL it
-  logs. Leave the placeholder in place to skip straight to the live
-  endpoint every time (functionally fine, just without the speed win).
+  the old CSV export). This is a plain static JSON file app-script.gs
+  keeps committed to this repo's "spots-cache" branch (see
+  regenerateSpotsCache/installSpotsCacheTrigger there), fetched here via
+  raw.githubusercontent.com rather than whoshotme.com itself - a Google
+  Drive file was tried first but doesn't send the CORS headers a browser
+  fetch() needs; this does, confirmed directly. Deliberately a different
+  branch to raw-serve from, NOT the Pages-deployed whoshotme.com URL -
+  that would route every regeneration through deploy.yml's full
+  build+deploy pipeline (real delay, the opposite of the goal). Fetching
+  it costs no Apps Script execution at all, so it's tried FIRST;
+  APPS_SCRIPT_URL above is only used as a fallback if this fetch fails
+  for any reason (network error, the cache not existing yet, a stale/
+  corrupt file - see loadSpotsFromSheet() below for the actual fallback
+  logic). The URL below is deterministic (owner/repo/branch/path, no
+  random ID to look up) - only needs changing if GITHUB_OWNER/REPO/
+  GITHUB_CACHE_BRANCH/PATH in app-script.gs ever do.
 ===================================================================== -->
 <script>
-  const PUBLIC_SPOTS_JSON_URL = 'PASTE_YOUR_SPOTS_CACHE_URL_HERE';
+  const PUBLIC_SPOTS_JSON_URL = 'https://raw.githubusercontent.com/whoshotmedotcom/whoshotme-site/spots-cache/spots-cache.json';
 </script>
 
 <!-- Leaflet + markercluster CSS, inlined rather than three separate

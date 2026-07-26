@@ -360,16 +360,26 @@ def test_add_shoot(p, device_name, engine):
 
 
 # CHANGED 26/07/2026: index.html/add-shoot.html no longer read the public
-# data from two Google Sheets CSV exports - both now call the same Apps
-# Script endpoint (action=spots) that index.html's own writes already
-# went through, returning JSON shaped {combined, photographers, galleries}
-# instead of two separate CSVs. `combined` no longer carries a
-# photographer's Name/Logo/Website directly (see getPublicSpots()'s own
-# comment in app-script.gs) - callers here still define each spot as one
-# flat dict for readability, and this helper splits it into the real
-# wire shape: shoot-only fields in `combined`, photographer fields
-# deduped by Shoot Tab Name into their own `photographers` list, exactly
-# like the real endpoint does.
+# data from two Google Sheets CSV exports - both now try a cache file at
+# PUBLIC_SPOTS_JSON_URL (raw.githubusercontent.com) first, falling back
+# to the same Apps Script endpoint (action=spots) index.html's own
+# writes already went through. Both return JSON shaped {combined,
+# photographers, galleries} instead of two separate CSVs. `combined` no
+# longer carries a photographer's Name/Logo/Website directly (see
+# getPublicSpots()'s own comment in app-script.gs) - callers here still
+# define each spot as one flat dict for readability, and this helper
+# splits it into the real wire shape: shoot-only fields in `combined`,
+# photographer fields deduped by Shoot Tab Name into their own
+# `photographers` list, exactly like the real endpoint does.
+#
+# Mocks BOTH the cache URL and the live endpoint with the same payload -
+# without this, the cache attempt would hit the REAL raw.githubusercontent.com
+# over the actual network (a real 404 until the live spots-cache branch
+# exists), which the app's own fallback handles fine functionally, but
+# the browser's own "Failed to load resource" console entry for that
+# real failed request trips any test checking for zero console errors.
+# Same reasoning as stub_tiles() above - don't hit live external
+# services from this suite if avoidable.
 _PHOTOGRAPHER_KEYS = ("Photographer Name", "Logo URL", "Website URL")
 
 
@@ -397,6 +407,8 @@ def route_spots_json(ctx, combined, galleries=None):
         else:
             route.continue_()
     ctx.route("**/script.google.com/**", handler)
+    ctx.route("**raw.githubusercontent.com/whoshotmedotcom/whoshotme-site/spots-cache/spots-cache.json",
+               lambda route: route.fulfill(status=200, content_type="application/json", body=body))
 
 
 def route_empty_spots(ctx):
