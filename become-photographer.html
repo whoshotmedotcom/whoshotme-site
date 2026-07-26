@@ -271,13 +271,17 @@
      comment for the full reasoning. Even more likely to trigger here
      than there: nameInput/emailInput/websiteInput below all set explicit
      autocomplete="name"/"email"/"url" hints, which makes a browser MORE
-     confident about autofilling and highlighting them, not less. */
+     confident about autofilling and highlighting them, not less.
+     border-color added after real Chrome screenshots showed a second,
+     separate autofill affordance this fix's first pass missed - see
+     add-shoot.html's updated comment for the full story. */
   .field input:-webkit-autofill,
   .field input:-webkit-autofill:hover,
   .field input:-webkit-autofill:focus{
     -webkit-text-fill-color: var(--paper);
     -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
     box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    border-color: var(--line) !important;
     transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
   }
   .field small{

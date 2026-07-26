@@ -532,13 +532,26 @@
      fill colour with this theme's background instead; the very long
      transition delays that from visibly flashing pale before it does.
      -webkit-text-fill-color is needed too - autofill also overrides
-     plain text color, which a normal `color` rule can't touch either. */
+     plain text color, which a normal `color` rule can't touch either.
+     UPDATED 26/07/2026 after real Chrome screenshots (this fix alone
+     wasn't enough): current Chrome ALSO draws its own bright border
+     around fields it's autofilled - a separate visual affordance from
+     the background fill, confirmed once real screenshots showed a
+     bright white outline around already-filled Name/Website/Logo
+     specifically, distinct from the (correctly rust-coloured, unrelated)
+     empty-required-field highlight on Location Name in a second
+     screenshot. Chrome DevTools Protocol's forcePseudoState - used to
+     verify the background/text-colour half of this fix - only forces
+     the CSS pseudo-class match, not this separate border affordance, so
+     it didn't catch the gap. border-color below forces it back to this
+     field's own normal resting border regardless. */
   .field input:-webkit-autofill,
   .field input:-webkit-autofill:hover,
   .field input:-webkit-autofill:focus{
     -webkit-text-fill-color: var(--paper);
     -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
     box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    border-color: var(--line) !important;
     transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
   }
   .field textarea{ resize:vertical; min-height:60px; }
@@ -597,13 +610,16 @@
      a deliberately transparent input sitting inside an opaquely-themed
      container (#locationSearchRow, solid var(--asphalt) this time, not
      an rgba mix), so the browser's own autofill paint is exactly as
-     visible against it. */
+     visible against it. border/outline forced to none too, same reason
+     as #searchInput's matching rule - no border of its own by design. */
   #locationSearchInput:-webkit-autofill,
   #locationSearchInput:-webkit-autofill:hover,
   #locationSearchInput:-webkit-autofill:focus{
     -webkit-text-fill-color: var(--paper);
     -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
     box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    border: none !important;
+    outline: none !important;
     transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
   }
   #locationSearchClear{

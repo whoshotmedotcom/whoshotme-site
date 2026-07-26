@@ -907,13 +907,23 @@
      against it, and box-shadow can't use an alpha-blended colour the way
      background can since there's nothing behind it to blend with in the
      same way. Same fix as add-shoot.html/become-photographer.html's
-     .field inputs - see either's comment for the fuller mechanism. */
+     .field inputs - see either's comment for the fuller mechanism.
+     border/outline forced back to none too - real Chrome screenshots on
+     add-shoot.html (see its .field autofill rule's own updated comment)
+     showed a second, separate bright-border autofill affordance this
+     rule's first pass missed entirely, distinct from the background fill
+     already handled above. #searchInput has no border of its own by
+     design (the themed border lives one level up, on #searchBox), so
+     forcing both properties to none is the correct "normal" state here,
+     not var(--line) the way a real bordered .field input needs. */
   #searchInput:-webkit-autofill,
   #searchInput:-webkit-autofill:hover,
   #searchInput:-webkit-autofill:focus{
     -webkit-text-fill-color: var(--paper);
     -webkit-box-shadow: 0 0 0 1000px var(--asphalt) inset;
     box-shadow: 0 0 0 1000px var(--asphalt) inset;
+    border: none !important;
+    outline: none !important;
     transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
   }
   #searchClear{
