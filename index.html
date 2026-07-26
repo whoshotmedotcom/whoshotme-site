@@ -186,8 +186,16 @@
      clustering (see loadMarkerClusterScript() / CLUSTERING_MARKER_THRESHOLD
      near the clustering code below), since most page loads currently have
      far fewer shoots live than that. Nothing to preload here anymore for
-     a script that might not load at all. -->
-<link rel="preload" as="script" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
+     a script that might not load at all.
+     crossorigin="anonymous" (CONFIRMED BUG, 26/07/2026, found via
+     DebugBear's free Core Web Vitals checker after this session's
+     Lighthouse pass): without it, this preload and the actual <script
+     src> tag below fetch with different credentials modes, so the
+     browser can't reuse the preloaded response and downloads
+     leaflet.min.js TWICE. cdnjs serves Access-Control-Allow-Origin: *
+     on this file (checked directly), so anonymous-mode CORS is safe -
+     both tags need the same attribute, not just this one. -->
+<link rel="preload" as="script" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
 <style>
   :root{
     --asphalt:#1c1e22;
@@ -1615,7 +1623,7 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
 
 <script>
 // =========================================================================
