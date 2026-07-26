@@ -4187,22 +4187,67 @@ let knownGoodRawCount = 0;
 // below, called from init() after the page is already interactive.
 const CONFIRM_FETCH_DELAY_MS = 1800;
 const EMPTY_RESULT_RETRY_DELAYS_MS = [1500, 3000];
+// Wraps loadSpotsFromSheet() so a thrown error (a genuine fetch failure -
+// non-2xx status, network error, etc.) can be handled in the SAME retry
+// loop as a suspiciously-empty result below, rather than needing two
+// separate code paths for "the response looked bad" vs "the request
+// failed outright".
+async function attemptLoadSpots(){
+  try {
+    return { result: await loadSpotsFromSheet(), error: null };
+  } catch (err) {
+    return { result: null, error: err };
+  }
+}
+
 async function loadSpotsInitial(){
-  let result = await loadSpotsFromSheet();
-  if (isSuspiciouslyEmpty(result)){
+  let { result, error } = await attemptLoadSpots();
+  // CONFIRMED BUG (26/07/2026): a HAR capture from a real third-party
+  // speed-test run caught BOTH CSV endpoints returning a hard HTTP 400
+  // at once - a live, reproduced instance of Google's publish-to-web
+  // CSV misbehaving in a way this file's existing retry logic didn't
+  // cover. Before this fix, loadSpotsFromSheet() throwing on the very
+  // first attempt propagated straight up through init()'s catch block
+  // to showErrorState() with no retry at all - a visitor hitting that
+  // exact moment saw a full "Couldn't load the map" screen and had to
+  // manually tap "Try again" themselves, for what's very likely a
+  // several-second Google-side hiccup (the same family of issue as the
+  // "Tommyboy incident" above, just a harder failure mode: an outright
+  // error response instead of a thin/inconsistent one). Folded into the
+  // same backoff loop already used for the suspiciously-empty case,
+  // since both are "this attempt looks bad, try again shortly" - not a
+  // new, separate retry schedule.
+  if (error || isSuspiciouslyEmpty(result)){
     for (const delay of EMPTY_RESULT_RETRY_DELAYS_MS){
-      console.warn(`Got ${result.rawCount} raw row(s) but 0 passed validation - retrying in ${delay}ms in case this is a transient bad snapshot.`);
+      console.warn(error
+        ? `Initial data fetch failed (${error.message}) - retrying in ${delay}ms in case this is a transient network/server hiccup.`
+        : `Got ${result.rawCount} raw row(s) but 0 passed validation - retrying in ${delay}ms in case this is a transient bad snapshot.`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      const retry = await loadSpotsFromSheet();
+      const retry = await attemptLoadSpots();
+      if (retry.error){
+        // Only let this retry's failure replace our current one if we
+        // don't already have SOME usable result - a fresh error should
+        // never overwrite a result we could still fall back to.
+        if (!result) error = retry.error;
+        continue;
+      }
+      error = null;
       // Compare spots.length, not rawCount - a wipeout's rawCount can be
       // identical between attempts (the rows are there, they just failed
       // validation), so rawCount alone can't tell "still broken" apart
       // from "recovered" here the way it can in scheduleConfirmFetch()
       // below (where the whole point is rawCount actually differing).
-      if (retry.spots.length > result.spots.length) result = retry;
+      if (!result || retry.result.spots.length > result.spots.length) result = retry.result;
       if (!isSuspiciouslyEmpty(result)) break;
     }
   }
+  // Every attempt failed outright (not just returned a thin/empty
+  // result) - let init()'s own catch block show the manual "Try again"
+  // error state. Deliberately NOT thrown for the "still empty after
+  // retries" case (error stays null there) - that's pre-existing,
+  // intentional behaviour: a genuinely empty sheet is a real, valid
+  // state to just show quietly, not an error to alarm anyone about.
+  if (error) throw error;
   knownGoodRawCount = Math.max(knownGoodRawCount, result.rawCount);
   return result;
 }
