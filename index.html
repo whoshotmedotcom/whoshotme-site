@@ -4031,8 +4031,8 @@ function hideLoadingState(){
 // signature of Google's publish-to-web CSV occasionally serving a
 // transient half-updated snapshot (same propagation-lag family as the
 // IMPORTRANGE bug fixed 18/07/2026) rather than real data loss — see
-// loadSpotsWithRetry() and scheduleBackgroundRefresh() below for how
-// that distinction gets used.
+// loadSpotsInitial() and scheduleBackgroundRefresh() below for how that
+// distinction gets used.
 async function loadSpotsFromSheet(){
   const [combinedRows, galleryRows] = await Promise.all([
     fetchCsv(COMBINED_CSV_URL),
@@ -4071,9 +4071,24 @@ let knownGoodRawCount = 0;
 // trusting the first response blindly. Total-wipeout results (see
 // isSuspiciouslyEmpty) get real retries with backoff instead, since
 // that's a worse/different failure than "missing a few rows".
+//
+// CHANGED 26/07/2026: the confirmatory fetch used to be awaited inside
+// this function, so init() (below) blocked on it before ever showing
+// the map - a real, measured ~2s+ delay on every single page load
+// (first fetch + this 1.8s wait + a second full fetch), confirmed via
+// a Lighthouse re-audit tracing index.html's poor LCP/Speed Index
+// straight to this. The correctness guarantee is still worth keeping,
+// but it doesn't need to block first paint to do its job - the
+// suspiciously-empty case (real data loss, not just "maybe missing a
+// few rows") still retries before showing anything, since a blank map
+// is a worse failure than a briefly-incomplete one, but the "got a
+// plausible result, might be a few rows short" case now renders that
+// first result immediately and only silently tops it up in the
+// background if a fuller one shows up - see scheduleConfirmFetch()
+// below, called from init() after the page is already interactive.
 const CONFIRM_FETCH_DELAY_MS = 1800;
 const EMPTY_RESULT_RETRY_DELAYS_MS = [1500, 3000];
-async function loadSpotsWithRetry(){
+async function loadSpotsInitial(){
   let result = await loadSpotsFromSheet();
   if (isSuspiciouslyEmpty(result)){
     for (const delay of EMPTY_RESULT_RETRY_DELAYS_MS){
@@ -4083,18 +4098,40 @@ async function loadSpotsWithRetry(){
       // Compare spots.length, not rawCount - a wipeout's rawCount can be
       // identical between attempts (the rows are there, they just failed
       // validation), so rawCount alone can't tell "still broken" apart
-      // from "recovered" here the way it can in the confirm-fetch branch
+      // from "recovered" here the way it can in scheduleConfirmFetch()
       // below (where the whole point is rawCount actually differing).
       if (retry.spots.length > result.spots.length) result = retry;
       if (!isSuspiciouslyEmpty(result)) break;
     }
-  } else {
-    await new Promise(resolve => setTimeout(resolve, CONFIRM_FETCH_DELAY_MS));
-    const confirm = await loadSpotsFromSheet();
-    if (confirm.rawCount > result.rawCount) result = confirm;
   }
   knownGoodRawCount = Math.max(knownGoodRawCount, result.rawCount);
   return result;
+}
+
+// Runs CONFIRM_FETCH_DELAY_MS after the page has already rendered the
+// first fetch's result (see the comment above) - fetches once more and,
+// only if it's genuinely fuller (same guard scheduleBackgroundRefresh()
+// uses), silently swaps it in and re-renders. Never touches mode/filter
+// state or re-runs the shared-link/default-mode logic - by this point
+// the visitor may already be interacting with the page, so this should
+// look like "a couple more pins quietly appeared", not a reset.
+function scheduleConfirmFetch(initialResult){
+  setTimeout(async () => {
+    try {
+      const confirm = await loadSpotsFromSheet();
+      if (isSuspiciouslyEmpty(confirm) || confirm.rawCount <= initialResult.rawCount) return;
+      knownGoodRawCount = Math.max(knownGoodRawCount, confirm.rawCount);
+      spots = confirm.spots;
+      updateLastUpdated();
+      rebuildDateAxis();
+      rebuildMonthOptions();
+      render();
+    } catch (err) {
+      // Quiet failure on purpose, same reasoning as scheduleBackgroundRefresh()
+      // below - the visitor already has a working map from the first fetch.
+      console.warn('Confirmatory fetch failed, keeping the initial result:', err);
+    }
+  }, CONFIRM_FETCH_DELAY_MS);
 }
 
 // Decides what the map shows on a completely fresh landing (no shared-shoot
@@ -4132,17 +4169,20 @@ const mapWrap = document.getElementById('mapWrap');
 // this just keeps #searchWrap sitting below whichever one is currently
 // visible. Only one of the two banners is ever shown at once (see the
 // comment in resolveDefaultMode()), so a single shared class is enough.
-// The CSS default (40px, matching one line of banner text) covers the
-// common case immediately; offsetHeight is read a frame later via rAF
-// rather than right here, since reading it synchronously right after the
-// classList change above would force a layout recalc mid-task instead of
-// letting the browser fold it into its normal next paint.
+// CONFIRMED BUG (26/07/2026): --bannerHeight used to be applied a frame
+// later via requestAnimationFrame (avoiding a forced layout recalc mid-
+// task was the whole point), but render() binds each marker's popup with
+// getPopupAutoPanOptions() - which reads #searchWrap's CURRENT position -
+// at render time, synchronously, during init(). Once the initial data
+// fetch got fast enough (see loadSpotsInitial/scheduleConfirmFetch above),
+// render() could run before that deferred frame ever fired, baking a too-
+// small top padding into that popup and letting it open under the search
+// bar while a banner was showing. Setting it synchronously here trades a
+// little avoidable layout work for never handing render() a stale value.
 function setBannerActive(bannerEl){
   if (bannerEl){
     mapWrap.classList.add('bannerActive');
-    requestAnimationFrame(() => {
-      mapWrap.style.setProperty('--bannerHeight', bannerEl.offsetHeight + 'px');
-    });
+    mapWrap.style.setProperty('--bannerHeight', bannerEl.offsetHeight + 'px');
   } else {
     mapWrap.classList.remove('bannerActive');
   }
@@ -4186,7 +4226,7 @@ async function init(){
   }
 
   try {
-    const result = await loadSpotsWithRetry();
+    const result = await loadSpotsInitial();
     spots = result.spots;
     updateLastUpdated();
     const wentToSharedShoot = applySharedShootFromUrl();
@@ -4213,6 +4253,7 @@ async function init(){
       flyToSpot(pendingSharedShootFocus);
       pendingSharedShootFocus = null;
     }
+    scheduleConfirmFetch(result);
     scheduleBackgroundRefresh();
   } catch (err) {
     showErrorState(err);
@@ -4309,7 +4350,7 @@ function scheduleBackgroundRefresh(){
       // Same "distrust a suspiciously thin snapshot" guard as the initial
       // load - either every row failed validation, or this fetch has
       // fewer raw rows than we've already confirmed exist this session
-      // (see knownGoodRawCount's comment on loadSpotsWithRetry above).
+      // (see knownGoodRawCount's comment on loadSpotsInitial above).
       // Don't let either wipe pins that are already showing correctly -
       // skip this tick and try again next interval, same as an outright
       // fetch error below.
