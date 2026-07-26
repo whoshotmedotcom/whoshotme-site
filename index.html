@@ -2015,7 +2015,16 @@ function buildSpots(rawSpotData, galleriesByShootId){
       const hasRealLogo = hasUsableCellValue(row.logo) && isSafeUrl(row.logo);
       return {
         name,
-        logo: hasRealLogo ? resizedLogoUrl(String(row.logo).trim(), 96) : initialsAvatar,
+        // CHANGED 26/07/2026: was 96 (so 192px actually fetched) - a
+        // genuine mismatch with reality, not a deliberate margin. The
+        // largest real on-screen use of this logo is the marker icon at
+        // 46px CSS (see makeIcon()'s `size`) - the popup's is smaller
+        // still (40px desktop, 34px mobile). 96 was requesting roughly
+        // 4x more pixel area than even a 3x-DPI phone showing the marker
+        // needs. Found via a real Lighthouse audit flagging this exact
+        // fetch as oversized. 46 keeps full 2x-retina sharpness at the
+        // actual largest size anything on this page ever shows it at.
+        logo: hasRealLogo ? resizedLogoUrl(String(row.logo).trim(), 46) : initialsAvatar,
         logoFallback: initialsAvatar,
         lat: row.lat,
         lng: row.lng,
