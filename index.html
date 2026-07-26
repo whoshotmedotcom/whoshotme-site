@@ -114,31 +114,33 @@
 
 <!-- ====================================================================
   LIVE DATA — where the map gets its shoots from.
-  1. In your Google Sheet: File > Share > Publish to web.
-  2. Under "Link", choose the "Combined" tab (not "Entire document") and
-     format "Comma-separated values (.csv)", then click Publish and copy
-     the URL it gives you into COMBINED_CSV_URL below.
-  3. Repeat for the "Galleries" tab into GALLERIES_CSV_URL below — read
-     directly, no "Combined Galleries" formula tab needed (this page's
-     own groupGalleriesByShootId() already filters out blank/unsafe URLs
-     itself, and reads columns by name, so the extra Shoot Tab Name
-     column Galleries has is simply ignored). If you don't use galleries,
-     leave this one as-is — it fails quietly.
-  Any edit to the sheet (once protections/permissions are set up per the
-  Instructions tab) appears on the site the next time someone loads the
-  page — no redeploy needed.
+  CHANGED 26/07/2026: this used to be two Google Sheets "publish to web"
+  CSV exports (COMBINED_CSV_URL / GALLERIES_CSV_URL). That mechanism had
+  a documented history of real reliability problems - propagation lag,
+  inconsistent CDN replicas serving different snapshots to different
+  visitors, and (confirmed live via a third-party speed-test capture)
+  outright HTTP errors - all traced to the CSV export being a static-
+  publish-plus-caching feature, not a real API. Reads now go through the
+  SAME Apps Script Web App used for writes (see APPS_SCRIPT_URL below) -
+  action=spots executes live against the actual sheet on every call, so
+  there's no separate caching layer of Google's left to be stale or
+  inconsistent. See getPublicSpots() in app-script.gs for the full
+  reasoning and exactly what it returns.
+  Nothing about editing the Google Sheet changed - the Photographers/
+  Shoots/Galleries tabs are still the real source of truth, still
+  editable by hand or via add-shoot.html exactly as before. Any edit
+  still appears on the site the next time someone loads the page.
 ===================================================================== -->
-<script>
-  const COMBINED_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1737338184&single=true&output=csv';
-  const GALLERIES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1842250391&single=true&output=csv';
-</script>
+
 
 <!-- ====================================================================
   Set this to the same Apps Script Web App URL used in add-shoot.html
-  (ends in /exec). Used only to send anonymous click counters back to
-  each photographer's Stats row — see trackEvent() further down. Leave
-  as-is to skip stats tracking entirely; nothing else on the site depends
-  on it.
+  (ends in /exec). CHANGED 26/07/2026: this used to be used only for
+  anonymous click counters (see trackEvent() further down) - it's now
+  also how the map itself gets its shoot/gallery data (see
+  loadSpotsFromSheet() and the LIVE DATA comment above). No longer
+  optional the way it once was for stats-only use - the map can't load
+  without it.
 ===================================================================== -->
 <script>
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4rliusH6XJOxTrk_yE4DfbV1cmSeg4J7W-Isa7qCZPolQ1ryCJK2sd-xIQKcGKr4l/exec';
@@ -1639,8 +1641,8 @@
 //
 // Shoots are added/changed/removed by editing the Google Sheet directly
 // (or via add-shoot.html, which builds a row to paste in) — never by
-// editing this file. See COMBINED_CSV_URL / GALLERIES_CSV_URL near the
-// top of the page for where the site pulls its data from.
+// editing this file. See APPS_SCRIPT_URL / the LIVE DATA comment near
+// the top of the page for where the site pulls its data from.
 //
 // EXPECTED COLUMNS (from the "Combined" tab):
 //   Photographer Name, Logo URL, Website URL, Location Name, Description,
@@ -1701,64 +1703,6 @@ function resizedLogoUrl(rawUrl, sizePx){
   return `https://images.weserv.nl/?url=${encodeURIComponent(rawUrl)}&w=${px}&h=${px}&fit=cover`;
 }
 
-// =========================================================================
-// CSV FETCHING — pulls live data from the "Combined" and "Combined
-// Galleries" tabs, published as CSV from the Google Sheet (see the
-// COMBINED_CSV_URL / GALLERIES_CSV_URL config near the top of this file).
-//
-// A tiny CSV parser is used instead of a naive split(',') because Google
-// Sheets quotes any field containing a comma, quote, or newline (e.g. a
-// description with a comma in it) — a naive split would shift columns
-// and quietly corrupt every row after the first one.
-// =========================================================================
-function parseCsv(text){
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++){
-    const c = text[i];
-    if (inQuotes){
-      if (c === '"'){
-        if (text[i + 1] === '"'){ field += '"'; i++; }
-        else { inQuotes = false; }
-      } else {
-        field += c;
-      }
-    } else if (c === '"'){
-      inQuotes = true;
-    } else if (c === ','){
-      row.push(field); field = '';
-    } else if (c === '\n' || c === '\r'){
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = '';
-      rows.push(row); row = [];
-    } else {
-      field += c;
-    }
-  }
-  if (field !== '' || row.length){ row.push(field); rows.push(row); }
-
-  if (!rows.length) return [];
-  const headers = rows[0].map(h => h.trim());
-  return rows.slice(1)
-    .filter(r => r.some(cell => cell.trim() !== '')) // drop fully-blank rows
-    .map(r => {
-      const obj = {};
-      headers.forEach((h, idx) => { obj[h] = (r[idx] !== undefined ? r[idx] : '').trim(); });
-      return obj;
-    });
-}
-
-async function fetchCsv(url){
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
-  let text = await res.text();
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip a leading BOM if present
-  return parseCsv(text);
-}
-
 // Groups gallery rows by Shoot ID so each spot can look up its own
 // galleries in O(1) instead of re-scanning the whole list per spot.
 function groupGalleriesByShootId(galleryRows){
@@ -1775,9 +1719,10 @@ function groupGalleriesByShootId(galleryRows){
   return map;
 }
 
-// Converts one row from the "Combined" CSV (Photographer Name, Logo URL,
-// Website URL, Location Name, Description, Lat, Lng, Start, End, Shoot ID)
-// into the {name, logo, lat, lng, ...} shape the rest of the app expects.
+// Converts one shoot object from the Apps Script spots feed (Photographer
+// Name, Logo URL, Website URL, Location Name, Description, Lat, Lng,
+// Start, End, Shoot ID - see getPublicSpots() in app-script.gs) into the
+// {name, logo, lat, lng, ...} shape the rest of the app expects.
 // Photographer-submitted fields (location, description, gallery labels/
 // URLs) end up in HTML via popups and search results below. Escaping text
 // and checking URL schemes here means a bad or leaked secret key can't be
@@ -4126,22 +4071,40 @@ function hideLoadingState(){
 // Returns {spots, rawCount} rather than just the built array — rawCount
 // (the raw row count before per-row validation) lets callers tell a
 // genuinely empty sheet (rawCount 0) apart from "got rows back but every
-// one failed validation" (rawCount > 0, spots empty). The latter is the
-// signature of Google's publish-to-web CSV occasionally serving a
-// transient half-updated snapshot (same propagation-lag family as the
-// IMPORTRANGE bug fixed 18/07/2026) rather than real data loss — see
+// one failed validation" (rawCount > 0, spots empty). That distinction
+// used to matter most for a Google-CDN-specific failure (the old CSV
+// export occasionally serving a transient half-updated snapshot - same
+// propagation-lag family as the IMPORTRANGE bug fixed 18/07/2026); now
+// that reads go straight through Apps Script (see the LIVE DATA comment
+// near the top of this file), that specific cause is gone, but the same
+// guard still covers a more mundane one - a single malformed row (bad
+// lat/lng, unparseable date) failing buildSpots()'s own validation -
+// worth retrying rather than trusting blindly either way. See
 // loadSpotsInitial() and scheduleBackgroundRefresh() below for how that
 // distinction gets used.
 async function loadSpotsFromSheet(){
-  const [combinedRows, galleryRows] = await Promise.all([
-    fetchCsv(COMBINED_CSV_URL),
-    (GALLERIES_CSV_URL && GALLERIES_CSV_URL.indexOf('PASTE_YOUR') !== 0
-      ? fetchCsv(GALLERIES_CSV_URL).catch(err => { console.warn('Galleries CSV failed to load, continuing without galleries:', err); return []; })
-      : Promise.resolve([]))
-  ]);
-  const galleriesByShootId = groupGalleriesByShootId(galleryRows);
-  const rawSpotData = combinedRows.map(combinedRowToRawSpot);
-  return { spots: buildSpots(rawSpotData, galleriesByShootId), rawCount: combinedRows.length };
+  const res = await fetch(`${APPS_SCRIPT_URL}?action=spots`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  // getPublicSpots() (app-script.gs) sends combinedCount/galleriesCount
+  // alongside the arrays themselves, computed from the same loop that
+  // built them - a mismatch here can only mean something corrupted the
+  // response after it left the server, or a bug in this function's own
+  // parsing, so it's treated as a real fetch failure (retried the same
+  // way any other one is) rather than silently trusting whatever length
+  // the array happens to have.
+  const combined = data.combined || [];
+  const galleries = data.galleries || [];
+  if (typeof data.combinedCount === 'number' && combined.length !== data.combinedCount){
+    throw new Error(`Spots feed length mismatch: got ${combined.length} rows, expected ${data.combinedCount}`);
+  }
+  if (typeof data.galleriesCount === 'number' && galleries.length !== data.galleriesCount){
+    throw new Error(`Galleries feed length mismatch: got ${galleries.length} rows, expected ${data.galleriesCount}`);
+  }
+  const galleriesByShootId = groupGalleriesByShootId(galleries);
+  const rawSpotData = combined.map(combinedRowToRawSpot);
+  return { spots: buildSpots(rawSpotData, galleriesByShootId), rawCount: combined.length };
 }
 
 function isSuspiciouslyEmpty(result){
@@ -4364,8 +4327,8 @@ async function init(){
   showLoadingState();
   tryAutoLocate(); // fire-and-forget - races the data fetch below, never blocks it
 
-  if (!COMBINED_CSV_URL || COMBINED_CSV_URL.indexOf('PASTE_YOUR') === 0){
-    showErrorState(new Error('COMBINED_CSV_URL has not been set yet'));
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0){
+    showErrorState(new Error('APPS_SCRIPT_URL has not been set yet'));
     return;
   }
 

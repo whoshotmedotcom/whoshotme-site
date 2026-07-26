@@ -28,6 +28,7 @@ gate as well as a manual check.
 """
 import datetime
 import http.server
+import json
 import re
 import socket
 import subprocess
@@ -119,6 +120,14 @@ def test_index(p, device_name, engine):
         service_workers="block",
     )
     stub_tiles(ctx)
+    # CHANGED 26/07/2026: this test used to implicitly rely on whatever
+    # was actually live on Google Sheets at the moment it ran - it never
+    # checks specific spot content, so that was never intentional, just
+    # how it happened to end up. Mocking it properly (same helper the
+    # other tests already use) makes this deterministic and independent
+    # of live external services, matching this file's own stated
+    # reasoning for stubbing tiles just above.
+    route_real_spot(ctx)
     page = ctx.new_page()
     errors = []
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
@@ -350,19 +359,34 @@ def test_add_shoot(p, device_name, engine):
     browser.close()
 
 
-EMPTY_CSV = "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
+# CHANGED 26/07/2026: index.html/add-shoot.html no longer read the public
+# data from two Google Sheets CSV exports - both now call the same Apps
+# Script endpoint (action=spots) that index.html's own writes already
+# went through, returning JSON shaped {combined: [...], galleries: [...]}
+# instead of two separate CSVs. This helper mocks that one endpoint;
+# `combined`/`galleries` are lists of plain dicts using the exact same
+# column names as object keys that the old CSV rows had, since
+# combinedRowToRawSpot()/groupGalleriesByShootId() in index.html expect
+# those same keys either way - only what fetches them changed.
+def route_spots_json(ctx, combined, galleries=None):
+    galleries = galleries or []
+    # combinedCount/galleriesCount match getPublicSpots()'s real response
+    # shape - see loadSpotsFromSheet()'s integrity check in index.html.
+    body = json.dumps({
+        "combined": combined, "galleries": galleries,
+        "combinedCount": len(combined), "galleriesCount": len(galleries),
+    })
 
-
-def route_empty_csv(ctx):
     def handler(route):
-        url = route.request.url
-        if "gid=1737338184" in url:
-            route.fulfill(status=200, content_type="text/csv", body=EMPTY_CSV)
-        elif "gid=1842250391" in url:
-            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
+        if route.request.method == "GET" and "action=spots" in route.request.url:
+            route.fulfill(status=200, content_type="application/json", body=body)
         else:
             route.continue_()
-    ctx.route("**/docs.google.com/**", handler)
+    ctx.route("**/script.google.com/**", handler)
+
+
+def route_empty_spots(ctx):
+    route_spots_json(ctx, [])
 
 
 def test_empty_state_no_drift(p, device_name, engine):
@@ -382,7 +406,7 @@ def test_empty_state_no_drift(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_empty_csv(ctx)
+    route_empty_spots(ctx)
     page = ctx.new_page()
     print(f"\n--- empty-state popup drift on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -415,22 +439,16 @@ def test_empty_state_no_drift(p, device_name, engine):
 # aged into the past.
 _TODAY = datetime.date.today().isoformat()
 
-EMOJI_NAME_CSV = (
-    "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
-    f"🏍️ Emoji Photog,,,Test Spot,,53.1,-1.6,{_TODAY} 00:00,{_TODAY} 23:59,S1,emojiphotog\r\n"
-)
+EMOJI_NAME_SPOT = {
+    "Photographer Name": "🏍️ Emoji Photog", "Logo URL": "", "Website URL": "",
+    "Location Name": "Test Spot", "Description": "", "Lat": "53.1", "Lng": "-1.6",
+    "Start": f"{_TODAY} 00:00", "End": f"{_TODAY} 23:59",
+    "Shoot ID": "S1", "Shoot Tab Name": "emojiphotog",
+}
 
 
-def route_emoji_name_csv(ctx):
-    def handler(route):
-        url = route.request.url
-        if "gid=1737338184" in url:
-            route.fulfill(status=200, content_type="text/csv; charset=utf-8", body=EMOJI_NAME_CSV)
-        elif "gid=1842250391" in url:
-            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
-        else:
-            route.continue_()
-    ctx.route("**/docs.google.com/**", handler)
+def route_emoji_name_spots(ctx):
+    route_spots_json(ctx, [EMOJI_NAME_SPOT])
 
 
 def test_emoji_name_no_crash(p, device_name, engine):
@@ -446,7 +464,7 @@ def test_emoji_name_no_crash(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_emoji_name_csv(ctx)
+    route_emoji_name_spots(ctx)
     page = ctx.new_page()
     print(f"\n--- emoji-name no-crash on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -460,22 +478,17 @@ def test_emoji_name_no_crash(p, device_name, engine):
     browser.close()
 
 
-REAL_SPOT_CSV = (
-    "Photographer Name,Logo URL,Website URL,Location Name,Description,Lat,Lng,Start,End,Shoot ID,Shoot Tab Name\r\n"
-    f"Real Photog,,https://example.com,Winnats Pass - top of the climb,Shooting bikes coming up the hill all afternoon - wave if you see me!,53.1,-1.6,{_TODAY} 00:00,{_TODAY} 23:59,S1,realphotog\r\n"
-)
+REAL_SPOT = {
+    "Photographer Name": "Real Photog", "Logo URL": "", "Website URL": "https://example.com",
+    "Location Name": "Winnats Pass - top of the climb",
+    "Description": "Shooting bikes coming up the hill all afternoon - wave if you see me!",
+    "Lat": "53.1", "Lng": "-1.6", "Start": f"{_TODAY} 00:00", "End": f"{_TODAY} 23:59",
+    "Shoot ID": "S1", "Shoot Tab Name": "realphotog",
+}
 
 
-def route_real_spot_csv(ctx):
-    def handler(route):
-        url = route.request.url
-        if "gid=1737338184" in url:
-            route.fulfill(status=200, content_type="text/csv", body=REAL_SPOT_CSV)
-        elif "gid=1842250391" in url:
-            route.fulfill(status=200, content_type="text/csv", body="Shoot ID,Label,URL\r\n")
-        else:
-            route.continue_()
-    ctx.route("**/docs.google.com/**", handler)
+def route_real_spot(ctx):
+    route_spots_json(ctx, [REAL_SPOT])
 
 
 def test_popup_clears_bottom_controls(p, device_name, engine):
@@ -503,7 +516,7 @@ def test_popup_clears_bottom_controls(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_real_spot_csv(ctx)
+    route_real_spot(ctx)
     page = ctx.new_page()
     print(f"\n--- popup clears bottom controls on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -572,7 +585,7 @@ def test_popup_clears_search_bar_during_banner(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_real_spot_csv(ctx)
+    route_real_spot(ctx)
     page = ctx.new_page()
     print(f"\n--- popup clears search bar during banner on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -632,7 +645,7 @@ def test_locate_button_top_right(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_real_spot_csv(ctx)
+    route_real_spot(ctx)
     page = ctx.new_page()
     print(f"\n--- locate button top-right on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -690,6 +703,7 @@ def test_aerial_attribution_no_overlap(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
+    route_real_spot(ctx)
     page = ctx.new_page()
     print(f"\n--- Aerial attribution doesn't overlap zoom control on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)
@@ -740,7 +754,7 @@ def test_no_stuck_hover_or_tap_highlight(p, device_name, engine):
     browser = getattr(p, engine).launch()
     ctx = browser.new_context(**device, service_workers="block")
     stub_tiles(ctx)
-    route_real_spot_csv(ctx)
+    route_real_spot(ctx)
     page = ctx.new_page()
     print(f"\n--- no stuck hover / tap highlight on {device_name} ({engine}) ---")
     page.goto(f"{BASE}/index.html", timeout=30000)

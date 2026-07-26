@@ -1116,10 +1116,12 @@
   function senderEmailDisplay(){
     return ['whoshotmedotcom', '@', 'gmail.com'].join('');
   }
-  // Same public feed index.html reads from — used here only for the
-  // nearby-photographer awareness on the map and the proximity warning
-  // (see PROXIMITY CHECK below), never written to from this page.
-  const COMBINED_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1vOM6lFKolOO-rdZODQoz4p9aENvjAZ2t_0KCQcr0zzuiuWzBCG0U1B-o6HIHx-XDNh4e0DJJKevk/pub?gid=1737338184&single=true&output=csv';
+  // Reads from the same APPS_SCRIPT_URL above (action=spots) — used here
+  // only for the nearby-photographer awareness on the map and the
+  // proximity warning (see PROXIMITY CHECK below), never written to from
+  // this page. CHANGED 26/07/2026: used to be its own separate CSV feed
+  // (COMBINED_CSV_URL) - see index.html's LIVE DATA comment for why that
+  // moved to the same Apps Script endpoint index.html now reads from.
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -1327,53 +1329,6 @@ function haversineMeters(lat1, lng1, lat2, lng2){
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function parseCsv(text){
-  // Identical to index.html's parser — see there for the full walkthrough.
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++){
-    const c = text[i];
-    if (inQuotes){
-      if (c === '"'){
-        if (text[i + 1] === '"'){ field += '"'; i++; }
-        else { inQuotes = false; }
-      } else {
-        field += c;
-      }
-    } else if (c === '"'){
-      inQuotes = true;
-    } else if (c === ','){
-      row.push(field); field = '';
-    } else if (c === '\n' || c === '\r'){
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = '';
-      rows.push(row); row = [];
-    } else {
-      field += c;
-    }
-  }
-  if (field !== '' || row.length){ row.push(field); rows.push(row); }
-  if (!rows.length) return [];
-  const headers = rows[0].map(h => h.trim());
-  return rows.slice(1)
-    .filter(r => r.some(cell => cell.trim() !== ''))
-    .map(r => {
-      const obj = {};
-      headers.forEach((h, idx) => { obj[h] = (r[idx] !== undefined ? r[idx] : '').trim(); });
-      return obj;
-    });
-}
-
-async function fetchCsv(url){
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
-  let text = await res.text();
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-  return parseCsv(text);
-}
-
 // Lightweight on purpose — only the fields the proximity check and the
 // "who else is around" map markers actually need, not the full spot
 // pipeline index.html builds (no galleries, no logo fallback, etc.).
@@ -1389,7 +1344,16 @@ const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 let otherPhotographersShoots = [];
 async function loadOtherPhotographersShoots(){
   try {
-    const rows = await fetchCsv(COMBINED_CSV_URL);
+    const res = await fetch(`${APPS_SCRIPT_URL}?action=spots`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const rows = data.combined || [];
+    // Same integrity check as index.html's loadSpotsFromSheet() - see
+    // its comment for the full reasoning.
+    if (typeof data.combinedCount === 'number' && rows.length !== data.combinedCount){
+      throw new Error(`Spots feed length mismatch: got ${rows.length} rows, expected ${data.combinedCount}`);
+    }
     otherPhotographersShoots = rows
       .filter(row => DATETIME_RE.test(row['Start'] || '') && DATETIME_RE.test(row['End'] || ''))
       .map(row => ({

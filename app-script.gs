@@ -1,7 +1,7 @@
 /**
  * WHO SHOT ME — backend script for the Google Sheet.
  *
- * Does four jobs:
+ * Does six jobs:
  *   1. Auto-stamps a permanent Shoot ID onto any row a photographer edits
  *      directly in the sheet (same as before).
  *   2. Runs as a Web App so add-shoot.html can create/edit/delete shoots,
@@ -22,6 +22,18 @@
  *      Email from add-shoot.html's Profile tab — confirm-new-address
  *      flow, same trust model as signup (see requestEmailChange/
  *      confirmEmailChange below).
+ *   6. Serves the public map's own shoot/gallery data directly (see
+ *      getPublicSpots, action=spots) — added 26/07/2026 to replace the
+ *      old Google Sheets "publish to web" CSV export, which had a
+ *      documented history of propagation lag, inconsistent CDN replicas,
+ *      and (confirmed live via a third-party speed-test capture the same
+ *      day) outright HTTP errors. This executes against the live sheet
+ *      on every call instead of reading a separately-published,
+ *      independently-cached snapshot, so there's no extra Google-side
+ *      caching layer left to be stale or inconsistent. index.html and
+ *      add-shoot.html both read from this now instead of the CSV feeds -
+ *      see getPublicSpots()'s own comment for exactly what it returns
+ *      and why.
  *
  * ARCHITECTURE (v3 — shared Shoots/Galleries tabs):
  * All photographers' shoots live in ONE "Shoots" tab, all galleries in ONE
@@ -317,6 +329,10 @@ function doGet(e) {
     // Same pattern, for confirming a changed Contact Email instead of a
     // brand new signup — see confirmEmailChange below.
     if (action === 'confirmEmailChange') return confirmEmailChangePage(e.parameter.token);
+
+    // Public, no key needed - see getPublicSpots()'s own comment for the
+    // full reasoning (replaces the old CSV publish-to-web feeds).
+    if (action === 'spots') return jsonOut(getPublicSpots());
 
     var p = e.parameter.p;
     var key = e.parameter.key;
@@ -1262,6 +1278,106 @@ function findRowByShootId(sheet, shootId) {
     if (data[i][0] === shootId) return i + 2;
   }
   return null;
+}
+
+// ---- public spots feed (index.html / add-shoot.html's own map) ----------
+
+// Replaces the old Google Sheets "publish to web" CSV export as the
+// site's public read path — see CLAUDE.md's notes on that mechanism's
+// own reliability problems (propagation lag, inconsistent CDN replicas,
+// and a confirmed outright HTTP 400 caught live via a third-party
+// speed-test capture on 26/07/2026). Added 26/07/2026. This executes
+// live against the actual sheet data on every call instead of reading a
+// separately-published, independently-cached snapshot, so there's no
+// extra caching layer of Google's to be stale or inconsistent.
+//
+// Deliberately public (no key needed) and strictly read-only — same
+// trust model as the CSV it replaces, anyone can already see this data
+// on the live public map, this only changes HOW it's served. Returns
+// objects shaped EXACTLY like the CSV rows index.html/add-shoot.html
+// already parsed (same column names as object keys), so
+// combinedRowToRawSpot()/groupGalleriesByShootId() over there didn't
+// need to change at all — only the fetch step that feeds them did.
+//
+// Only pulls the specific PUBLIC Photographers columns actually needed
+// here (Photographer Name/Logo URL/Website URL/Shoot Tab Name) via
+// requireColumnIndexes, the same pattern findPhotographerRow uses —
+// Contact Email and Secret Key must never appear in this response.
+function getPublicSpots() {
+  var shootsSheet = SpreadsheetApp.getActive().getSheetByName(SHOOTS_SHEET);
+  var galleriesSheet = SpreadsheetApp.getActive().getSheetByName(GALLERIES_SHEET);
+  var photographersSheet = getPhotographersSheet();
+
+  var photographersByTab = {};
+  if (photographersSheet) {
+    var pData = photographersSheet.getDataRange().getValues();
+    var pCols = requireColumnIndexes(pData[0], ['Photographer Name', 'Logo URL', 'Website URL', 'Shoot Tab Name']);
+    for (var pi = 1; pi < pData.length; pi++) {
+      var pRow = pData[pi];
+      var tab = pRow[pCols['Shoot Tab Name']];
+      if (!tab) continue;
+      photographersByTab[tab] = {
+        name: pRow[pCols['Photographer Name']] || '',
+        logo: pRow[pCols['Logo URL']] || '',
+        website: pRow[pCols['Website URL']] || ''
+      };
+    }
+  }
+
+  var combined = [];
+  if (shootsSheet) {
+    var sData = shootsSheet.getDataRange().getValues();
+    for (var si = 1; si < sData.length; si++) { // start at 1 to skip the header row
+      var sRow = sData[si];
+      var shootId = sRow[0], location = sRow[1], tabName = sRow[7];
+      if (!location) continue;
+      var photographer = photographersByTab[tabName] || { name: '', logo: '', website: '' };
+      combined.push({
+        'Photographer Name': photographer.name,
+        'Logo URL': photographer.logo,
+        'Website URL': photographer.website,
+        'Location Name': location,
+        'Description': sRow[2] || '',
+        'Lat': sRow[3],
+        'Lng': sRow[4],
+        'Start': formatDateCell(sRow[5]),
+        'End': formatDateCell(sRow[6]),
+        'Shoot ID': shootId,
+        'Shoot Tab Name': tabName
+      });
+    }
+  }
+
+  // Deliberately NOT filtered to one photographer (unlike
+  // getGalleriesForTab below, which is) - every visitor's map needs
+  // every photographer's galleries, the same way the old "Galleries" CSV
+  // export was read unfiltered client-side.
+  var galleries = [];
+  if (galleriesSheet && galleriesSheet.getLastRow() >= 2) {
+    var gData = galleriesSheet.getRange('A2:D' + galleriesSheet.getLastRow()).getValues();
+    for (var gi = 0; gi < gData.length; gi++) {
+      var gRow = gData[gi];
+      if (!gRow[0]) continue; // no Shoot ID
+      galleries.push({
+        'Shoot ID': gRow[0],
+        'Gallery Label': gRow[1] || '',
+        'Gallery URL': gRow[2] || ''
+      });
+    }
+  }
+
+  // combinedCount/galleriesCount let the client verify it actually got a
+  // complete response rather than trusting response.json() alone - a
+  // response genuinely cut off mid-transfer already fails to parse as
+  // JSON at all (unlike the old CSV export, which could silently parse
+  // as "just fewer rows" from a truncated body), so this isn't guarding
+  // against that specific failure mode. It's still a cheap, useful
+  // self-check: the array length and the count are computed from the
+  // same loop above, so a mismatch on the client can only mean something
+  // corrupted the response in transit after this function returned, or a
+  // bug here - either way, worth surfacing as a real error rather than
+  // silently trusting whatever array length showed up.
+  return { combined: combined, galleries: galleries, combinedCount: combined.length, galleriesCount: galleries.length };
 }
 
 // ---- galleries ------------------------------------------------------------
