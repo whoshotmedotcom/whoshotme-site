@@ -701,6 +701,72 @@ def test_aerial_attribution_no_overlap(p, device_name, engine):
     browser.close()
 
 
+def test_no_stuck_hover_or_tap_highlight(p, device_name, engine):
+    # Regression test for two confirmed bugs, both reported on real mobile
+    # use (26/07/2026): (1) tapping the date steppers or "Today" left a
+    # green outline stuck on until tapping something else entirely - plain
+    # :hover rules aren't scoped to real pointer devices, so a touch tap
+    # leaves them "stuck" with no mouse-leave event to ever clear them.
+    # Found the exact same unscoped pattern on ~15 other buttons/links
+    # sitewide and fixed all of them the same way (@media (hover: hover)).
+    # (2) a visible blue tap-highlight flash on click - the sitewide
+    # `*{-webkit-tap-highlight-color:transparent}` rule doesn't actually
+    # win against Leaflet's own default stylesheet, which sets its OWN
+    # higher-specificity blue tap-highlight specifically for links inside
+    # the map (popup Directions/gallery links) - confirmed via computed
+    # style that they were still getting Leaflet's blue flash regardless
+    # of the sitewide rule.
+    device = p.devices[device_name]
+    browser = getattr(p, engine).launch()
+    ctx = browser.new_context(**device)
+    stub_tiles(ctx)
+    route_real_spot_csv(ctx)
+    page = ctx.new_page()
+    print(f"\n--- no stuck hover / tap highlight on {device_name} ({engine}) ---")
+    page.goto(f"{BASE}/index.html", timeout=30000)
+    page.wait_for_function("document.getElementById('dataStateOverlay').classList.contains('hidden')", timeout=20000)
+    page.wait_for_timeout(500)
+    if page.eval_on_selector("#locationPromptBanner", "el => !el.classList.contains('hidden')"):
+        page.tap("#dismissLocationPromptBtn")
+        page.wait_for_timeout(300)
+
+    normal_border = page.eval_on_selector("#nextDay", "el => getComputedStyle(el).borderColor")
+    page.tap("#nextDay")
+    page.wait_for_timeout(200)
+    check(
+        "date stepper border isn't stuck on hi-vis after a real tap",
+        page.eval_on_selector("#nextDay", "el => getComputedStyle(el).borderColor") == normal_border,
+    )
+    page.tap("#todayBtn")
+    page.wait_for_timeout(200)
+    check(
+        "Today button border isn't stuck on hi-vis after a real tap",
+        page.eval_on_selector("#todayBtn", "el => getComputedStyle(el).borderColor") == normal_border,
+    )
+
+    page.evaluate(
+        "() => { const spot = spots[0]; "
+        "['live','soon','past'].forEach(s => clusterGroups[s].eachLayer(m => { "
+        "if (m._spotRef === spot) m.openPopup(); })); }"
+    )
+    page.wait_for_timeout(400)
+    # -webkit-tap-highlight-color is primarily a Chromium/Android thing -
+    # Safari/WebKit doesn't show this kind of tap highlight at all and
+    # doesn't expose the property via getComputedStyle (returns null/""),
+    # so there's nothing meaningful to check on that engine specifically.
+    tap_highlight = page.eval_on_selector(".popup-btn", "el => getComputedStyle(el).webkitTapHighlightColor")
+    if tap_highlight:
+        check(
+            "popup link has no visible tap-highlight flash (Leaflet's own default doesn't override the sitewide rule)",
+            tap_highlight in ("rgba(0, 0, 0, 0)", "transparent"),
+            tap_highlight,
+        )
+    else:
+        print("  (skipped tap-highlight check: not exposed on this engine)")
+    ctx.close()
+    browser.close()
+
+
 def main():
     httpd = start_server_if_needed()
     try:
@@ -714,6 +780,7 @@ def main():
                 test_popup_clears_search_bar_during_banner(p, device_name, engine)
                 test_locate_button_top_right(p, device_name, engine)
                 test_aerial_attribution_no_overlap(p, device_name, engine)
+                test_no_stuck_hover_or_tap_highlight(p, device_name, engine)
     finally:
         if httpd:
             httpd.shutdown()

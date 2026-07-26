@@ -98,7 +98,7 @@
     font-size:0.82rem;
     text-decoration:none;
   }
-  #backLink:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
+  @media (hover: hover){ #backLink:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); } }
   #backLink:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   #aboutLink{
     display:inline-block;
@@ -117,7 +117,7 @@
     cursor:pointer;
     font-family:inherit;
   }
-  #aboutLink:hover{ color:var(--hi-vis); }
+  @media (hover: hover){ #aboutLink:hover{ color:var(--hi-vis); } }
 
   /* ---- About modal - same component as index.html/add-shoot.html ---- */
   #aboutOverlay{
@@ -168,7 +168,7 @@
     line-height:1;
     cursor:pointer;
   }
-  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  @media (hover: hover){ #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); } }
   #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   #aboutModal h2{
     margin:0;
@@ -208,7 +208,7 @@
     font-size:0.8rem;
     cursor:pointer;
   }
-  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+  @media (hover: hover){ #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); } }
   #aboutCloseBtn:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   .creatorPhoto{
     display:block;
@@ -326,7 +326,7 @@
     cursor:pointer;
     font-family:inherit;
   }
-  .toggleLink:hover{ color:var(--hi-vis); }
+  @media (hover: hover){ .toggleLink:hover{ color:var(--hi-vis); } }
   .toggleLink:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
 </style>
 </head>

@@ -70,6 +70,12 @@
   /* Removes the default blue/grey tap flash mobile browsers show on
      clickable elements — see index.html for the full note. */
   *{ -webkit-tap-highlight-color: transparent; }
+  /* See index.html for the full reasoning - Leaflet's own default
+     stylesheet sets a higher-specificity blue tap-highlight for links
+     inside the map that the rule above doesn't actually beat. This
+     page's own map has fewer real links inside it than the public
+     map's popups do, but fixing it here too for consistency/safety. */
+  .leaflet-container a{ -webkit-tap-highlight-color: transparent; }
   /* Not selectable by default (dashboard buttons/tabs/map dragging kept
      accidentally highlighting text) - re-enabled for actual form fields
      below. See index.html for the full note. */
@@ -113,7 +119,7 @@
     padding:14px 4px;
     margin:-14px -4px -14px 0;
   }
-  #aboutLink:hover{ color:var(--hi-vis); }
+  @media (hover: hover){ #aboutLink:hover{ color:var(--hi-vis); } }
   #aboutOverlay{
     position:fixed;
     inset:0;
@@ -164,7 +170,7 @@
     line-height:1;
     cursor:pointer;
   }
-  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  @media (hover: hover){ #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); } }
   #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   #aboutModal h2{
     margin:0;
@@ -212,7 +218,7 @@
     font-size:0.8rem;
     cursor:pointer;
   }
-  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+  @media (hover: hover){ #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); } }
 
   main{
     max-width:720px;
@@ -252,7 +258,7 @@
     text-align:center;
     cursor:pointer;
   }
-  .dash-tab:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); }
+  @media (hover: hover){ .dash-tab:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); } }
   .dash-tab.active{
     background:var(--hi-vis);
     border-color:var(--hi-vis);
@@ -394,7 +400,7 @@
     flex:1 1 auto;
     min-width:0;
   }
-  .gallery-item-link:hover{ color:var(--hi-vis); text-decoration:underline; }
+  @media (hover: hover){ .gallery-item-link:hover{ color:var(--hi-vis); text-decoration:underline; } }
   .gallery-item-btn{
     background:none;
     border:1px solid var(--line);
@@ -405,8 +411,8 @@
     padding:3px 9px;
     flex:0 0 auto;
   }
-  .gallery-item-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
-  .gallery-item-btn.danger:hover{ border-color:var(--rust); color:var(--rust); }
+  @media (hover: hover){ .gallery-item-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); } }
+  @media (hover: hover){ .gallery-item-btn.danger:hover{ border-color:var(--rust); color:var(--rust); } }
 
   .status-badge{
     flex:0 0 auto;
@@ -443,8 +449,8 @@
     font-size:0.76rem;
     cursor:pointer;
   }
-  .chip-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
-  .chip-btn.danger:hover{ border-color:var(--rust); color:var(--rust); }
+  @media (hover: hover){ .chip-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); } }
+  @media (hover: hover){ .chip-btn.danger:hover{ border-color:var(--rust); color:var(--rust); } }
 
   #emptyState{ color:var(--muted-grey); font-size:0.85rem; text-align:center; padding:20px; }
 
@@ -575,7 +581,7 @@
     color:var(--paper);
   }
   #locationSearchResults .resultItem:last-child{ border-bottom:none; }
-  #locationSearchResults .resultItem:hover{ background:var(--asphalt-light); }
+  @media (hover: hover){ #locationSearchResults .resultItem:hover{ background:var(--asphalt-light); } }
   #locationSearchResults .resultItem:focus-visible{ background:var(--asphalt-light); outline:2px solid var(--hi-vis); outline-offset:-2px; }
 
   #formSection{
@@ -656,7 +662,7 @@
     display:block;
   }
   .leaflet-control-zoom a:last-child{ border-bottom:none !important; }
-  .leaflet-control-zoom a:hover{ background:var(--asphalt) !important; }
+  @media (hover: hover){ .leaflet-control-zoom a:hover{ background:var(--asphalt) !important; } }
 
   /* Basemap switcher (Map / Aerial) — matches the zoom control's look */
   .leaflet-control-layers{
@@ -667,8 +673,16 @@
     border-radius:12px !important;
     padding:6px 10px !important;
   }
+  /* See index.html for the full reasoning - Leaflet's default icon here
+     is a plain grey/white PNG, never actually themed. Same inline SVG
+     replacement, coloured to match --hi-vis (#d4ff3f, hardcoded since a
+     data: URI can't reference a CSS custom property). */
   .leaflet-control-layers-toggle{
     background-color:var(--asphalt-light) !important;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='%23d4ff3f' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpolygon points='12,3 21,8 12,13 3,8'/%3E%3Cpolyline points='3,12 12,17 21,12'/%3E%3Cpolyline points='3,16 12,21 21,16'/%3E%3C/svg%3E") !important;
+    background-position:center !important;
+    background-repeat:no-repeat !important;
+    background-size:20px 20px !important;
     width:44px !important;
     height:44px !important;
     border-radius:50% !important;
@@ -719,7 +733,7 @@
     font-size:0.88rem;
     cursor:pointer;
   }
-  .ghost-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); }
+  @media (hover: hover){ .ghost-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis-dim); } }
 
   .error-text{ color:var(--rust); font-size:0.82rem; margin:10px 0 0; }
 
@@ -951,10 +965,10 @@
           <div id="locationSearchResults" role="listbox" aria-label="Location search results"></div>
           <div id="mapWrap">
             <div id="map"></div>
-            <div id="timeGateOverlay">📅 Set your start and end time above before placing a pin</div>
+            <div id="timeGateOverlay">Set your start and end time above before placing a pin</div>
           </div>
           <p id="mapHint">Drag the pin afterwards to fine-tune it.</p>
-          <button id="useCurrentLocationBtn" type="button" class="chip-btn">📍 Use current location</button>
+          <button id="useCurrentLocationBtn" type="button" class="chip-btn">Use current location</button>
           <p id="coordReadout" class="empty">No location set yet.</p>
           <!-- Private to this form, never shown publicly and never written
                back to anyone else's listing — see PROXIMITY CHECK in the
@@ -1594,8 +1608,8 @@ function makePinIcon(){
     html: `<div style="
       width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;
       transform:rotate(-45deg);
-      background:#d4ff3f;
-      border:2px solid #1c1e22;
+      background:var(--hi-vis);
+      border:2px solid var(--asphalt);
       box-shadow:0 2px 8px rgba(0,0,0,0.5);
     "></div>`,
     iconSize: [size, size],
@@ -1676,6 +1690,10 @@ function updateProximityWarning(){
     otherPhotographersShoots
       .filter(s => timeRangesOverlap(start, end, s.start, s.end))
       .forEach(s => {
+        // Raw hex, not var(--muted-grey) - Leaflet's marker options are
+        // JS, not CSS, and assign this straight to the SVG path's
+        // fill/stroke attributes rather than resolving custom properties.
+        // Keep in sync with --muted-grey (#9aa0a6) by hand if it changes.
         L.circleMarker([s.lat, s.lng], {
           radius: 8, weight: 2, color: '#9aa0a6', fillColor: '#9aa0a6', fillOpacity: 0.5
         }).addTo(nearbyShootsLayer).bindTooltip(escapeHtml(s.name), { direction: 'top', offset: [0, -8] });
@@ -1708,7 +1726,7 @@ function updateProximityWarning(){
     : `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 
   const plural = conflicts.length > 1;
-  proximityWarningEl.innerHTML = `📍 You're near ${plural ? 'overlapping shoots by' : 'a shoot by'} ${listText} at an overlapping time - might be worth a quick message to check before you commit to this spot.`;
+  proximityWarningEl.innerHTML = `You're near ${plural ? 'overlapping shoots by' : 'a shoot by'} ${listText} at an overlapping time - might be worth a quick message to check before you commit to this spot.`;
   proximityWarningEl.classList.remove('hidden');
 }
 
@@ -1813,7 +1831,7 @@ locationSearchInput.addEventListener('input', (e) => {
       return;
     }
     locationSearchResults.innerHTML = places.map((place, i) =>
-      `<div class="resultItem" role="option" tabindex="0" data-place-idx="${i}">📍 ${escapeHtml(place.label)}</div>`
+      `<div class="resultItem" role="option" tabindex="0" data-place-idx="${i}">${escapeHtml(place.label)}</div>`
     ).join('');
     locationSearchResults.classList.add('show');
     // Each result gets both a click handler and a keydown handler

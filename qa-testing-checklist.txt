@@ -337,6 +337,55 @@ close when it shouldn't, closes via every path a user would expect.
        (a date aging into the past mid-session) caused a confusing false
        trail while investigating. Full suite now 86/86.
 
+       Second follow-up (26/07/2026), a batch of visual/UX requests:
+       - Swapped the bottom-left stack order (zoom now above Reset view,
+         was the other way round) - just an add-order change in Leaflet's
+         same-corner control stacking, verified no popup-overlap
+         regression.
+       - Layers icon: was Leaflet's default plain grey/white PNG, never
+         actually themed - replaced with an inline SVG sized to exactly
+         match the crosshair icon (20x20) and coloured to the theme.
+       - Removed the redundant "‹ Back to today" button entirely (it had
+         a byte-for-byte identical click handler to the always-visible
+         "Today" button) - this was also THE root cause of the reported
+         mobile text-overflow bug (the date label sitting under "Jump to
+         month"), fixed by removing the crowding element rather than
+         patching spacing. Also changed #dateLabel from ellipsis-
+         truncating to wrapping, so a long message is always fully
+         readable instead of cut off with "…" even in the normal case.
+       - Full colour audit: found and fixed a real bug (the "Past" filter
+         chip's legend dot was hardcoded to the OLD pre-WCAG-correction
+         grey (#6c7077), not the current --past-grey (#868a90) - it had
+         been silently out of sync with every other "past" indicator on
+         the site since that correction shipped). Also converted ~10
+         other hardcoded hex colours that duplicated theme variables (in
+         real DOM inline styles/injected <style> tags, where var()
+         genuinely resolves) over to the variables themselves, and added
+         a themed border to the address-search popup, which was the one
+         popup on the site with no accent colour at all.
+       - Emoji audit: removed true pictograph emoji everywhere except
+         on-map popup action buttons (Directions/gallery/Share, which
+         appear inside marker popups) - "Get listed", "List view", a
+         weekend-tag decoration, and 4 place-search-result prefixes
+         across index.html/add-shoot.html. Left plain dingbat symbols
+         (✕ ✓) alone as distinct from true emoji.
+       - Mobile tap-highlight: found the sitewide `*{-webkit-tap-
+         highlight-color:transparent}` rule doesn't actually win
+         everywhere - Leaflet's own default stylesheet sets a higher-
+         specificity VISIBLE blue tap-highlight specifically for links
+         inside the map, which is exactly what a popup's Directions/
+         gallery links are built from. Fixed with a matching-specificity
+         override.
+       - Stuck hover/focus outline: confirmed the exact bug already fixed
+         once this project (recenter-btn, listViewToggleBtn) was present
+         on ~15 OTHER buttons/links sitewide, including the date steppers
+         and "Today" button specifically reported this time - a plain
+         :hover rule not scoped to real pointer devices gets "stuck" on
+         after a touch tap, with no mouse-leave event to ever clear it.
+         Scoped every remaining instance to @media (hover: hover).
+       Full device-tests.py suite now 91/91 (4 new permanent regression
+       checks added for this round).
+
 =============================================================================
 6. SITE-SPECIFIC DATA EDGE CASES
 =============================================================================

@@ -229,6 +229,18 @@
      since it's a one-line fix with no downside and the same flash would
      otherwise show up on every button on the site, not just this one. */
   *{ -webkit-tap-highlight-color: transparent; }
+  /* CONFIRMED BUG (26/07/2026): the universal rule above doesn't actually
+     win everywhere - Leaflet's own inlined default stylesheet (see the
+     big minified block near the top of this file) sets its OWN visible
+     blue tap-highlight specifically for links inside the map
+     (".leaflet-container a{-webkit-tap-highlight-color:rgba(51,181,229,.4)}"),
+     which has higher specificity than a bare "*" and wins regardless of
+     source order. That's exactly the links a popup's Directions/gallery
+     buttons are built from - confirmed via computed-style check that
+     they were still showing Leaflet's blue flash despite the rule above.
+     Matching Leaflet's own selector exactly (same specificity, defined
+     after it in the cascade) is what actually overrides it. */
+  .leaflet-container a{ -webkit-tap-highlight-color: transparent; }
   /* This is a map/UI app, not a document - dragging the map, double-tapping
      to zoom, or clicking chips/buttons was accidentally highlighting text
      as a side effect on most browsers. Nothing here needs to be selectable
@@ -301,7 +313,7 @@
     padding:14px 4px;
     margin:-14px -4px -14px 0;
   }
-  #aboutLink:hover{ color:var(--hi-vis); }
+  @media (hover: hover){ #aboutLink:hover{ color:var(--hi-vis); } }
   #aboutOverlay{
     position:fixed;
     inset:0;
@@ -352,7 +364,7 @@
     line-height:1;
     cursor:pointer;
   }
-  #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); }
+  @media (hover: hover){ #aboutCloseBtnTop:hover{ border-color:var(--hi-vis); } }
   #aboutCloseBtnTop:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:2px; }
   #aboutModal h2{
     margin:0;
@@ -400,7 +412,7 @@
     font-size:0.8rem;
     cursor:pointer;
   }
-  #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); }
+  @media (hover: hover){ #aboutCloseBtn:hover{ background:var(--hi-vis); color:var(--asphalt); } }
 
   /* Recenter control — sits below the default zoom buttons, bottom-left.
      Dimmed by default (nothing to do yet); switches to the hi-vis accent
@@ -463,7 +475,7 @@
     cursor:pointer;
     transition:background 0.2s ease;
   }
-  .locate-btn:hover{ background:var(--asphalt); }
+  @media (hover: hover){ .locate-btn:hover{ background:var(--asphalt); } }
   .locate-btn:disabled{ opacity:0.5; cursor:default; }
 
   /* Theme Leaflet's default zoom control (+/-) to match the dark UI instead
@@ -491,9 +503,11 @@
     display:block;
   }
   .leaflet-control-zoom a:last-child{ border-bottom:none !important; }
-  .leaflet-control-zoom a:hover{
-    background:var(--asphalt) !important;
-    color:var(--hi-vis) !important;
+  @media (hover: hover){
+    .leaflet-control-zoom a:hover{
+      background:var(--asphalt) !important;
+      color:var(--hi-vis) !important;
+    }
   }
   .leaflet-control-zoom a.leaflet-disabled{
     background:none !important;
@@ -514,8 +528,22 @@
     border-radius:12px !important;
     padding:6px 10px !important;
   }
+  /* Leaflet's own default icon here is a plain grey/white PNG pulled from
+     cdnjs - never actually themed (confirmed via computed-style check),
+     so it looked visually inconsistent next to the crosshair/zoom icons
+     which both use the hi-vis accent colour. Replaced with an inline SVG
+     (a stack of 3 diamonds, the conventional "layers" glyph) coloured to
+     match, and sized 20x20 to match the crosshair icon exactly rather
+     than whatever size the PNG happened to render at. #d4ff3f is
+     --hi-vis's literal value - a data: URI background-image can't
+     reference a CSS custom property, so this needs to stay in sync by
+     hand if that variable ever changes. */
   .leaflet-control-layers-toggle{
     background-color:var(--asphalt-light) !important;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='%23d4ff3f' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpolygon points='12,3 21,8 12,13 3,8'/%3E%3Cpolyline points='3,12 12,17 21,12'/%3E%3Cpolyline points='3,16 12,21 21,16'/%3E%3C/svg%3E") !important;
+    background-position:center !important;
+    background-repeat:no-repeat !important;
+    background-size:20px 20px !important;
     width:44px !important;
     height:44px !important;
     border-radius:50% !important;
@@ -605,7 +633,7 @@
     font-weight:700;
     cursor:pointer;
   }
-  #listViewCloseBtn:hover{ background:var(--line); }
+  @media (hover: hover){ #listViewCloseBtn:hover{ background:var(--line); } }
   #listViewItems .resultItem{ border-radius:8px; margin-bottom:6px; border-bottom:none; background:var(--asphalt-light); }
   #listViewEmpty{ color:var(--muted-grey); font-size:0.85rem; }
   #dataStateTitle{
@@ -692,7 +720,9 @@
     cursor:pointer;
     white-space:nowrap;
   }
-  #clearPhotographerFilterBtn:hover, #dismissDefaultModeBtn:hover, #useMyLocationBtn:hover, #dismissLocationPromptBtn:hover{ background:var(--asphalt-light); }
+  @media (hover: hover){
+    #clearPhotographerFilterBtn:hover, #dismissDefaultModeBtn:hover, #useMyLocationBtn:hover, #dismissLocationPromptBtn:hover{ background:var(--asphalt-light); }
+  }
 
   /* Floating search box over the map, top-left */
   #searchWrap{
@@ -760,11 +790,13 @@
     overflow-wrap:break-word;
   }
   .resultItem:last-child{ border-bottom:none; }
-  .resultItem:hover{ background:var(--asphalt-light); }
+  @media (hover: hover){ .resultItem:hover{ background:var(--asphalt-light); } }
   .resultItem:focus-visible{ background:var(--asphalt-light); outline:2px solid var(--hi-vis); outline-offset:-2px; }
   .resultItem .rName{ font-weight:700; color:var(--hi-vis); display:block; }
   .resultItem .rMeta{ color:var(--muted-grey); font-size:0.78rem; }
   .resultItem .rTagPast{ color:var(--past-grey); font-style:italic; }
+  .resultItem .rTagLive{ color:var(--hi-vis); }
+  .resultItem .rTagUpcoming{ color:var(--rust); }
   .resultsSectionTitle{
     padding:8px 14px 4px;
     font-size:0.7rem;
@@ -795,7 +827,7 @@
     white-space:nowrap;
     cursor:pointer;
   }
-  #getListedBtn:hover{ background:var(--hi-vis-dim); }
+  @media (hover: hover){ #getListedBtn:hover{ background:var(--hi-vis-dim); } }
 
 
   /* ---- Bottom control panel ---- */
@@ -828,7 +860,7 @@
     cursor:pointer;
     transition:background .15s ease, color .15s ease, border-color .15s ease;
   }
-  .chip:hover{ border-color:var(--hi-vis); }
+  @media (hover: hover){ .chip:hover{ border-color:var(--hi-vis); } }
   .chip.active{
     background:var(--hi-vis);
     color:var(--asphalt);
@@ -953,6 +985,14 @@
   }
   .noShootsPopup .leaflet-popup-content{ margin:14px 16px; }
   .noShootsPopup .leaflet-popup-content-wrapper{ border:1px solid var(--hi-vis-dim); }
+  /* An address/place search result isn't a shoot, so none of the live/
+     upcoming/past status colours below make sense for it - but it was
+     the one popup on the site with no themed border at all, plain
+     asphalt with no accent. Same treatment as .noShootsPopup above
+     (this site's established "informational, not a shoot" popup style)
+     rather than inventing a third visual language for what's really the
+     same kind of thing. */
+  .locationSearchPopup .leaflet-popup-content-wrapper{ border:1px solid var(--hi-vis-dim); }
   /* Colored edge matching the same live/upcoming/past system already
      used everywhere else (marker rings, cluster icons, status badges) -
      className set per-status in popupHtml's callers (see marker.bindPopup
@@ -1042,11 +1082,13 @@
     color:var(--hi-vis);
     width:fit-content;
   }
-  .leaflet-container a.popup-link:hover,
-  .leaflet-container a.popup-gallery-link:hover,
-  .popup-btn:hover{
-    background:var(--hi-vis);
-    color:var(--asphalt);
+  @media (hover: hover){
+    .leaflet-container a.popup-link:hover,
+    .leaflet-container a.popup-gallery-link:hover,
+    .popup-btn:hover{
+      background:var(--hi-vis);
+      color:var(--asphalt);
+    }
   }
   /* Share is a secondary/utility action, not "go look at content" like
      the buttons above - same muted-outline-then-hi-vis-on-hover pattern
@@ -1074,7 +1116,7 @@
     font-family:inherit;
     width:fit-content;
   }
-  .popup-share-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); }
+  @media (hover: hover){ .popup-share-btn:hover{ border-color:var(--hi-vis-dim); color:var(--hi-vis); } }
   .popup-galleries{
     display:flex;
     flex-direction:column;
@@ -1125,26 +1167,8 @@
     max-width:100%;
     flex-shrink:0;
   }
-  #monthSelect:hover{ border-color:var(--hi-vis-dim); }
+  @media (hover: hover){ #monthSelect:hover{ border-color:var(--hi-vis-dim); } }
   #monthSelect:focus-visible{ outline:2px solid var(--hi-vis); outline-offset:1px; }
-  #exitMonthLockBtn{
-    background:var(--hi-vis);
-    color:var(--asphalt);
-    border:none;
-    border-radius:14px;
-    padding:5px 12px;
-    min-height:44px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    font-size:0.76rem;
-    font-weight:700;
-    cursor:pointer;
-    white-space:nowrap;
-    flex-shrink:0;
-  }
-  #exitMonthLockBtn:hover{ background:var(--hi-vis-dim); }
-  #exitMonthLockBtn.hidden{ display:none; }
 
   /* Small transient status message (geolocation errors, etc.) - same
      component as add-shoot.html's toast, added here so index.html has
@@ -1180,9 +1204,14 @@
     color:var(--hi-vis);
     flex:1;
     min-width:0;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+    /* Was a single-line ellipsis truncation - fine for a short date, but
+       a longer message (e.g. "Today - Sun, 26th July - no shoots
+       scheduled") could still end up unreadable on a narrow viewport,
+       just cut off with "…" instead of literally overlapping
+       #monthSelect the way it used to. Wrapping to a second line
+       instead guarantees the full message is always readable; the date
+       bar's own height already isn't fixed, so it grows to fit. */
+    overflow-wrap:break-word;
   }
   #dateSliderWrap{
     position:relative;
@@ -1259,7 +1288,6 @@
     justify-content:center;
     line-height:1;
   }
-  .stepBtn:hover{ border-color:var(--hi-vis); }
   .stepBtn:active{ background:var(--hi-vis); color:var(--asphalt); border-color:var(--hi-vis); }
   #todayBtn{
     border:1px solid var(--line);
@@ -1274,7 +1302,17 @@
     font-size:0.78rem;
     cursor:pointer;
   }
-  #todayBtn:hover{ border-color:var(--hi-vis); }
+  /* CONFIRMED BUG (26/07/2026): plain :hover rules (not scoped to real
+     pointer devices) get "stuck" on touch since there's no mouse-leave
+     event to clear them - reported as the green outline staying on the
+     date steppers/Today button after tapping, until tapping something
+     else entirely. Same fix already applied to .recenter-btn/
+     #listViewToggleBtn earlier this project - scope to devices that can
+     actually hover. */
+  @media (hover: hover){
+    .stepBtn:hover{ border-color:var(--hi-vis); }
+    #todayBtn:hover{ border-color:var(--hi-vis); }
+  }
 
   #lastUpdated{ white-space:nowrap; color:var(--muted-grey); font-size:0.78rem; }
 
@@ -1396,7 +1434,6 @@
 
     #dateBar{ padding:8px 12px 10px; gap:6px; }
     #monthSelect{ font-size:0.72rem; padding:4px 8px; }
-    #exitMonthLockBtn{ font-size:0.72rem; padding:4px 10px; }
     #dateLabel{ font-size:0.8rem; }
     #dateSlider::-webkit-slider-thumb{ width:26px; height:26px; }
     #dateSlider::-moz-range-thumb{ width:26px; height:26px; }
@@ -1417,7 +1454,7 @@
     <h1><img class="logo-header" src="logo-header.svg" alt="Who Shot Me?" width="1028" height="142"></h1>
     <p>Find your ride photos - past, live & upcoming. <button id="aboutLink">About</button></p>
   </div>
-  <a id="getListedBtn" href="become-photographer.html">📷 Get listed</a>
+  <a id="getListedBtn" href="become-photographer.html">Get listed</a>
 </header>
 
 <div id="aboutOverlay">
@@ -1505,18 +1542,17 @@
 
 <div id="bottomPanel">
   <div id="filters">
-    <button class="chip" data-filter="past"><span class="chipDot" style="background:#6c7077;border:2px dashed var(--muted-grey);"></span>Past</button>
-    <button class="chip" data-filter="live"><span class="chipDot" style="background:#d4ff3f;"></span>Live now</button>
-    <button class="chip active" data-filter="upcoming"><span class="chipDot" style="background:#d97a53;"></span>Upcoming</button>
+    <button class="chip" data-filter="past"><span class="chipDot" style="background:var(--past-grey);border:2px dashed var(--muted-grey);"></span>Past</button>
+    <button class="chip" data-filter="live"><span class="chipDot" style="background:var(--hi-vis);"></span>Live now</button>
+    <button class="chip active" data-filter="upcoming"><span class="chipDot" style="background:var(--rust);"></span>Upcoming</button>
     <span class="count-pill" id="countPill"></span>
     <span id="lastUpdated"></span>
-    <button id="listViewToggleBtn" aria-haspopup="dialog">📋 List view</button>
+    <button id="listViewToggleBtn" aria-haspopup="dialog">List view</button>
   </div>
 
   <div id="dateBar">
     <div id="dateLabelRow">
       <span id="dateLabel"></span>
-      <button id="exitMonthLockBtn" class="hidden" aria-label="Exit month view and return to today">‹ Back to today</button>
       <select id="monthSelect" aria-label="Jump to a specific month">
         <option value="">Jump to month…</option>
       </select>
@@ -1942,7 +1978,10 @@ const UK_BOUNDS = L.latLngBounds([49.5, -10.9], [61.2, 2.1]);
 // for those, this makes sure Leaflet notices too.
 window.addEventListener('resize', () => map.invalidateSize());
 window.addEventListener('orientationchange', () => map.invalidateSize());
-L.control.zoom({ position: 'bottomleft' }).addTo(map);
+// Added further down (right after RecenterControl, see the comment
+// there) rather than here - Leaflet stacks same-corner controls in the
+// order they're added, growing upward from the bottom, so which one
+// ends up on top depends on which line runs second.
 // prefix:false drops the "Leaflet" branding link — the required
 // attribution for whichever basemap is active (added via each tile layer
 // below) is kept, since removing that would breach its usage policy.
@@ -2241,6 +2280,11 @@ const RecenterControl = L.Control.extend({
   }
 });
 map.addControl(new RecenterControl());
+// Added here rather than back near the other early map setup (26/07/2026,
+// by request) specifically so it lands ABOVE Reset view in the
+// bottom-left stack instead of below it - Leaflet stacks same-corner
+// controls in add order, growing upward from the bottom.
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
 // My location - top-right (25/07/2026, moved from bottom-left by
 // request). Sits in the same top strip as the search box rather than
@@ -2466,7 +2510,7 @@ function flashBadgeHtml(uid){
       pointer-events:none;
     "><div style="
       position:absolute; inset:0;
-      background:#1c1e22;
+      background:var(--asphalt);
       clip-path:${STAR_CLIP};
     "></div><div style="
       position:absolute; top:2.5px; left:2.5px;
@@ -2548,7 +2592,7 @@ function makeIcon(spot, status){
       <div class="${isLive ? 'live-marker-ring' : ''}" style="
         width:${size}px;height:${size}px;border-radius:50%;
         overflow:hidden;
-        background-color:#1c1e22;
+        background-color:var(--asphalt);
         border:3px ${isPast ? 'dashed' : 'solid'} ${statusColor};
         box-shadow:0 0 0 2px ${statusColor}55;
         opacity:${isPast ? 0.55 : 1};
@@ -2581,7 +2625,7 @@ styleTag.textContent = `
     position:absolute;
     inset:-3px;
     border-radius:50%;
-    border:3px solid #d4ff3f;
+    border:3px solid var(--hi-vis);
     animation:pulse 1.6s cubic-bezier(0.6, 0, 0.85, 0.15) infinite;
     /* Randomized per-marker in makeIcon() (a negative delay seeds the
        animation into a random point of its cycle immediately) so
@@ -2691,7 +2735,6 @@ let selectedMonthKey = ''; // "YYYY-MM" when currentMode === 'month', else unuse
 // spill back out to today's date until the lock is explicitly exited.
 let monthLockKey = null;
 let lockedDates = [];
-const exitMonthLockBtn = document.getElementById('exitMonthLockBtn');
 
 function activeDates(){
   return monthLockKey ? lockedDates : shootDates;
@@ -2742,7 +2785,6 @@ function exitMonthLock(){
   lockedDates = [];
   selectedMonthKey = '';
   monthSelectEl.value = '';
-  exitMonthLockBtn.classList.add('hidden');
   updateSliderRange();
   positionTodayMarker(); // re-show the marker now that we're back on the unlocked axis
 }
@@ -2862,8 +2904,7 @@ function fmtDateLabel(d){
   const dayNum = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric' }).format(d));
   const month = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', month: 'long' }).format(d);
   const label = `${dow}, ${dayNum}${ordinalSuffix(dayNum)} ${month}`;
-  const weekendTag = (dow === 'Sat' || dow === 'Sun') ? ' 🏍️' : '';
-  return (isToday ? `Today - ${label}` : label) + weekendTag;
+  return isToday ? `Today - ${label}` : label;
 }
 
 function popupHtml(spot){
@@ -3424,8 +3465,8 @@ function renderListViewPanel(){
   listViewItemsEl.innerHTML = currentVisibleSpots.map((spot, i) => {
     const status = getStatus(spot);
     const tag = status === 'past' ? '<span class="rTagPast">(past)</span>' :
-                status === 'live' ? '<span style="color:#d4ff3f;">(live now)</span>' :
-                '<span style="color:#d97a53;">(upcoming)</span>';
+                status === 'live' ? '<span class="rTagLive">(live now)</span>' :
+                '<span class="rTagUpcoming">(upcoming)</span>';
     return `<div class="resultItem" role="option" tabindex="0" data-list-idx="${i}">
       <span class="rName">${escapeHtml(spot.name)} ${tag}</span>
       <span class="rMeta">${escapeHtml(spot.location)} - ${fmtTime(spot.start)}</span>
@@ -3535,11 +3576,13 @@ function goToDateMode(index){
 sliderEl.addEventListener('input', (e) => goToDateMode(parseInt(e.target.value, 10)));
 document.getElementById('prevDay').addEventListener('click', () => goToDateMode(selectedIndex - 1));
 document.getElementById('nextDay').addEventListener('click', () => goToDateMode(selectedIndex + 1));
+// Was also duplicated on a dedicated "‹ Back to today" button next to the
+// month dropdown (removed 26/07/2026) - it did the exact same thing as
+// this one, just conditionally shown while a month was locked, and on a
+// narrow mobile #dateLabelRow it was crowding out the actual date label
+// text badly enough to make it unreadable. "Today" already always sits
+// at the end of the date bar and covers this exact case.
 document.getElementById('todayBtn').addEventListener('click', () => {
-  exitMonthLock();
-  goToDateMode(defaultDateIndex());
-});
-exitMonthLockBtn.addEventListener('click', () => {
   exitMonthLock();
   goToDateMode(defaultDateIndex());
 });
@@ -3554,7 +3597,6 @@ monthSelectEl.addEventListener('change', (e) => {
   selectedIndex = 0; // land on the first day that month with a shoot on it
   sliderEl.value = selectedIndex;
   currentMode = 'month';
-  exitMonthLockBtn.classList.remove('hidden');
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   positionTodayMarker(); // hides the marker now that we're locked
   render();
@@ -3613,7 +3655,7 @@ function flyToLocation(lat, lng, label){
   // programmaticMapMove so it doesn't light up "Reset view" or suppress
   // auto-recentre, the same as a popup click.
   programmaticMapMove(() => map.setView([lat, lng], 14, { animate: true }));
-  L.popup({ maxWidth: 240, ...getPopupAutoPanOptions() })
+  L.popup({ maxWidth: 240, className: 'locationSearchPopup', ...getPopupAutoPanOptions() })
     .setLatLng([lat, lng])
     .setContent(`<p class="popup-meta" style="margin:0;">${escapeHtml(label)}</p>`)
     .openOn(map);
@@ -3656,8 +3698,8 @@ function renderSearchResults(spotMatches, places){
     html += spotMatches.map((spot, i) => {
       const status = getStatus(spot);
       const tag = status === 'past' ? '<span class="rTagPast">(past)</span>' :
-                  status === 'live' ? '<span style="color:#d4ff3f;">(live now)</span>' :
-                  '<span style="color:#d97a53;">(upcoming)</span>';
+                  status === 'live' ? '<span class="rTagLive">(live now)</span>' :
+                  '<span class="rTagUpcoming">(upcoming)</span>';
       return `<div class="resultItem" role="option" tabindex="0" data-spot-idx="${i}">
         <span class="rName">${escapeHtml(spot.name)} ${tag}</span>
         <span class="rMeta">${escapeHtml(spot.location)} - ${fmtTime(spot.start)}</span>
@@ -3672,7 +3714,7 @@ function renderSearchResults(spotMatches, places){
   } else if (places.length){
     html += `<div class="resultsSectionTitle">Places</div>`;
     html += places.map((place, i) => `<div class="resultItem" role="option" tabindex="0" data-place-idx="${i}">
-      <span class="rName">📍 ${escapeHtml(place.label)}</span>
+      <span class="rName">${escapeHtml(place.label)}</span>
     </div>`).join('');
   }
 
